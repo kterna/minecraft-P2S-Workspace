@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-11-26 原生 LLM 连接
+
+- LLM 设置可选择 Chat Completions、Responses、Anthropic Messages、Gemini、Vertex、Bedrock Converse 或 Mistral Chat，并设置思考等级与可选温度。子任务和压缩沿用主连接。
+- 会话保存协议所需的工具关联信息及签名。恢复同一连接和模型的会话后可继续工具循环。旧会话继续读取。
+- Bedrock 支持区域端点、SigV4 和临时会话令牌。Vertex 可使用自行管理的访问令牌。
+
 ## 2026-11-25 LLM 请求参数
 - 不再在每个请求里写死 `temperature: 0.4`。开了思考的 Claude（例如经 New API 网关）因此不再返回 400。需要固定温度时，在 `config/p2s_client.json` 写顶层 `"temperature"`。
 - 可选顶层 `"maxTokens"`：OpenAI 官方地址发 `max_completion_tokens`，其他兼容服务发 `max_tokens`；不写就不发。

@@ -12,7 +12,7 @@ import com.p2s.agent.core.AgentLoop;
 import com.p2s.agent.core.AgentLoopConfig;
 import com.p2s.agent.core.AgentMessage;
 import com.p2s.agent.llm.LlmRequestConfig;
-import com.p2s.agent.llm.OpenAiChatCompletions;
+import com.p2s.agent.llm.LlmTransports;
 import com.p2s.agent.llm.OpenAiMessageCodec;
 import com.p2s.agent.tool.RegistryTools;
 import com.p2s.agent.tool.ToolExecutors;
@@ -461,7 +461,7 @@ public final class SubagentManager {
         OpenAiMessageCodec.Decoded decoded = OpenAiMessageCodec.fromWire(history);
 
         // Same core loop as the main agent, restricted by the profile's tools, turns and timeout.
-        AgentLoopConfig config = AgentLoopConfig.builder(new OpenAiChatCompletions(() -> {
+        AgentLoopConfig config = AgentLoopConfig.builder(LlmTransports.stream(() -> {
                     LlmRequestConfig base = P2SClientConfig.llmRequestConfig();
                     return base.withTimeoutSeconds(timeoutSeconds).withStreaming(false);
                 }))

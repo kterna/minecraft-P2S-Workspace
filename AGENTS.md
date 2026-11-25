@@ -93,4 +93,4 @@ Pull Request 应包含：
 ## 配置与密钥
 运行时配置位于 `config/p2s_client.json`。项目 / 工作区 / 会话 / skills / profiles 还会写入 `config/p2s_projects_v2/`、`config/p2s_sessions_v2/`、`config/p2s_skills/` 等目录。
 
-不要提交 API Key、本地配置，或自动生成的世界/项目数据。
+不要提交 API Key、本地配置，或自动生成的世界/项目数据。LLM 协议配置、会话签名回放和参数覆盖范围见 `docs/architecture/llm-transports.md`。协议测试用离线样例，不读取真实凭据。

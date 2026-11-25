@@ -14,7 +14,7 @@ import com.p2s.agent.core.AgentLoopConfig;
 import com.p2s.agent.core.AgentMessage;
 import com.p2s.agent.core.AgentToolResult;
 import com.p2s.agent.core.AssistantMessageEvent;
-import com.p2s.agent.llm.OpenAiChatCompletions;
+import com.p2s.agent.llm.LlmTransports;
 import com.p2s.agent.llm.OpenAiMessageCodec;
 import com.p2s.agent.runtime.AgentRunGuard;
 import com.p2s.agent.runtime.AgentRunGuard.RunIdentity;
@@ -748,7 +748,7 @@ public final class ClientAgentManager {
     // ---------------------------------------------------------------- agent wiring
 
     private static Agent createAgent(LocalSession session, List<AgentMessage> transcript) {
-        AgentLoopConfig config = AgentLoopConfig.builder(new OpenAiChatCompletions(P2SClientConfig::llmRequestConfig))
+        AgentLoopConfig config = AgentLoopConfig.builder(LlmTransports.stream(P2SClientConfig::llmRequestConfig))
                 .transformContext(messages -> ContextBuilder.build(messages, MAX_CONTEXT_MESSAGES,
                         ClientAgentManager::isPinnedMessage))
                 .prepareNextTurn(turn -> compactBetweenTurns(session, turn.messages()))

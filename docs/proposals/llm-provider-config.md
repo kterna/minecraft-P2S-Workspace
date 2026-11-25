@@ -1,6 +1,6 @@
 # LLM 提供方配置（provider / 模型能力 / 思考等级）
 
-> 状态：提案，未实施（2026-11-25）。分支 `feat/llm-provider-config`。
+> 2026-11-25 设计草案。2026-11-26 已在 `feat/llm-provider-config` 接入各协议，实际字段、连接示例和待定选项见[协议与参数表](../architecture/llm-transports.md)。
 > 主要参考：pi-ai 1.6.0（`dist/types.d.ts`、`dist/providers/compat-schema.d.ts`、`dist/api/openai-completions.js`、`anthropic-messages.js`、`openai-responses.js`、`google-*.js`、`providers/data/*.json`、`README.md`）。只读源码，没有运行。
 
 ## 0. 问题

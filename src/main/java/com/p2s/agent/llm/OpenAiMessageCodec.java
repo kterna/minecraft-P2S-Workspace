@@ -24,25 +24,18 @@ public final class OpenAiMessageCodec {
     private OpenAiMessageCodec() {
     }
 
+    /** Version of the {@value #REPLAY_KEY} extension written on assistant messages. */
+    static final int REPLAY_VERSION = 1;
+    /** Extension field on persisted assistant messages; never sent to a provider. */
+    public static final String REPLAY_KEY = "p2s_replay";
+
     /**
      * Persisted history: wire messages with an optional leading system message. Assistant
-     * thinking is kept as {@code reasoning_content}, which older versions already read.
+     * thinking is kept as {@code reasoning_content}, which older versions already read, and
+     * provider replay data (signatures, encrypted reasoning) as the versioned
+     * {@value #REPLAY_KEY} extension, which older versions ignore.
      */
     public static List<JsonObject> toWire(String systemPrompt, List<AgentMessage> messages) {
-        return encodeAll(systemPrompt, messages, true, false);
-    }
-
-    /**
-     * Request messages for a Chat Completions call. Thinking is only echoed when the provider
-     * requires it; then an assistant turn without thinking carries an empty string.
-     */
-    public static List<JsonObject> toRequest(String systemPrompt, List<AgentMessage> messages,
-                                             boolean requiresReasoningContent) {
-        return encodeAll(systemPrompt, messages, requiresReasoningContent, requiresReasoningContent);
-    }
-
-    private static List<JsonObject> encodeAll(String systemPrompt, List<AgentMessage> messages,
-                                              boolean writeThinking, boolean alwaysWriteThinking) {
         List<JsonObject> wire = new ArrayList<>();
         if (systemPrompt != null && !systemPrompt.isBlank()) {
             JsonObject system = new JsonObject();
@@ -55,13 +48,30 @@ public final class OpenAiMessageCodec {
             if (encoded == null) {
                 continue;
             }
-            if (message instanceof AgentMessage.Assistant assistant && writeThinking
-                    && (alwaysWriteThinking || !assistant.thinking().isEmpty())) {
-                encoded.addProperty("reasoning_content", assistant.thinking());
+            if (message instanceof AgentMessage.Assistant assistant) {
+                if (!assistant.thinking().isEmpty()) {
+                    encoded.addProperty("reasoning_content", assistant.thinking());
+                }
+                if (assistant.replay() != null) {
+                    JsonObject replay = new JsonObject();
+                    replay.addProperty("v", REPLAY_VERSION);
+                    replay.addProperty("api", assistant.replay().api());
+                    replay.addProperty("provider", assistant.replay().provider());
+                    replay.addProperty("model", assistant.replay().model());
+                    replay.add("data", assistant.replay().data());
+                    encoded.add(REPLAY_KEY, replay);
+                }
             }
             wire.add(encoded);
         }
         return wire;
+    }
+
+    /** Copy of a persisted message without P2S extension fields. */
+    public static JsonObject withoutExtensions(JsonObject message) {
+        JsonObject copy = message.deepCopy();
+        copy.remove(REPLAY_KEY);
+        return copy;
     }
 
     public static JsonObject encode(AgentMessage message) {
@@ -180,7 +190,25 @@ public final class OpenAiMessageCodec {
         }
         AgentMessage.StopReason reason = calls.isEmpty() ? AgentMessage.StopReason.STOP : AgentMessage.StopReason.TOOL_USE;
         String thinking = json.has("reasoning_content") ? contentText(json.get("reasoning_content")) : "";
-        return new AgentMessage.Assistant(contentText(json.get("content")), thinking, calls, reason, "", 0L);
+        return new AgentMessage.Assistant(contentText(json.get("content")), thinking, calls, reason, "", 0L,
+                decodeReplay(json), null);
+    }
+
+    /** Unknown versions are ignored: replaying data we do not understand could break the request. */
+    private static AgentMessage.Replay decodeReplay(JsonObject json) {
+        if (!json.has(REPLAY_KEY) || !json.get(REPLAY_KEY).isJsonObject()) {
+            return null;
+        }
+        JsonObject replay = json.getAsJsonObject(REPLAY_KEY);
+        try {
+            if (!replay.has("v") || replay.get("v").getAsInt() != REPLAY_VERSION) {
+                return null;
+            }
+        } catch (RuntimeException ex) {
+            return null;
+        }
+        JsonObject data = replay.has("data") && replay.get("data").isJsonObject() ? replay.getAsJsonObject("data") : null;
+        return new AgentMessage.Replay(string(replay, "api"), string(replay, "provider"), string(replay, "model"), data);
     }
 
     static JsonObject parseToolContent(String text) {
