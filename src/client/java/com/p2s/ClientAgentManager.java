@@ -1389,52 +1389,64 @@ public final class ClientAgentManager {
         return session.id;
     }
 
-    // Called on the client thread while LOCK is held. No worker may read the
-    // singleton UI state to save a detached session.
+    static SessionPersistence.SavedSession diagnosticSnapshot() {
+        synchronized (LOCK) {
+            return currentSession == null ? null : snapshotSessionLocked(currentSession);
+        }
+    }
+
+    // Called on the client thread while LOCK is held.
+    private static SessionPersistence.SavedSession snapshotSessionLocked(LocalSession session) {
+        refreshSessionViewLocked(session);
+        ClientSessionState.SessionViewSnapshot view = session.lastView;
+        if (view == null) {
+            return null;
+        }
+        List<SessionPersistence.ChatMessageEntry> chatLog = new ArrayList<>();
+        String title = "";
+        for (ClientSessionState.ChatMessage message : view.messages()) {
+            chatLog.add(new SessionPersistence.ChatMessageEntry(message.id(), message.role(),
+                    message.text(), message.kind(), message.detail()));
+            if (title.isBlank() && P2SI18n.isUserRole(message.role())) {
+                title = message.text().trim();
+            }
+        }
+        if (title.length() > 60) {
+            title = title.substring(0, 57) + "...";
+        }
+        if (title.isBlank()) {
+            title = P2SI18n.tr("screen.p2s.sessions.default_title",
+                    session.id.substring(0, Math.min(8, session.id.length()))).getString();
+        }
+        List<SessionPersistence.PlanItemEntry> plan = new ArrayList<>();
+        for (ClientSessionState.PlanItem item : view.planItems()) {
+            plan.add(new SessionPersistence.PlanItemEntry(item.step(), item.status()));
+        }
+        SessionPersistence.ChoiceRequestEntry choice = null;
+        if (view.pendingChoice() != null) {
+            List<SessionPersistence.ChoiceOptionEntry> options = new ArrayList<>();
+            for (ClientSessionState.ChoiceOption option : view.pendingChoice().options()) {
+                options.add(new SessionPersistence.ChoiceOptionEntry(option.id(), option.label(), option.description()));
+            }
+            choice = new SessionPersistence.ChoiceRequestEntry(view.pendingChoice().requestId(),
+                    view.pendingChoice().prompt(), List.copyOf(options));
+        }
+        session.selectedWorkspacePath = view.selectedWorkspacePath();
+        // The persisted history keeps the previous wire format: system message first.
+        List<JsonObject> history = OpenAiMessageCodec.toWire(systemPrompt(),
+                ContextBuilder.repair(session.agent.messages()));
+        return new SessionPersistence.SavedSession(
+                session.id, session.projectId, title, session.createdAt, System.currentTimeMillis(),
+                chatLog.size(), history, List.copyOf(chatLog), List.copyOf(plan),
+                view.planExplanation(), session.selectedWorkspacePath, choice, scriptStoreJson(session));
+    }
+
     private static void saveSessionLocked(LocalSession session) {
         try {
-            refreshSessionViewLocked(session);
-            ClientSessionState.SessionViewSnapshot view = session.lastView;
-            if (view == null) {
+            SessionPersistence.SavedSession saved = snapshotSessionLocked(session);
+            if (saved == null) {
                 return;
             }
-            List<SessionPersistence.ChatMessageEntry> chatLog = new ArrayList<>();
-            String title = "";
-            for (ClientSessionState.ChatMessage message : view.messages()) {
-                chatLog.add(new SessionPersistence.ChatMessageEntry(message.id(), message.role(),
-                        message.text(), message.kind(), message.detail()));
-                if (title.isBlank() && P2SI18n.isUserRole(message.role())) {
-                    title = message.text().trim();
-                }
-            }
-            if (title.length() > 60) {
-                title = title.substring(0, 57) + "...";
-            }
-            if (title.isBlank()) {
-                title = P2SI18n.tr("screen.p2s.sessions.default_title",
-                        session.id.substring(0, Math.min(8, session.id.length()))).getString();
-            }
-            List<SessionPersistence.PlanItemEntry> plan = new ArrayList<>();
-            for (ClientSessionState.PlanItem item : view.planItems()) {
-                plan.add(new SessionPersistence.PlanItemEntry(item.step(), item.status()));
-            }
-            SessionPersistence.ChoiceRequestEntry choice = null;
-            if (view.pendingChoice() != null) {
-                List<SessionPersistence.ChoiceOptionEntry> options = new ArrayList<>();
-                for (ClientSessionState.ChoiceOption option : view.pendingChoice().options()) {
-                    options.add(new SessionPersistence.ChoiceOptionEntry(option.id(), option.label(), option.description()));
-                }
-                choice = new SessionPersistence.ChoiceRequestEntry(view.pendingChoice().requestId(),
-                        view.pendingChoice().prompt(), List.copyOf(options));
-            }
-            session.selectedWorkspacePath = view.selectedWorkspacePath();
-            // The persisted history keeps the previous wire format: system message first.
-            List<JsonObject> history = OpenAiMessageCodec.toWire(systemPrompt(),
-                    ContextBuilder.repair(session.agent.messages()));
-            SessionPersistence.SavedSession saved = new SessionPersistence.SavedSession(
-                    session.id, session.projectId, title, session.createdAt, System.currentTimeMillis(),
-                    chatLog.size(), history, List.copyOf(chatLog), List.copyOf(plan),
-                    view.planExplanation(), session.selectedWorkspacePath, choice, scriptStoreJson(session));
             // A single writer preserves capture order even when the same session
             // finishes, closes, and is restored in quick succession.
             PENDING_SAVES.put(saved.id(), saved);

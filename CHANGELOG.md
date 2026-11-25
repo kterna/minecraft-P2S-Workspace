@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-11-26 诊断导出与审阅提示
+
+- 聊天面板和 `/p2s export` 可导出当前会话、完整工作区的提交/暂存版本、筛选日志和脱敏配置。
+- 有多个文件待审时，编辑区的应用按钮显示当前序号和总数，悬停可见 Shift 全部应用提示。
+
 ## 2026-11-25 工具 v2 与脚本
 - Agent 默认改用 v2 工具集：统一的虚拟文件系统（`workspace/`、`skills/`、`agents/`）加 `ls` `read` `grep` `find` `edit` `write` `set_part` `move` `delete` `project_info` `inspect_world` `ask_user` `task` 等工具；`config/p2s_client.json` 中 `"toolset": "legacy"` 可切回原 21 个工具。
 - 新增 `script`：在沙箱中运行 JavaScript，可批量调用工具、只返回结果，也可用 `ws` / `geo` 程序化编辑工作区（穹顶、球体、拱、螺旋等）；脚本失败不留下任何改动。

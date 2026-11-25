@@ -92,10 +92,12 @@ tasks.withType(Test).configureEach {
 }
 
 processResources {
+	def revision = providers.gradleProperty('p2sCommit').orElse(providers.environmentVariable('GITHUB_SHA')).getOrElse('')
+	inputs.property 'p2sCommit', revision ==~ /[a-fA-F0-9]{7,64}/ ? revision : 'unknown'
 	inputs.property "version", project.version
 
 	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
+		expand "version": inputs.properties.version, "p2sCommit": inputs.properties.p2sCommit
 	}
 }
 

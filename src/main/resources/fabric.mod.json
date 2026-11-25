@@ -2,6 +2,7 @@
 	"schemaVersion": 1,
 	"id": "prompt2structure",
 	"version": "${version}",
+	"custom": { "p2s:commit": "${p2sCommit}" },
 	"name": "P2S Workspace",
 	"description": "AI IDE-style pipeline workspace for Minecraft structure generation, patching, and iterative editing.",
 	"authors": [

@@ -53,6 +53,7 @@ public final class P2SChatSessionWidgets {
             Runnable onCompactHistory,
             Runnable onToggleInfo,
             Runnable onOpenConfig,
+            Runnable onExport,
             Runnable onOpenCheckpoints,
             Runnable onApplyPatch,
             Runnable onEnterDiscardReasonMode,
@@ -167,6 +168,10 @@ public final class P2SChatSessionWidgets {
         int rowY = config.padding() + config.topButtonHeight() + 4;
         int actionWidth = config.smallButtonWidth() * 2 + 2;
         int rowStart = config.panelX() + config.panelWidth() - config.padding() - actionWidth;
+
+        host.addButton(Button.builder(P2SI18n.tr("screen.p2s.chat.export"), btn -> config.onExport().run())
+                .bounds(config.panelX() + config.padding(), rowY, 78, config.topButtonHeight())
+                .build());
 
         Button undoButton = host.addButton(Button.builder(P2SI18n.tr("screen.p2s.chat.undo"), btn -> config.onUndo().run())
                 .bounds(rowStart, rowY, config.smallButtonWidth(), config.topButtonHeight())

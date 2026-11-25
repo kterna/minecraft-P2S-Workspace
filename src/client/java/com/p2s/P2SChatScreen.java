@@ -637,6 +637,7 @@ public class P2SChatScreen extends Screen {
                             }
                         },
                         () -> this.minecraft.setScreen(new P2SConfigScreen(this)),
+                        ClientDiagnostics::start,
                         () -> this.minecraft.setScreen(new P2SCheckpointListScreen(this)),
                         ClientAgentManager::submitPatchApply,
                         this::enterDiscardReasonMode,
@@ -1342,6 +1343,32 @@ public class P2SChatScreen extends Screen {
         }
         String summary = file.path().equals(ClientSessionState.getPendingPath()) ? ClientSessionState.getPendingSummary() : "";
         return file.path() + "|" + file.revision() + "|" + file.pendingChangedBlocks() + "|" + summary;
+    }
+
+    /**
+     * The visible Apply button lives in the context panel; show "n/N" and the Shift+click hint
+     * there when more than one file has staged changes.
+     */
+    private void updateApplyButtonCount() {
+        List<String> pending = new ArrayList<>(ClientSessionState.getPendingWorkspacePaths());
+        java.util.Collections.sort(pending);
+        int total = pending.size();
+        int index = ClientSessionState.hasPendingPatch() ? pending.indexOf(ClientSessionState.getPendingPath()) + 1 : 0;
+        int key = total * 10_000 + index;
+        if (key == lastPendingFileCount) {
+            return;
+        }
+        lastPendingFileCount = key;
+        Component label = total > 1
+                ? Component.literal(P2SI18n.tr("screen.p2s.chat.apply").getString() + " " + Math.max(index, 1) + "/" + total)
+                : P2SI18n.tr("screen.p2s.chat.apply");
+        Tooltip tooltip = total > 1 ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.apply_all_hint", total)) : null;
+        for (Button button : new Button[]{contextApplyButton, applyButton}) {
+            if (button != null) {
+                button.setMessage(label);
+                button.setTooltip(tooltip);
+            }
+        }
     }
 
     private boolean canActOnSelectedPendingPatch() {
@@ -3194,14 +3221,7 @@ public class P2SChatScreen extends Screen {
         if (compactButton != null) {
             compactButton.active = ClientAgentManager.canManualCompact();
         }
-        if (applyButton != null) {
-            int pendingFiles = ClientSessionState.getPendingWorkspacePaths().size();
-            if (pendingFiles != lastPendingFileCount) {
-                lastPendingFileCount = pendingFiles;
-                applyButton.setTooltip(pendingFiles > 1
-                        ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.apply_all_hint", pendingFiles)) : null);
-            }
-        }
+        updateApplyButtonCount();
         if (sendButton != null) {
             boolean stopMode = isStopMode();
             Component label = Component.literal(stopMode ? "\u25A0" : ">");

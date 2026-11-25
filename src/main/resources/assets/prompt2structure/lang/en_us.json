@@ -1,4 +1,10 @@
 {
+  "screen.p2s.chat.export": "Export logs",
+  "message.p2s.export.start": "Exporting diagnostics…",
+  "message.p2s.export.done": "Saved diagnostics to %s",
+  "message.p2s.export.error": "Diagnostics export failed: %s",
+  "message.p2s.export.no_session": "Open a project with a chat session first.",
+  "message.p2s.export.changed": "The project or workspace changed. Run the export again.",
   "category.p2s": "Prompt2Structure",
   "command.p2s.ai.no_structure": "AI response did not include a structure",
   "command.p2s.build.completed_saved": "Build completed (saved as %s)",

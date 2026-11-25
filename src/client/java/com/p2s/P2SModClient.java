@@ -19,6 +19,7 @@ public class P2SModClient implements ClientModInitializer {
             ClientServerBridge.onDisconnect();
             ClientAgentManager.onClientDisconnect();
         }));
+        ClientDiagnostics.registerCommand();
         ModKeyBindings.registerTickHandler();
         SelectionInputHandler.register();
         SelectionRenderer.register();

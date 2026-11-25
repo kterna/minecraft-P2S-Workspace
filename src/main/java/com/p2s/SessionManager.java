@@ -673,7 +673,22 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                 ? workspace.current : workspace.pendingPatch.nextScript;
         JsonObject payload = buildToolSuccess("workspace_text");
         payload.addProperty("path", workspace.path);
-        payload.addProperty("workspace_toml", WorkspaceTomlCodec.write(WorkspaceTomlCodec.fromWorkspace(workspace, effective)));
+        String text = WorkspaceTomlCodec.write(WorkspaceTomlCodec.fromWorkspace(workspace, effective));
+        if (args.has("offset")) {
+            if (!project.id.equals(getString(args, "project_id"))) {
+                return buildToolError("workspace_text", "The active project changed during export");
+            }
+            int offset = args.get("offset").getAsInt();
+            if (offset < 0 || offset > text.length()) {
+                return buildToolError("workspace_text", "Invalid workspace text offset");
+            }
+            int end = offset + Math.min(24_000, text.length() - offset);
+            if (end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))) end--;
+            payload.addProperty("workspace_toml", text.substring(offset, end));
+            payload.addProperty("length", text.length());
+        } else {
+            payload.addProperty("workspace_toml", text);
+        }
         payload.addProperty("committed_revision", workspace.revision == null ? "" : workspace.revision);
         payload.addProperty("staged_revision", stagedRevision(workspace));
         payload.addProperty("has_pending", workspace.pendingPatch != null);
