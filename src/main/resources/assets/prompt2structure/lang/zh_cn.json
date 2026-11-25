@@ -4,6 +4,7 @@
   "message.p2s.export.done": "诊断包已保存到 %s",
   "message.p2s.export.error": "诊断导出失败：%s",
   "message.p2s.export.no_session": "请先打开项目和聊天会话。",
+  "message.p2s.export.old_server": "当前服务端不支持诊断导出，请将服务端 P2S 更新到与客户端相同的版本。",
   "message.p2s.export.changed": "导出期间项目或工作区已更改，请重新导出。",
   "category.p2s": "Prompt2Structure",
   "command.p2s.ai.no_structure": "AI 响应未包含结构数据",

@@ -6,6 +6,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonParseException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -29,12 +31,13 @@ final class DiagnosticArchive {
     private static final String FIELD = "(?:[\\w-]*(?:api[_-]?key|access[_-]?key|private[_-]?key|secret|password|credential|(?:access|refresh|session|auth)[_-]?token)[\\w-]*|key|token|authorization|cookie|set-cookie)";
     private static final Pattern NAME = Pattern.compile(FIELD, Pattern.CASE_INSENSITIVE);
     private static final Pattern ASSIGNMENT = Pattern.compile("(?i)((?:^|(?<=[^\\w-]))[\"']?" + FIELD
-            + "[\"']?\\s*[:=]\\s*)(?:\"(?:\\\\.|[^\"\\\\])*\"|'[^']*'|(?:Bearer |Basic )?[^\\s,;&}]+)");
+            + "[\"']?\\s*[:=]\\s*)(?:\"(?:\\\\.|[^\"\\\\]++)*+\"|'(?:\\\\.|[^'\\\\]++)*+'|(?:Bearer |Basic )?[^\\s,;&}]+)");
     private static final Pattern AUTH = Pattern.compile("(?i)\\b(Bearer|Basic) +[A-Za-z0-9._~+/=-]+");
     private static final Pattern TOKEN = Pattern.compile("\\b(?:sk-[A-Za-z0-9_-]{12,}|AIza[A-Za-z0-9_-]{30,}|(?:AKIA|ASIA)[A-Z0-9]{16})\\b");
     private static final Pattern URL_USER = Pattern.compile("(?i)(https?://)[^/@\\s]+@");
     private static final Pattern PRIVATE_KEY = Pattern.compile("(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)");
-    private static final Pattern COOKIE = Pattern.compile("(?im)(^|[\\[{,]\\s*)(set-cookie|cookie)\\s*:\\s*[^\\r\\n]+");
+    private static final Pattern COOKIE = Pattern.compile("(?i)(?<![\\w-])((?:set-cookie|cookie)[\"']?\\s*[:=]\\s*)[^\\r\\n]+");
+    private static final Pattern HEADERS = Pattern.compile("(?i)(?<![\\w-])headers[\"']?\\s*[:=]\\s*(?=[{\\[])");
     private static final Pattern STACK = Pattern.compile("^\\s*(?:at |Caused by:|Suppressed:|\\.\\.\\. \\d+ more).*");
     private static final int LOG_INPUT_BYTES = 2 * 1024 * 1024;
     private static final int LOG_OUTPUT_CHARS = 96 * 1024;
@@ -61,13 +64,51 @@ final class DiagnosticArchive {
     }
 
     String clean(String text) {
+        String trimmed = text.strip();
+        if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+            try {
+                JsonElement parsed = JsonParser.parseString(trimmed);
+                if (parsed.isJsonObject() || parsed.isJsonArray()) {
+                    JsonElement redacted = clean(parsed);
+                    return redacted.equals(parsed) ? text : redacted.toString();
+                }
+            } catch (JsonParseException ignored) {
+                // User instructions and TOML can also start and end with brackets.
+            }
+        }
         for (String secret : secrets) text = text.replace(secret, MASK);
         text = PRIVATE_KEY.matcher(text).replaceAll(MASK);
-        text = COOKIE.matcher(text).replaceAll("$1$2: ***");
+        text = COOKIE.matcher(text).replaceAll("$1***");
+        text = maskHeaderBlocks(text);
         text = AUTH.matcher(text).replaceAll("$1 ***");
         text = ASSIGNMENT.matcher(text).replaceAll("$1***");
         text = TOKEN.matcher(text).replaceAll(MASK);
         return URL_USER.matcher(text).replaceAll("$1***@");
+    }
+
+    /** Log messages may prefix a JSON/header map with a timestamp or other ordinary text. */
+    private static String maskHeaderBlocks(String text) {
+        var header = HEADERS.matcher(text);
+        if (!header.find()) return text;
+        StringBuilder out = new StringBuilder();
+        int copied = 0;
+        do {
+            int at = header.end();
+            out.append(text, copied, at).append(MASK);
+            int depth = 0;
+            char quote = 0;
+            while (at < text.length()) {
+                char c = text.charAt(at++);
+                if (quote != 0) {
+                    if (c == '\\' && at < text.length()) at++;
+                    else if (c == quote) quote = 0;
+                } else if (c == '"' || c == '\'') quote = c;
+                else if (c == '{' || c == '[') depth++;
+                else if ((c == '}' || c == ']') && --depth == 0) break;
+            }
+            copied = at;
+        } while (header.find(copied));
+        return out.append(text, copied, text.length()).toString();
     }
 
     JsonElement clean(JsonElement value) {
@@ -87,6 +128,12 @@ final class DiagnosticArchive {
         }
         if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) return new JsonPrimitive(clean(value.getAsString()));
         return value;
+    }
+
+    void writeSession(ZipOutputStream zip, JsonObject session) throws IOException {
+        JsonObject redacted = clean(session).getAsJsonObject();
+        writeEntry(zip, "session.json", JSON.toJson(redacted));
+        writeEntry(zip, "transcript.md", transcript(redacted));
     }
 
     void writeJson(ZipOutputStream zip, String file, JsonElement data) throws IOException {
@@ -120,6 +167,10 @@ final class DiagnosticArchive {
             out.append("\n## ").append(role).append('\n');
             if (msg.has("tool_call_id")) out.append("Call ID: ").append(field(msg, "tool_call_id")).append('\n');
             out.append(field(msg, "content")).append('\n');
+            if (msg.has("p2sRawAssistant") && msg.get("p2sRawAssistant").isJsonObject()) {
+                String error = field(msg.getAsJsonObject("p2sRawAssistant"), "errorMessage");
+                if (!error.isBlank()) out.append("Error: ").append(error).append('\n');
+            }
             if (msg.has("tool_calls")) {
                 for (JsonElement call : msg.getAsJsonArray("tool_calls")) {
                     JsonObject tool = call.getAsJsonObject();
@@ -132,8 +183,8 @@ final class DiagnosticArchive {
         out.append("\n## Client messages and errors\n");
         for (JsonElement item : session.getAsJsonArray("chatLog")) {
             JsonObject msg = item.getAsJsonObject();
-            if (P2SI18n.ROLE_USER.equals(field(msg, "role")) || P2SI18n.ROLE_ASSISTANT.equals(field(msg, "role"))) continue;
-            out.append('\n').append(field(msg, "text")).append('\n').append(field(msg, "detail")).append('\n');
+            out.append("\n### ").append(field(msg, "role")).append('\n');
+            out.append(field(msg, "text")).append('\n').append(field(msg, "detail")).append('\n');
         }
         return out.toString();
     }

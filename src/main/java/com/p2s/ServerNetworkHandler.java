@@ -3,6 +3,7 @@ package com.p2s;
 import com.p2s.network.C2SSetSelectionPayload;
 import com.p2s.network.C2SSessionActionPayload;
 import com.p2s.network.C2SToolBridgePayload;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,6 +13,7 @@ public final class ServerNetworkHandler {
     }
 
     public static void register() {
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> SessionManager.clearExportPage(handler.player));
         ServerPlayNetworking.registerGlobalReceiver(C2SSetSelectionPayload.TYPE, (payload, context) -> {
             ServerPlayer player = context.player();
             if (P2SMod.DEBUG) {

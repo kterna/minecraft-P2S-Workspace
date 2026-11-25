@@ -49,6 +49,53 @@ class DiagnosticArchiveTest {
     }
 
     @Test
+    void redactsConfiguredProviderCredentialsAndInlineLogHeaders() {
+        JsonObject config = JsonParser.parseString("""
+                {"llm":{"headers":{"X-Proxy-Custom":"opaque-proxy-value"},"providerOptions":{
+                "accessKeyId":"access-example","secretAccessKey":"secret-example","sessionToken":"session-example"}}}
+                """).getAsJsonObject();
+        var archive = new DiagnosticArchive(config, "");
+        String safe = archive.clean(config).toString() + archive.clean(
+                "opaque-proxy-value access-example secret-example session-example\n"
+                + "[INFO] Cookie: SID=first-private; sessionid=second-private\n"
+                + "[DEBUG] headers: {\n  \"X-Account\": \"unknown-private}value\"\n} status 200");
+        for (String value : new String[]{"opaque-proxy-value","access-example","secret-example","session-example",
+                "first-private","second-private","unknown-private"}) {
+            assertFalse(safe.contains(value), safe);
+        }
+        assertTrue(safe.contains("status 200"));
+        assertEquals("trace password=***", archive.clean("trace password=\"" + "z".repeat(60_000) + "\""));
+    }
+
+    @Test
+    void removesArbitraryNestedHeaderValuesFromBothSessionEntriesAndKeepsVisibleErrors() throws Exception {
+        JsonObject snapshot = JsonParser.parseString("""
+                {"llmHistory":[{"role":"assistant","tool_calls":[{"id":"a","function":{"name":"read"}}]},
+                 {"role":"assistant","p2sRawAssistant":{"errorMessage":"upstream stream interrupted"}}],
+                 "chatLog":[{"role":"assistant","text":"HTTP 400 temperature setting rejected","detail":""}]}
+                """).getAsJsonObject();
+        JsonObject fn = snapshot.getAsJsonArray("llmHistory").get(0).getAsJsonObject()
+                .getAsJsonArray("tool_calls").get(0).getAsJsonObject().getAsJsonObject("function");
+        fn.addProperty("arguments", "{\"headers\":{\"Unusual-Header\":\"nested-opaque\"},\"limit\":7}");
+        var archive = new DiagnosticArchive(new JsonObject(), "");
+        var bytes = new ByteArrayOutputStream();
+        try (var zip = new ZipOutputStream(bytes)) {
+            archive.writeSession(zip, snapshot);
+        }
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+            for (String name : new String[]{"session.json","transcript.md"}) {
+                assertEquals(name, zip.getNextEntry().getName());
+                String content = new String(zip.readAllBytes(), StandardCharsets.UTF_8);
+                assertFalse(content.contains("nested-opaque"));
+                assertTrue(content.contains("HTTP 400 temperature setting rejected"));
+                assertTrue(content.contains("upstream stream interrupted"));
+                assertTrue(content.contains("limit"));
+                assertFalse(content.contains("not executed"));
+            }
+        }
+    }
+
+    @Test
     void filtersLogAndIncludesOnlyRelatedContinuationLines(@TempDir Path dir) throws Exception {
         Path log = dir.resolve("latest.log");
         Files.writeString(log, "[Render/INFO] unrelated\n\tat uninteresting\n[x/ERROR] failure\n"

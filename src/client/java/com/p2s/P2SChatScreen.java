@@ -663,7 +663,6 @@ public class P2SChatScreen extends Screen {
         compactButton = sessionWidgets.compactButton();
         configButton = sessionWidgets.configButton();
         applyButton = sessionWidgets.applyButton();
-        lastPendingFileCount = -1;
         discardButton = sessionWidgets.discardButton();
         undoButton = sessionWidgets.undoButton();
         redoButton = sessionWidgets.redoButton();
@@ -829,6 +828,7 @@ public class P2SChatScreen extends Screen {
         contextFormatButton = contextWidgets.contextFormatButton();
         contextClearButton = contextWidgets.contextClearButton();
         contextApplyButton = contextWidgets.contextApplyButton();
+        lastPendingFileCount = -1;
         contextDiscardButton = contextWidgets.contextDiscardButton();
         contextDiffPrevButton = contextWidgets.contextDiffPrevButton();
         contextDiffNextButton = contextWidgets.contextDiffNextButton();
@@ -1350,25 +1350,24 @@ public class P2SChatScreen extends Screen {
      * there when more than one file has staged changes.
      */
     private void updateApplyButtonCount() {
-        List<String> pending = new ArrayList<>(ClientSessionState.getPendingWorkspacePaths());
-        java.util.Collections.sort(pending);
+        if (contextApplyButton == null) return;
+        List<String> pending = ClientSessionState.getPendingWorkspacePaths();
         int total = pending.size();
-        int index = ClientSessionState.hasPendingPatch() ? pending.indexOf(ClientSessionState.getPendingPath()) + 1 : 0;
-        int key = total * 10_000 + index;
-        if (key == lastPendingFileCount) {
-            return;
-        }
-        lastPendingFileCount = key;
-        Component label = total > 1
-                ? Component.literal(P2SI18n.tr("screen.p2s.chat.apply").getString() + " " + Math.max(index, 1) + "/" + total)
-                : P2SI18n.tr("screen.p2s.chat.apply");
-        Tooltip tooltip = total > 1 ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.apply_all_hint", total)) : null;
-        for (Button button : new Button[]{contextApplyButton, applyButton}) {
-            if (button != null) {
-                button.setMessage(label);
-                button.setTooltip(tooltip);
+        String selected = ClientSessionState.getPendingPath();
+        int index = 0;
+        if (ClientSessionState.hasPendingPatch() && pending.contains(selected)) {
+            index = 1;
+            for (String path : pending) {
+                if (path.compareTo(selected) < 0) index++;
             }
         }
+        int key = total * 10_000 + index;
+        if (key == lastPendingFileCount) return;
+        lastPendingFileCount = key;
+        Component label = P2SI18n.tr("screen.p2s.chat.apply");
+        if (total > 1 && index > 0) label = label.copy().append(" " + index + "/" + total);
+        contextApplyButton.setMessage(label);
+        contextApplyButton.setTooltip(total > 1 ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.apply_all_hint", total)) : null);
     }
 
     private boolean canActOnSelectedPendingPatch() {

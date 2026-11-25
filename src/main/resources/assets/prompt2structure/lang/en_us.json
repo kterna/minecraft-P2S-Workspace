@@ -4,6 +4,7 @@
   "message.p2s.export.done": "Saved diagnostics to %s",
   "message.p2s.export.error": "Diagnostics export failed: %s",
   "message.p2s.export.no_session": "Open a project with a chat session first.",
+  "message.p2s.export.old_server": "Update the server to the same P2S version as the client before exporting diagnostics.",
   "message.p2s.export.changed": "The project or workspace changed. Run the export again.",
   "category.p2s": "Prompt2Structure",
   "command.p2s.ai.no_structure": "AI response did not include a structure",

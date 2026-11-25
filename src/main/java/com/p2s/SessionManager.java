@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public final class SessionManager {
     private static final Gson GSON = new Gson();
+    private static final WorkspaceExport<ServerPlayer> EXPORT_PAGES = new WorkspaceExport<>();
     private static final Map<UUID, Session> sessions = new ConcurrentHashMap<>();
     private static final Map<UUID, String> currentProjectIds = new ConcurrentHashMap<>();
     private static final Map<String, ProjectPersistence.ProjectRecord> loadedProjects = new ConcurrentHashMap<>();
@@ -138,13 +139,14 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                 case "session_discard_patch" -> discardPendingPatchWithReceipt(player,
                         normalizeArgsObject(arguments).toString());
                 // v2 tools: full workspace text, staging of whole-file edits, world inspection.
+                case "export_workspace_manifest" -> handleExportManifest(player, normalizeArgsObject(arguments));
                 case "workspace_text" -> handleWorkspaceText(player, normalizeArgsObject(arguments));
                 case "stage_workspace_file" -> handleStageWorkspaceFile(player, normalizeArgsObject(arguments));
                 case "inspect_world" -> WorldInspector.inspect(player, currentProject(player, sessions.get(player.getUUID())),
                         normalizeArgsObject(arguments));
                 default -> buildToolErrorKey(normalizedTool, "message.p2s.tool.unknown_tool");
             };
-            if (!"workspace_text".equals(normalizedTool) && !"inspect_world".equals(normalizedTool)) {
+            if (!"workspace_text".equals(normalizedTool) && !"inspect_world".equals(normalizedTool) && !"export_workspace_manifest".equals(normalizedTool)) {
                 sendSessionSync(player, sessions.get(player.getUUID()));
                 ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
                 Session session = sessions.get(player.getUUID());
@@ -655,6 +657,32 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         return payload;
     }
 
+    static void clearExportPage(ServerPlayer player) {
+        EXPORT_PAGES.release(player);
+    }
+
+    private static JsonObject handleExportManifest(ServerPlayer player, JsonObject args) {
+        clearExportPage(player);
+        ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
+        if (project == null || !project.id.equals(getString(args, "project_id"))) {
+            return buildToolErrorKey("export_workspace_manifest", "message.p2s.export.changed");
+        }
+        JsonObject files = new JsonObject();
+        for (var entry : project.workspaceFiles.entrySet()) {
+            JsonObject revision = new JsonObject();
+            exportRevision(entry.getValue()).writeTo(revision);
+            files.add(entry.getKey(), revision);
+        }
+        JsonObject result = buildToolSuccess("export_workspace_manifest");
+        result.add("files", files);
+        return result;
+    }
+
+    private static WorkspaceExport.Revision exportRevision(ProjectPersistence.WorkspaceFileRecord workspace) {
+        return new WorkspaceExport.Revision(workspace.revision == null ? "" : workspace.revision,
+                stagedRevision(workspace), workspace.pendingPatch != null);
+    }
+
     /** Full TOML of a workspace file (staged unless committed=true), plus both revisions. */
     private static JsonObject handleWorkspaceText(ServerPlayer player, JsonObject args) {
         ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
@@ -673,25 +701,21 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                 ? workspace.current : workspace.pendingPatch.nextScript;
         JsonObject payload = buildToolSuccess("workspace_text");
         payload.addProperty("path", workspace.path);
-        String text = WorkspaceTomlCodec.write(WorkspaceTomlCodec.fromWorkspace(workspace, effective));
+        var revision = exportRevision(workspace);
+        java.util.function.Supplier<String> serialize = () ->
+                WorkspaceTomlCodec.write(WorkspaceTomlCodec.fromWorkspace(workspace, effective));
         if (args.has("offset")) {
             if (!project.id.equals(getString(args, "project_id"))) {
-                return buildToolError("workspace_text", "The active project changed during export");
+                return buildToolErrorKey("workspace_text", "message.p2s.export.changed");
             }
-            int offset = args.get("offset").getAsInt();
-            if (offset < 0 || offset > text.length()) {
-                return buildToolError("workspace_text", "Invalid workspace text offset");
-            }
-            int end = offset + Math.min(24_000, text.length() - offset);
-            if (end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))) end--;
-            payload.addProperty("workspace_toml", text.substring(offset, end));
-            payload.addProperty("length", text.length());
+            var version = new WorkspaceExport.Version(project.id, path, committed, revision);
+            var page = EXPORT_PAGES.read(player, version, args.get("offset").getAsInt(), serialize);
+            payload.addProperty("workspace_toml", page.text());
+            payload.addProperty("length", page.length());
         } else {
-            payload.addProperty("workspace_toml", text);
+            payload.addProperty("workspace_toml", serialize.get());
         }
-        payload.addProperty("committed_revision", workspace.revision == null ? "" : workspace.revision);
-        payload.addProperty("staged_revision", stagedRevision(workspace));
-        payload.addProperty("has_pending", workspace.pendingPatch != null);
+        revision.writeTo(payload);
         return payload;
     }
 
