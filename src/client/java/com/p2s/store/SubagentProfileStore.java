@@ -41,7 +41,10 @@ public final class SubagentProfileStore {
             "rename_workspace_file",
             "delete_workspace_file",
             "propose_patch",
-            "search_block_ids"
+            "search_block_ids",
+            // v2 tool names (legacy names above are mapped to v2 when toolset = v2)
+            "ls", "read", "grep", "find", "edit", "write", "set_part", "move", "delete",
+            "project_info", "inspect_world", "update_plan", "task_status", "script", "sh"
     );
 
     private SubagentProfileStore() {

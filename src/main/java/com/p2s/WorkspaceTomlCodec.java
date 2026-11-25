@@ -245,11 +245,23 @@ public final class WorkspaceTomlCodec {
         if (value.isBlank()) {
             return "manual";
         }
-        String normalized = ProjectPersistence.normalizeWorkspaceType(value);
+        String normalized = normalizeType(value);
         if (!normalized.equals(value.trim().toLowerCase(Locale.ROOT))) {
             throw new IllegalArgumentException("workspace.type must be one of: layout, floor, facade, component, semantic, generated, manual, shared");
         }
         return normalized;
+    }
+
+    /**
+     * Workspace type normalization with no dependencies, so parsing TOML never loads
+     * ProjectPersistence (whose static state needs a running Fabric loader).
+     */
+    public static String normalizeType(String type) {
+        String value = type == null ? "" : type.trim().toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case "layout", "floor", "facade", "component", "semantic", "generated", "manual", "shared" -> value;
+            default -> "manual";
+        };
     }
 
     private static List<Integer> vec3(ProjectPersistence.Vec3Data value) {

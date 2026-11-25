@@ -62,6 +62,8 @@ public final class P2SClientConfig {
     private static boolean useToolCall = DEFAULT_USE_TOOL_CALL;
     private static boolean useStreaming = DEFAULT_USE_STREAMING;
     private static boolean autoApplyPatch = DEFAULT_AUTO_APPLY_PATCH;
+    /** "v2" (default) or "legacy": which agent tool set the client uses. */
+    private static String toolset = "v2";
     private static String systemPrompt = DEFAULT_SYSTEM_PROMPT;
     private static boolean autoCompactEnabled = DEFAULT_AUTO_COMPACT_ENABLED;
     private static int autoCompactTokenLimit = DEFAULT_AUTO_COMPACT_TOKEN_LIMIT;
@@ -127,6 +129,14 @@ public final class P2SClientConfig {
 
     public static synchronized boolean getUseStreaming() {
         return useStreaming;
+    }
+
+    public static synchronized boolean isToolsetV2() {
+        return !"legacy".equals(toolset);
+    }
+
+    public static synchronized String getToolset() {
+        return toolset;
     }
 
     public static synchronized boolean getAutoApplyPatch() {
@@ -345,13 +355,15 @@ public final class P2SClientConfig {
         }
     }
 
-    public static synchronized LLMService.RequestConfig llmRequestConfig() {
-        return new LLMService.RequestConfig(
-                apiUrl,
-                apiKey,
-                model,
-                httpTimeoutSeconds,
-                useToolCall
+    /** Blank values fall back to the built-in defaults, as the previous transport did. */
+    public static synchronized com.p2s.agent.llm.LlmRequestConfig llmRequestConfig() {
+        return new com.p2s.agent.llm.LlmRequestConfig(
+                apiUrl == null || apiUrl.isBlank() ? P2SDefaults.DEFAULT_API_URL : apiUrl,
+                apiKey == null || apiKey.isBlank() ? P2SDefaults.DEFAULT_API_KEY : apiKey,
+                model == null || model.isBlank() ? P2SDefaults.DEFAULT_MODEL : model,
+                httpTimeoutSeconds <= 0 ? P2SDefaults.DEFAULT_TIMEOUT_SECONDS : httpTimeoutSeconds,
+                useToolCall,
+                useStreaming
         );
     }
 
@@ -380,6 +392,7 @@ public final class P2SClientConfig {
         Boolean loadedUseToolCall = null;
         Boolean loadedUseStreaming = null;
         Boolean loadedAutoApplyPatch = null;
+        String loadedToolset = null;
         Boolean loadedAutoCompactEnabled = null;
         Integer loadedAutoCompactTokenLimit = null;
         Integer loadedCompactRetainUserTokenBudget = null;
@@ -402,6 +415,7 @@ public final class P2SClientConfig {
                 loadedUseToolCall = root.has("useToolCall") ? root.get("useToolCall").getAsBoolean() : null;
                 loadedUseStreaming = root.has("useStreaming") ? root.get("useStreaming").getAsBoolean() : null;
                 loadedAutoApplyPatch = root.has("autoApplyPatch") ? root.get("autoApplyPatch").getAsBoolean() : null;
+                loadedToolset = root.has("toolset") ? root.get("toolset").getAsString() : null;
                 loadedSystemPrompt = root.has("systemPrompt") ? root.get("systemPrompt").getAsString() : null;
                 loadedAutoCompactEnabled = root.has("autoCompactEnabled") ? root.get("autoCompactEnabled").getAsBoolean() : null;
                 loadedAutoCompactTokenLimit = root.has("autoCompactTokenLimit") ? root.get("autoCompactTokenLimit").getAsInt() : null;
@@ -462,6 +476,7 @@ public final class P2SClientConfig {
         useToolCall = loadedUseToolCall == null ? DEFAULT_USE_TOOL_CALL : loadedUseToolCall;
         useStreaming = loadedUseStreaming == null ? DEFAULT_USE_STREAMING : loadedUseStreaming;
         autoApplyPatch = loadedAutoApplyPatch == null ? DEFAULT_AUTO_APPLY_PATCH : loadedAutoApplyPatch;
+        toolset = "legacy".equalsIgnoreCase(loadedToolset == null ? "" : loadedToolset.trim()) ? "legacy" : "v2";
         String prompt = loadedSystemPrompt == null ? "" : loadedSystemPrompt.trim();
         systemPrompt = prompt.isBlank() ? DEFAULT_SYSTEM_PROMPT : prompt;
         autoCompactEnabled = loadedAutoCompactEnabled == null ? DEFAULT_AUTO_COMPACT_ENABLED : loadedAutoCompactEnabled;
@@ -500,6 +515,7 @@ public final class P2SClientConfig {
             root.addProperty("useToolCall", useToolCall);
             root.addProperty("useStreaming", useStreaming);
             root.addProperty("autoApplyPatch", autoApplyPatch);
+            root.addProperty("toolset", toolset);
             root.addProperty("systemPrompt", systemPrompt);
             root.addProperty("autoCompactEnabled", autoCompactEnabled);
             root.addProperty("autoCompactTokenLimit", autoCompactTokenLimit);

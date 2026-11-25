@@ -1,395 +1,72 @@
-package com.p2s;
+package com.p2s.agent.tool;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-public final class LLMService {
-    private static final Gson GSON = new Gson();
-    private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
-    private static volatile OkHttpClient CLIENT = buildClient(P2SDefaults.DEFAULT_TIMEOUT_SECONDS);
-    private static volatile int CLIENT_TIMEOUT_SECONDS = P2SDefaults.DEFAULT_TIMEOUT_SECONDS;
+/** Provider-independent tool definitions in their original request order. */
+public final class ToolCatalog {
+    private static final List<ToolDefinition> TOOLS = buildTools();
+    private static final Map<String, ToolDefinition> BY_NAME = indexTools();
 
-    private LLMService() {
+    private ToolCatalog() {
     }
 
-    public static CompletableFuture<SessionResult> requestWithHistory(java.util.List<JsonObject> messages) {
-        return requestWithHistoryInternal(messages, false, null, null);
+    public static List<ToolDefinition> all() {
+        return TOOLS;
     }
 
-    public static CompletableFuture<SessionResult> requestWithHistoryWithSkills(java.util.List<JsonObject> messages) {
-        return requestWithHistoryInternal(messages, true, null, null);
+    public static ToolDefinition find(String name) {
+        return BY_NAME.get(name);
     }
 
-    public static CompletableFuture<SessionResult> requestWithHistoryWithSkills(
-            java.util.List<JsonObject> messages,
-            RequestConfig config
-    ) {
-        return requestWithHistoryInternal(messages, true, config, null);
-    }
-
-    public static CompletableFuture<SessionResult> requestWithHistoryWithSkills(
-            java.util.List<JsonObject> messages,
-            RequestConfig config,
-            Collection<String> allowedTools
-    ) {
-        return requestWithHistoryInternal(messages, true, config, allowedTools);
-    }
-
-    public static CompletableFuture<SessionResult> requestPlainTextWithHistory(
-            java.util.List<JsonObject> messages,
-            RequestConfig overrideConfig
-    ) {
-        return CompletableFuture.supplyAsync(() -> {
-            RequestConfig cfg = resolveConfig(overrideConfig);
-            String bodyJson = buildPlainTextBodyForMessages(messages, cfg.model());
-            int messageCount = messages == null ? 0 : messages.size();
-            int payloadBytes = bodyJson == null ? 0 : bodyJson.length();
-            P2SMod.LOGGER.info("LLM plain-text request -> url={}, model={}, timeout={}s", cfg.apiUrl(), cfg.model(), cfg.httpTimeoutSeconds());
-            P2SMod.LOGGER.info("LLM plain-text payload -> messages={}, bytes={}", messageCount, payloadBytes);
-            if (P2SMod.DEBUG) {
-                P2SMod.LOGGER.info("[DEBUG] LLM plain-text full request body: {}", bodyJson);
-                P2SMod.LOGGER.info("[DEBUG] LLM plain-text messages array: {}", GSON.toJson(messages));
-            }
-
-            Request request = new Request.Builder()
-                    .url(cfg.apiUrl())
-                    .post(RequestBody.create(bodyJson, JSON))
-                    .header("Authorization", "Bearer " + cfg.apiKey())
-                    .build();
-
-            try (Response response = getClient(cfg.httpTimeoutSeconds()).newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errBody = response.body() == null ? "" : response.body().string();
-                    P2SMod.LOGGER.error("LLM failed status={}, body={}", response.code(), truncate(errBody));
-                    throw new IOException("请求失败，状态码: " + response.code());
-                }
-                String respBody = response.body() == null ? "" : response.body().string();
-                P2SMod.LOGGER.info("LLM raw response (truncated): {}", truncate(respBody));
-                if (P2SMod.DEBUG) {
-                    P2SMod.LOGGER.info("[DEBUG] LLM plain-text full response body: {}", respBody);
-                }
-                return parseSessionResponse(respBody, cfg.useToolCall());
-            } catch (Exception e) {
-                throw new RuntimeException("LLM 请求异常: " + e.getMessage(), e);
-            }
-        }, EXECUTOR);
-    }
-
-    public interface StreamCallback {
-        void onToken(String token);
-        default void onComplete(SessionResult result) {}
-        default void onError(String message) {}
-    }
-
-    public static CompletableFuture<SessionResult> requestWithHistoryStreaming(
-            java.util.List<JsonObject> messages,
-            RequestConfig overrideConfig,
-            StreamCallback callback
-    ) {
-        return CompletableFuture.supplyAsync(() -> {
-            RequestConfig cfg = resolveConfig(overrideConfig);
-            Set<String> normalizedAllowedTools = null;
-            String bodyJsonBase = buildBodyForMessages(messages, cfg.model(), cfg.useToolCall(), true, normalizedAllowedTools);
-
-            JsonObject bodyObj = JsonParser.parseString(bodyJsonBase).getAsJsonObject();
-            bodyObj.addProperty("stream", true);
-            String bodyJson = GSON.toJson(bodyObj);
-
-            int messageCount = messages == null ? 0 : messages.size();
-            P2SMod.LOGGER.info("LLM streaming request -> url={}, model={}, timeout={}s, messages={}",
-                    cfg.apiUrl(), cfg.model(), cfg.httpTimeoutSeconds(), messageCount);
-            if (P2SMod.DEBUG) {
-                P2SMod.LOGGER.info("[DEBUG] LLM streaming full request body: {}", bodyJson);
-            }
-
-            Request request = new Request.Builder()
-                    .url(cfg.apiUrl())
-                    .post(RequestBody.create(bodyJson, JSON))
-                    .header("Authorization", "Bearer " + cfg.apiKey())
-                    .build();
-
-            try {
-                Response response = getClient(cfg.httpTimeoutSeconds()).newCall(request).execute();
-                try {
-                    if (!response.isSuccessful()) {
-                        String errBody = response.body() == null ? "" : response.body().string();
-                        P2SMod.LOGGER.error("LLM streaming failed status={}, body={}", response.code(), truncate(errBody));
-                        throw new IOException("请求失败，状态码: " + response.code());
-                    }
-
-                    String contentType = response.header("Content-Type", "");
-                    if (!contentType.contains("text/event-stream") && !contentType.contains("text/plain")) {
-                        P2SMod.LOGGER.info("LLM streaming fallback to non-stream (Content-Type: {})", contentType);
-                        String respBody = response.body() == null ? "" : response.body().string();
-                        SessionResult result = parseSessionResponse(respBody, cfg.useToolCall());
-                        if (callback != null) {
-                            callback.onComplete(result);
-                        }
-                        return result;
-                    }
-
-                    return readSSEStream(response, callback);
-                } finally {
-                    response.close();
-                }
-            } catch (Exception e) {
-                String msg = e.getMessage() == null ? "Unknown streaming error" : e.getMessage();
-                if (callback != null) {
-                    callback.onError(msg);
-                }
-                throw new RuntimeException("LLM 流式请求异常: " + msg, e);
-            }
-        }, EXECUTOR);
-    }
-
-    private static final class ToolCallAccumulator {
-        String id = "";
-        String name = "";
-        final StringBuilder arguments = new StringBuilder();
-    }
-
-    private static SessionResult readSSEStream(Response response, StreamCallback callback) throws IOException {
-        StringBuilder contentBuilder = new StringBuilder();
-        Map<Integer, ToolCallAccumulator> toolAccumulators = new HashMap<>();
-
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(response.body().byteStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.isBlank() || line.startsWith(":")) {
-                    continue;
-                }
-                if (!line.startsWith("data: ")) {
-                    continue;
-                }
-                String data = line.substring(6).trim();
-                if ("[DONE]".equals(data)) {
-                    if (P2SMod.DEBUG) {
-                        P2SMod.LOGGER.info("[DEBUG] SSE stream received [DONE]");
-                    }
-                    break;
-                }
-                if (P2SMod.DEBUG) {
-                    P2SMod.LOGGER.info("[DEBUG] SSE chunk: {}", data);
-                }
-
-                try {
-                    JsonObject chunk = JsonParser.parseString(data).getAsJsonObject();
-                    JsonArray choices = chunk.getAsJsonArray("choices");
-                    if (choices == null || choices.isEmpty()) {
-                        continue;
-                    }
-                    JsonObject firstChoice = choices.get(0).getAsJsonObject();
-                    JsonObject delta = firstChoice.has("delta") ? firstChoice.getAsJsonObject("delta") : null;
-                    if (delta == null) {
-                        continue;
-                    }
-
-                    if (delta.has("content") && !delta.get("content").isJsonNull()) {
-                        String token = delta.get("content").getAsString();
-                        if (token != null && !token.isEmpty()) {
-                            contentBuilder.append(token);
-                            if (callback != null) {
-                                callback.onToken(token);
-                            }
-                        }
-                    }
-
-                    if (delta.has("tool_calls") && delta.get("tool_calls").isJsonArray()) {
-                        JsonArray toolCallDeltas = delta.getAsJsonArray("tool_calls");
-                        for (JsonElement tcElem : toolCallDeltas) {
-                            if (!tcElem.isJsonObject()) {
-                                continue;
-                            }
-                            JsonObject tcDelta = tcElem.getAsJsonObject();
-                            int index = tcDelta.has("index") ? tcDelta.get("index").getAsInt() : 0;
-                            ToolCallAccumulator acc = toolAccumulators.computeIfAbsent(index, k -> new ToolCallAccumulator());
-                            if (tcDelta.has("id") && !tcDelta.get("id").isJsonNull()) {
-                                acc.id = tcDelta.get("id").getAsString();
-                            }
-                            if (tcDelta.has("function") && tcDelta.get("function").isJsonObject()) {
-                                JsonObject fnDelta = tcDelta.getAsJsonObject("function");
-                                if (fnDelta.has("name") && !fnDelta.get("name").isJsonNull()) {
-                                    acc.name = fnDelta.get("name").getAsString();
-                                }
-                                if (fnDelta.has("arguments") && !fnDelta.get("arguments").isJsonNull()) {
-                                    acc.arguments.append(fnDelta.get("arguments").getAsString());
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    P2SMod.LOGGER.debug("SSE chunk parse error: {}", e.getMessage());
-                }
+    public static JsonArray definitions(boolean includeClientTools, Collection<String> allowedTools) {
+        Set<String> allowed = normalizeAllowedNames(allowedTools);
+        JsonArray definitions = new JsonArray();
+        for (ToolDefinition tool : TOOLS) {
+            if ((!tool.clientTool() || includeClientTools)
+                    && (allowed == null || allowed.contains(tool.name()))) {
+                definitions.add(tool.declaration());
             }
         }
+        return definitions;
+    }
 
-        String textContent = contentBuilder.toString();
-        List<ToolCall> toolCalls = new ArrayList<>();
-        JsonObject assembledMessage = new JsonObject();
-        assembledMessage.addProperty("role", "assistant");
-
-        if (!textContent.isEmpty()) {
-            assembledMessage.addProperty("content", textContent);
-        } else {
-            assembledMessage.add("content", com.google.gson.JsonNull.INSTANCE);
+    public static Set<String> normalizeAllowedNames(Collection<String> names) {
+        if (names == null) {
+            return null;
         }
-
-        if (!toolAccumulators.isEmpty()) {
-            JsonArray toolCallsArray = new JsonArray();
-            List<Integer> indices = new ArrayList<>(toolAccumulators.keySet());
-            indices.sort(Integer::compareTo);
-            for (int idx : indices) {
-                ToolCallAccumulator acc = toolAccumulators.get(idx);
-                JsonElement argsElem;
-                try {
-                    argsElem = JsonParser.parseString(acc.arguments.toString());
-                } catch (Exception e) {
-                    argsElem = new com.google.gson.JsonPrimitive(acc.arguments.toString());
-                }
-                toolCalls.add(new ToolCall(acc.id, acc.name, argsElem));
-
-                JsonObject tcObj = new JsonObject();
-                tcObj.addProperty("id", acc.id);
-                tcObj.addProperty("type", "function");
-                JsonObject fnObj = new JsonObject();
-                fnObj.addProperty("name", acc.name);
-                fnObj.addProperty("arguments", acc.arguments.toString());
-                tcObj.add("function", fnObj);
-                toolCallsArray.add(tcObj);
+        Set<String> normalized = new LinkedHashSet<>();
+        for (String name : names) {
+            if (name != null && !name.isBlank()) {
+                normalized.add(name.trim());
             }
-            assembledMessage.add("tool_calls", toolCallsArray);
         }
-
-        int textLen = textContent.length();
-        P2SMod.LOGGER.info("LLM streaming complete -> toolCalls={}, textLen={}", toolCalls.size(), textLen);
-
-        SessionResult result = new SessionResult(
-                textContent.isEmpty() ? null : textContent,
-                null,
-                assembledMessage,
-                toolCalls
-        );
-        if (callback != null) {
-            callback.onComplete(result);
-        }
-        return result;
+        return Set.copyOf(normalized);
     }
 
-    private static CompletableFuture<SessionResult> requestWithHistoryInternal(
-            java.util.List<JsonObject> messages,
-            boolean includeSkillTools,
-            RequestConfig overrideConfig,
-            Collection<String> allowedTools
-    ) {
-        return CompletableFuture.supplyAsync(() -> {
-            RequestConfig cfg = resolveConfig(overrideConfig);
-            Set<String> normalizedAllowedTools = normalizeAllowedToolNames(allowedTools);
-            String bodyJson = buildBodyForMessages(messages, cfg.model(), cfg.useToolCall(), includeSkillTools, normalizedAllowedTools);
-            int messageCount = messages == null ? 0 : messages.size();
-            int payloadBytes = bodyJson == null ? 0 : bodyJson.length();
-            P2SMod.LOGGER.info("LLM session request -> url={}, model={}, timeout={}s", cfg.apiUrl(), cfg.model(), cfg.httpTimeoutSeconds());
-            P2SMod.LOGGER.info("LLM session payload -> messages={}, bytes={}, toolCall={}, toolWhitelist={}",
-                    messageCount,
-                    payloadBytes,
-                    cfg.useToolCall(),
-                    normalizedAllowedTools == null ? "all" : normalizedAllowedTools.size());
-            if (P2SMod.DEBUG) {
-                P2SMod.LOGGER.info("[DEBUG] LLM session full request body: {}", bodyJson);
-                P2SMod.LOGGER.info("[DEBUG] LLM session messages array: {}", GSON.toJson(messages));
+    private static Map<String, ToolDefinition> indexTools() {
+        Map<String, ToolDefinition> tools = new LinkedHashMap<>();
+        for (ToolDefinition tool : TOOLS) {
+            if (tools.putIfAbsent(tool.name(), tool) != null) {
+                throw new IllegalStateException("Duplicate tool definition: " + tool.name());
             }
-            Request request = new Request.Builder()
-                    .url(cfg.apiUrl())
-                    .post(RequestBody.create(bodyJson, JSON))
-                    .header("Authorization", "Bearer " + cfg.apiKey())
-                    .build();
-
-            try (Response response = getClient(cfg.httpTimeoutSeconds()).newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    String errBody = response.body() == null ? "" : response.body().string();
-                    P2SMod.LOGGER.error("LLM failed status={}, body={}", response.code(), truncate(errBody));
-                    throw new IOException("请求失败，状态码: " + response.code());
-                }
-                String respBody = response.body() == null ? "" : response.body().string();
-                P2SMod.LOGGER.info("LLM raw response (truncated): {}", truncate(respBody));
-                if (P2SMod.DEBUG) {
-                    P2SMod.LOGGER.info("[DEBUG] LLM session full response body: {}", respBody);
-                }
-                return parseSessionResponse(respBody, cfg.useToolCall());
-            } catch (Exception e) {
-                throw new RuntimeException("LLM 请求异常: " + e.getMessage(), e);
-            }
-        }, EXECUTOR);
-    }
-
-    private static String buildBodyForMessages(
-            java.util.List<JsonObject> messages,
-            String model,
-            boolean useToolCall,
-            boolean includeSkillTools,
-            Set<String> allowedTools
-    ) {
-        JsonObject body = new JsonObject();
-        body.addProperty("model", model);
-        body.add("messages", GSON.toJsonTree(messages));
-        body.addProperty("temperature", 0.4);
-        applySessionToolOrResponseFormat(body, useToolCall, includeSkillTools, allowedTools);
-        return GSON.toJson(body);
-    }
-
-    private static String buildPlainTextBodyForMessages(
-            java.util.List<JsonObject> messages,
-            String model
-    ) {
-        JsonObject body = new JsonObject();
-        body.addProperty("model", model);
-        body.add("messages", GSON.toJsonTree(messages));
-        body.addProperty("temperature", 0.4);
-        return GSON.toJson(body);
-    }
-
-    private static void applySessionToolOrResponseFormat(
-            JsonObject body,
-            boolean useToolCall,
-            boolean includeSkillTools,
-            Set<String> allowedTools
-    ) {
-        if (useToolCall) {
-            body.add("tools", buildSessionToolDefinitions(includeSkillTools, allowedTools));
-            body.addProperty("tool_choice", "auto");
-            return;
         }
+        return Collections.unmodifiableMap(tools);
     }
 
-    private static JsonArray buildSessionToolDefinitions(boolean includeSkillTools, Set<String> allowedTools) {
-        JsonArray tools = new JsonArray();
+    private static List<ToolDefinition> buildTools() {
+        List<ToolDefinition> tools = new ArrayList<>();
 
-        if (includeSkillTools && allowsTool(allowedTools, "list_skills")) {
+        {
             JsonObject listSkillTool = new JsonObject();
             listSkillTool.addProperty("type", "function");
             JsonObject listSkillFn = new JsonObject();
@@ -401,10 +78,10 @@ public final class LLMService {
             listSkillParams.addProperty("additionalProperties", false);
             listSkillFn.add("parameters", listSkillParams);
             listSkillTool.add("function", listSkillFn);
-            tools.add(listSkillTool);
+            tools.add(new ToolDefinition("list_skills", true, Set.of(), listSkillTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "read_skill")) {
+        {
             JsonObject readSkillTool = new JsonObject();
             readSkillTool.addProperty("type", "function");
             JsonObject readSkillFn = new JsonObject();
@@ -421,10 +98,10 @@ public final class LLMService {
             readSkillParams.addProperty("additionalProperties", false);
             readSkillFn.add("parameters", readSkillParams);
             readSkillTool.add("function", readSkillFn);
-            tools.add(readSkillTool);
+            tools.add(new ToolDefinition("read_skill", true, Set.of(), readSkillTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "read_subdoc")) {
+        {
             JsonObject readSubdocTool = new JsonObject();
             readSubdocTool.addProperty("type", "function");
             JsonObject readSubdocFn = new JsonObject();
@@ -448,10 +125,10 @@ public final class LLMService {
             readSubdocParams.addProperty("additionalProperties", false);
             readSubdocFn.add("parameters", readSubdocParams);
             readSubdocTool.add("function", readSubdocFn);
-            tools.add(readSubdocTool);
+            tools.add(new ToolDefinition("read_subdoc", true, Set.of(), readSubdocTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "search_skill")) {
+        {
             JsonObject searchSkillTool = new JsonObject();
             searchSkillTool.addProperty("type", "function");
             JsonObject searchSkillFn = new JsonObject();
@@ -479,10 +156,10 @@ public final class LLMService {
             searchSkillParams.addProperty("additionalProperties", false);
             searchSkillFn.add("parameters", searchSkillParams);
             searchSkillTool.add("function", searchSkillFn);
-            tools.add(searchSkillTool);
+            tools.add(new ToolDefinition("search_skill", true, Set.of(), searchSkillTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "update_plan")) {
+        {
             JsonObject planTool = new JsonObject();
             planTool.addProperty("type", "function");
             JsonObject planFn = new JsonObject();
@@ -531,10 +208,10 @@ public final class LLMService {
             planParams.addProperty("additionalProperties", false);
             planFn.add("parameters", planParams);
             planTool.add("function", planFn);
-            tools.add(planTool);
+            tools.add(new ToolDefinition("update_plan", true, Set.of(ToolDefinition.Effect.SESSION_STATE), planTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "request_user_choice")) {
+        {
             JsonObject requestChoiceTool = new JsonObject();
             requestChoiceTool.addProperty("type", "function");
             JsonObject requestChoiceFn = new JsonObject();
@@ -582,10 +259,10 @@ public final class LLMService {
             requestChoiceParams.addProperty("additionalProperties", false);
             requestChoiceFn.add("parameters", requestChoiceParams);
             requestChoiceTool.add("function", requestChoiceFn);
-            tools.add(requestChoiceTool);
+            tools.add(new ToolDefinition("request_user_choice", true, Set.of(ToolDefinition.Effect.SESSION_STATE, ToolDefinition.Effect.INTERACTION), requestChoiceTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "clear_user_choice")) {
+        {
             JsonObject clearChoiceTool = new JsonObject();
             clearChoiceTool.addProperty("type", "function");
             JsonObject clearChoiceFn = new JsonObject();
@@ -597,10 +274,10 @@ public final class LLMService {
             clearChoiceParams.addProperty("additionalProperties", false);
             clearChoiceFn.add("parameters", clearChoiceParams);
             clearChoiceTool.add("function", clearChoiceFn);
-            tools.add(clearChoiceTool);
+            tools.add(new ToolDefinition("clear_user_choice", true, Set.of(ToolDefinition.Effect.SESSION_STATE, ToolDefinition.Effect.INTERACTION), clearChoiceTool));
         }
 
-        if (allowsTool(allowedTools, "get_project_state")) {
+        {
             JsonObject projectTool = new JsonObject();
             projectTool.addProperty("type", "function");
             JsonObject projectFn = new JsonObject();
@@ -612,10 +289,10 @@ public final class LLMService {
             projectParams.addProperty("additionalProperties", false);
             projectFn.add("parameters", projectParams);
             projectTool.add("function", projectFn);
-            tools.add(projectTool);
+            tools.add(new ToolDefinition("get_project_state", false, Set.of(), projectTool));
         }
 
-        if (allowsTool(allowedTools, "read_workspace_file")) {
+        {
             JsonObject readTool = new JsonObject();
             readTool.addProperty("type", "function");
             JsonObject readFn = new JsonObject();
@@ -644,10 +321,10 @@ public final class LLMService {
             readParams.addProperty("additionalProperties", false);
             readFn.add("parameters", readParams);
             readTool.add("function", readFn);
-            tools.add(readTool);
+            tools.add(new ToolDefinition("read_workspace_file", false, Set.of(), readTool));
         }
 
-        if (allowsTool(allowedTools, "create_workspace_file")) {
+        {
             JsonObject createTool = new JsonObject();
             createTool.addProperty("type", "function");
             JsonObject createFn = new JsonObject();
@@ -691,10 +368,10 @@ public final class LLMService {
             createParams.addProperty("additionalProperties", false);
             createFn.add("parameters", createParams);
             createTool.add("function", createFn);
-            tools.add(createTool);
+            tools.add(new ToolDefinition("create_workspace_file", false, Set.of(ToolDefinition.Effect.PROJECT_STATE), createTool));
         }
 
-        if (allowsTool(allowedTools, "rename_workspace_file")) {
+        {
             JsonObject renameTool = new JsonObject();
             renameTool.addProperty("type", "function");
             JsonObject renameFn = new JsonObject();
@@ -722,10 +399,10 @@ public final class LLMService {
             renameParams.addProperty("additionalProperties", false);
             renameFn.add("parameters", renameParams);
             renameTool.add("function", renameFn);
-            tools.add(renameTool);
+            tools.add(new ToolDefinition("rename_workspace_file", false, Set.of(ToolDefinition.Effect.PROJECT_STATE), renameTool));
         }
 
-        if (allowsTool(allowedTools, "delete_workspace_file")) {
+        {
             JsonObject deleteTool = new JsonObject();
             deleteTool.addProperty("type", "function");
             JsonObject deleteFn = new JsonObject();
@@ -747,10 +424,10 @@ public final class LLMService {
             deleteParams.addProperty("additionalProperties", false);
             deleteFn.add("parameters", deleteParams);
             deleteTool.add("function", deleteFn);
-            tools.add(deleteTool);
+            tools.add(new ToolDefinition("delete_workspace_file", false, Set.of(ToolDefinition.Effect.PROJECT_STATE), deleteTool));
         }
 
-        if (allowsTool(allowedTools, "search_block_ids")) {
+        {
             JsonObject searchTool = new JsonObject();
             searchTool.addProperty("type", "function");
             JsonObject searchFn = new JsonObject();
@@ -777,10 +454,10 @@ public final class LLMService {
             searchParams.addProperty("additionalProperties", false);
             searchFn.add("parameters", searchParams);
             searchTool.add("function", searchFn);
-            tools.add(searchTool);
+            tools.add(new ToolDefinition("search_block_ids", false, Set.of(), searchTool));
         }
 
-        if (allowsTool(allowedTools, "propose_patch")) {
+        {
             JsonObject patchTool = new JsonObject();
             patchTool.addProperty("type", "function");
             JsonObject patchFn = new JsonObject();
@@ -818,10 +495,10 @@ public final class LLMService {
             params.addProperty("additionalProperties", false);
             patchFn.add("parameters", params);
             patchTool.add("function", patchFn);
-            tools.add(patchTool);
+            tools.add(new ToolDefinition("propose_patch", false, Set.of(ToolDefinition.Effect.PROJECT_STATE, ToolDefinition.Effect.INTERACTION), patchTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "list_subagents")) {
+        {
             JsonObject listSubagentsTool = new JsonObject();
             listSubagentsTool.addProperty("type", "function");
             JsonObject listSubagentsFn = new JsonObject();
@@ -838,10 +515,10 @@ public final class LLMService {
             listSubagentsParams.addProperty("additionalProperties", false);
             listSubagentsFn.add("parameters", listSubagentsParams);
             listSubagentsTool.add("function", listSubagentsFn);
-            tools.add(listSubagentsTool);
+            tools.add(new ToolDefinition("list_subagents", true, Set.of(), listSubagentsTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "create_subagent")) {
+        {
             JsonObject createSubagentTool = new JsonObject();
             createSubagentTool.addProperty("type", "function");
             JsonObject createSubagentFn = new JsonObject();
@@ -875,10 +552,10 @@ public final class LLMService {
             createSubagentParams.add("required", createSubagentRequired);
             createSubagentFn.add("parameters", createSubagentParams);
             createSubagentTool.add("function", createSubagentFn);
-            tools.add(createSubagentTool);
+            tools.add(new ToolDefinition("create_subagent", true, Set.of(ToolDefinition.Effect.SUBAGENT_STATE), createSubagentTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "continue_subagent")) {
+        {
             JsonObject continueSubagentTool = new JsonObject();
             continueSubagentTool.addProperty("type", "function");
             JsonObject continueSubagentFn = new JsonObject();
@@ -902,10 +579,10 @@ public final class LLMService {
             continueSubagentParams.addProperty("additionalProperties", false);
             continueSubagentFn.add("parameters", continueSubagentParams);
             continueSubagentTool.add("function", continueSubagentFn);
-            tools.add(continueSubagentTool);
+            tools.add(new ToolDefinition("continue_subagent", true, Set.of(ToolDefinition.Effect.SUBAGENT_STATE), continueSubagentTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "get_subagent")) {
+        {
             JsonObject getSubagentTool = new JsonObject();
             getSubagentTool.addProperty("type", "function");
             JsonObject getSubagentFn = new JsonObject();
@@ -924,10 +601,10 @@ public final class LLMService {
             getSubagentParams.add("required", getSubagentRequired);
             getSubagentFn.add("parameters", getSubagentParams);
             getSubagentTool.add("function", getSubagentFn);
-            tools.add(getSubagentTool);
+            tools.add(new ToolDefinition("get_subagent", true, Set.of(), getSubagentTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "delete_subagent")) {
+        {
             JsonObject deleteSubagentTool = new JsonObject();
             deleteSubagentTool.addProperty("type", "function");
             JsonObject deleteSubagentFn = new JsonObject();
@@ -946,10 +623,10 @@ public final class LLMService {
             deleteSubagentParams.add("required", deleteSubagentRequired);
             deleteSubagentFn.add("parameters", deleteSubagentParams);
             deleteSubagentTool.add("function", deleteSubagentFn);
-            tools.add(deleteSubagentTool);
+            tools.add(new ToolDefinition("delete_subagent", true, Set.of(ToolDefinition.Effect.SUBAGENT_STATE), deleteSubagentTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "list_profiles")) {
+        {
             JsonObject listProfilesTool = new JsonObject();
             listProfilesTool.addProperty("type", "function");
             JsonObject listProfilesFn = new JsonObject();
@@ -961,10 +638,10 @@ public final class LLMService {
             listProfilesParams.addProperty("additionalProperties", false);
             listProfilesFn.add("parameters", listProfilesParams);
             listProfilesTool.add("function", listProfilesFn);
-            tools.add(listProfilesTool);
+            tools.add(new ToolDefinition("list_profiles", true, Set.of(), listProfilesTool));
         }
 
-        if (includeSkillTools && allowsTool(allowedTools, "get_profile")) {
+        {
             JsonObject getProfileTool = new JsonObject();
             getProfileTool.addProperty("type", "function");
             JsonObject getProfileFn = new JsonObject();
@@ -983,219 +660,10 @@ public final class LLMService {
             getProfileParams.add("required", getProfileRequired);
             getProfileFn.add("parameters", getProfileParams);
             getProfileTool.add("function", getProfileFn);
-            tools.add(getProfileTool);
+            tools.add(new ToolDefinition("get_profile", true, Set.of(), getProfileTool));
         }
 
-        return tools;
+        return List.copyOf(tools);
     }
 
-    private static Set<String> normalizeAllowedToolNames(Collection<String> allowedTools) {
-        if (allowedTools == null) {
-            return null;
-        }
-        LinkedHashSet<String> names = new LinkedHashSet<>();
-        for (String raw : allowedTools) {
-            if (raw == null || raw.isBlank()) {
-                continue;
-            }
-            names.add(raw.trim());
-        }
-        return names;
-    }
-
-    private static boolean allowsTool(Set<String> allowedTools, String toolName) {
-        return allowedTools == null || allowedTools.contains(toolName);
-    }
-
-    private static SessionResult parseSessionResponse(String responseBody, boolean useToolCall) throws IOException {
-        JsonObject root = JsonParser.parseString(responseBody).getAsJsonObject();
-        JsonArray choices = root.getAsJsonArray("choices");
-        if (choices == null || choices.isEmpty()) {
-            throw new IOException("LLM 未返回内容");
-        }
-        JsonObject firstChoice = choices.get(0).getAsJsonObject();
-        JsonObject message = firstChoice.getAsJsonObject("message");
-        if (message == null) {
-            throw new IOException("响应缺少 message 字段");
-        }
-
-        String textContent = message.has("content") && !message.get("content").isJsonNull()
-                ? message.get("content").getAsString() : "";
-        int textLen = textContent == null ? 0 : textContent.length();
-
-        List<ToolCall> toolCalls = extractToolCalls(message);
-        if (!toolCalls.isEmpty()) {
-            P2SMod.LOGGER.info("LLM session parse -> toolCalls={}, textLen={}, hasScript=false", toolCalls.size(), textLen);
-            return new SessionResult(textContent, null, message, toolCalls);
-        }
-        if (!useToolCall && textContent != null && !textContent.isBlank()) {
-            try {
-                String content = cleanContent(textContent);
-                StructureBuilder.VbsScriptV2 script = parseScriptFromContent(content);
-                P2SMod.LOGGER.info("LLM session parse -> toolCalls=0, textLen={}, hasScript=true (toml content)", textLen);
-                return new SessionResult(textContent, script, message, toolCalls);
-            } catch (Exception ignored) {
-                // fall through to text-only response
-            }
-        }
-        P2SMod.LOGGER.info("LLM session parse -> toolCalls=0, textLen={}, hasScript=false", textLen);
-        return new SessionResult(textContent, null, message, toolCalls);
-    }
-
-    private static StructureBuilder.VbsScriptV2 parseScriptFromContent(String content) {
-        WorkspaceTomlCodec.WorkspaceTomlDocument document = WorkspaceTomlCodec.parse(content);
-        return WorkspaceTomlCodec.toScript(document);
-    }
-
-    private static List<ToolCall> extractToolCalls(JsonObject message) {
-        List<ToolCall> result = new ArrayList<>();
-        if (message == null) {
-            return result;
-        }
-
-        if (message.has("tool_calls") && message.get("tool_calls").isJsonArray()) {
-            JsonArray toolCalls = message.getAsJsonArray("tool_calls");
-            for (JsonElement elem : toolCalls) {
-                if (!elem.isJsonObject()) {
-                    continue;
-                }
-                JsonObject call = elem.getAsJsonObject();
-                if (!call.has("function")) {
-                    continue;
-                }
-                JsonObject fn = call.getAsJsonObject("function");
-                if (fn == null || !fn.has("name")) {
-                    continue;
-                }
-                String name = fn.get("name").getAsString();
-                String callId = call.has("id") ? call.get("id").getAsString() : "";
-                JsonElement argsElem = fn.get("arguments");
-                result.add(new ToolCall(callId, name, argsElem));
-            }
-        }
-
-        if (result.isEmpty() && message.has("function_call") && message.get("function_call").isJsonObject()) {
-            JsonObject fn = message.getAsJsonObject("function_call");
-            if (fn.has("name")) {
-                String name = fn.get("name").getAsString();
-                JsonElement argsElem = fn.get("arguments");
-                result.add(new ToolCall("", name, argsElem));
-            }
-        }
-
-        return result;
-    }
-
-    private static String cleanContent(String content) {
-        if (content == null) {
-            return "";
-        }
-        String trimmed = content.trim();
-        String block = extractCodeBlock(trimmed);
-        if (block != null) {
-            return block.trim();
-        }
-        if (trimmed.startsWith("```")) {
-            int firstLineBreak = trimmed.indexOf('\n');
-            if (firstLineBreak > 0) {
-                trimmed = trimmed.substring(firstLineBreak + 1);
-            }
-            if (trimmed.endsWith("```")) {
-                trimmed = trimmed.substring(0, trimmed.length() - 3);
-            }
-        }
-        return trimmed.trim();
-    }
-
-    private static String extractCodeBlock(String text) {
-        int start = text.indexOf("```toml");
-        int fenceHeaderLength = 7;
-        if (start < 0) {
-            start = text.indexOf("```");
-            fenceHeaderLength = 3;
-        }
-        if (start < 0) {
-            return null;
-        }
-        int end = text.indexOf("```", start + 3);
-        if (end < 0) {
-            return null;
-        }
-        return text.substring(start + fenceHeaderLength, end);
-    }
-
-    private static String truncate(String text) {
-        if (text == null) {
-            return "";
-        }
-        int limit = 800;
-        if (text.length() <= limit) {
-            return text;
-        }
-        return text.substring(0, limit) + "...(truncated, len=" + text.length() + ")";
-    }
-
-    private static RequestConfig resolveConfig(RequestConfig override) {
-        if (override == null) {
-            return new RequestConfig(
-                    P2SDefaults.DEFAULT_API_URL,
-                    P2SDefaults.DEFAULT_API_KEY,
-                    P2SDefaults.DEFAULT_MODEL,
-                    P2SDefaults.DEFAULT_TIMEOUT_SECONDS,
-                    P2SDefaults.DEFAULT_USE_TOOL_CALL
-            );
-        }
-        String apiUrl = override.apiUrl() == null || override.apiUrl().isBlank() ? P2SDefaults.DEFAULT_API_URL : override.apiUrl().trim();
-        String apiKey = override.apiKey() == null || override.apiKey().isBlank() ? P2SDefaults.DEFAULT_API_KEY : override.apiKey().trim();
-        String model = override.model() == null || override.model().isBlank() ? P2SDefaults.DEFAULT_MODEL : override.model().trim();
-        int timeout = override.httpTimeoutSeconds() <= 0 ? P2SDefaults.DEFAULT_TIMEOUT_SECONDS : override.httpTimeoutSeconds();
-        boolean toolCall = override.useToolCall();
-        return new RequestConfig(apiUrl, apiKey, model, timeout, toolCall);
-    }
-
-    private static OkHttpClient getClient() {
-        int cfgTimeout = P2SDefaults.DEFAULT_TIMEOUT_SECONDS;
-        if (cfgTimeout != CLIENT_TIMEOUT_SECONDS) {
-            CLIENT_TIMEOUT_SECONDS = cfgTimeout;
-            CLIENT = buildClient(cfgTimeout);
-            P2SMod.LOGGER.info("LLM HTTP client rebuilt with timeout {}s", cfgTimeout);
-        }
-        return CLIENT;
-    }
-
-    private static OkHttpClient getClient(int timeoutSeconds) {
-        if (timeoutSeconds <= 0 || timeoutSeconds == P2SDefaults.DEFAULT_TIMEOUT_SECONDS) {
-            return getClient();
-        }
-        return buildClient(timeoutSeconds);
-    }
-
-    private static OkHttpClient buildClient(int timeoutSeconds) {
-        return new OkHttpClient.Builder()
-                .connectTimeout(Duration.ofSeconds(timeoutSeconds))
-                .readTimeout(Duration.ofSeconds(timeoutSeconds))
-                .writeTimeout(Duration.ofSeconds(timeoutSeconds))
-                .callTimeout(Duration.ofSeconds(timeoutSeconds))
-                .build();
-    }
-
-    public record SessionResult(
-            String textContent,
-            StructureBuilder.VbsScriptV2 script,
-            JsonObject rawAssistantMessage,
-            List<ToolCall> toolCalls
-    ) {
-    }
-
-    public record ToolCall(String id, String name, JsonElement arguments) {
-    }
-
-    public record RequestConfig(
-            String apiUrl,
-            String apiKey,
-            String model,
-            int httpTimeoutSeconds,
-            boolean useToolCall
-    ) {
-    }
 }

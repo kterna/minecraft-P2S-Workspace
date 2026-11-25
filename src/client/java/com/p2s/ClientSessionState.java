@@ -417,6 +417,12 @@ public final class ClientSessionState {
         return Collections.unmodifiableList(new ArrayList<>(messages));
     }
 
+    /** Capture all persisted view data under the same monitor. */
+    public static synchronized SessionViewSnapshot captureSessionView() {
+        return new SessionViewSnapshot(projectId, selectedWorkspacePath, messages,
+                planExplanation, planItems, pendingChoice);
+    }
+
     public static synchronized boolean hasProject() {
         return hasProject;
     }
@@ -473,6 +479,24 @@ public final class ClientSessionState {
 
     public static synchronized boolean hasPendingPatch() {
         return hasPendingPatch;
+    }
+
+    /** Every workspace file with a staged change, the selected one first. */
+    public static synchronized List<String> getPendingWorkspacePaths() {
+        java.util.LinkedHashSet<String> paths = new java.util.LinkedHashSet<>();
+        if (hasPendingPatch && pendingPath != null && !pendingPath.isBlank()) {
+            paths.add(pendingPath);
+        }
+        for (WorkspaceFileInfo file : workspaceFiles) {
+            if (file != null && file.hasPendingPatch() && file.path() != null && !file.path().isBlank()) {
+                paths.add(file.path());
+            }
+        }
+        return List.copyOf(paths);
+    }
+
+    public static synchronized boolean hasAnyPendingPatch() {
+        return hasPendingPatch || !getPendingWorkspacePaths().isEmpty();
     }
 
     public static synchronized String getPendingPath() {
@@ -839,6 +863,24 @@ public final class ClientSessionState {
     }
 
     public record ChatMessage(String id, String role, String text, String kind, String detail) {
+    }
+
+    public record SessionViewSnapshot(
+            String projectId,
+            String selectedWorkspacePath,
+            List<ChatMessage> messages,
+            String planExplanation,
+            List<PlanItem> planItems,
+            ChoiceRequest pendingChoice
+    ) {
+        public SessionViewSnapshot {
+            messages = List.copyOf(messages);
+            planItems = List.copyOf(planItems);
+            if (pendingChoice != null) {
+                pendingChoice = new ChoiceRequest(pendingChoice.requestId(), pendingChoice.prompt(),
+                        List.copyOf(pendingChoice.options()));
+            }
+        }
     }
 
     public record PlanItem(String step, String status) {

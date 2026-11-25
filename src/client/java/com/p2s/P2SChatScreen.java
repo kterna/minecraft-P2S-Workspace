@@ -17,6 +17,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
@@ -71,6 +72,7 @@ public class P2SChatScreen extends Screen {
     private Button compactButton;
     private Button configButton;
     private Button applyButton;
+    private int lastPendingFileCount = -1;
     private Button discardButton;
     private Button undoButton;
     private Button redoButton;
@@ -622,7 +624,7 @@ public class P2SChatScreen extends Screen {
                         checkpointNameDraft,
                         choiceCustomDraft,
                         modeLabel(),
-                        this::sendMessage,
+                        this::onSendButton,
                         () -> this.minecraft.setScreen(new P2SProjectListScreen(this)),
                         () -> this.minecraft.setScreen(new P2SSessionListScreen(this)),
                         ClientAgentManager::newSession,
@@ -660,6 +662,7 @@ public class P2SChatScreen extends Screen {
         compactButton = sessionWidgets.compactButton();
         configButton = sessionWidgets.configButton();
         applyButton = sessionWidgets.applyButton();
+        lastPendingFileCount = -1;
         discardButton = sessionWidgets.discardButton();
         undoButton = sessionWidgets.undoButton();
         redoButton = sessionWidgets.redoButton();
@@ -3191,6 +3194,22 @@ public class P2SChatScreen extends Screen {
         if (compactButton != null) {
             compactButton.active = ClientAgentManager.canManualCompact();
         }
+        if (applyButton != null) {
+            int pendingFiles = ClientSessionState.getPendingWorkspacePaths().size();
+            if (pendingFiles != lastPendingFileCount) {
+                lastPendingFileCount = pendingFiles;
+                applyButton.setTooltip(pendingFiles > 1
+                        ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.apply_all_hint", pendingFiles)) : null);
+            }
+        }
+        if (sendButton != null) {
+            boolean stopMode = isStopMode();
+            Component label = Component.literal(stopMode ? "\u25A0" : ">");
+            if (!label.getString().equals(sendButton.getMessage().getString())) {
+                sendButton.setMessage(label);
+                sendButton.setTooltip(stopMode ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.stop")) : null);
+            }
+        }
         boolean sessionActive = ClientSessionState.isActive();
         boolean hasCheckpoint = ClientSessionState.getSelectedCheckpoint() != null;
         if (checkpointCreateButton != null) {
@@ -4776,8 +4795,26 @@ public class P2SChatScreen extends Screen {
     }
 
     private void applySelectedPendingPatch() {
+        if (hasShiftDown()) {
+            ClientAgentManager.submitPatchApplyAll();
+            return;
+        }
         queueNextPendingWorkspaceJump();
         ClientAgentManager.submitPatchApply();
+    }
+
+    /** While the agent runs, the send button stops it when there is nothing to send. */
+    private boolean isStopMode() {
+        String text = input == null ? null : input.getValue();
+        return ClientAgentManager.isAgentRunning() && (text == null || text.trim().isEmpty());
+    }
+
+    private void onSendButton() {
+        if (isStopMode()) {
+            ClientAgentManager.stopCurrentRun();
+            return;
+        }
+        sendMessage();
     }
 
     private void sendMessage() {

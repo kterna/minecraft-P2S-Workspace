@@ -450,11 +450,7 @@ public final class ProjectPersistence {
     }
 
     public static String normalizeWorkspaceType(String type) {
-        String value = type == null ? "" : type.trim().toLowerCase(Locale.ROOT);
-        return switch (value) {
-            case "layout", "floor", "facade", "component", "semantic", "generated", "manual", "shared" -> value;
-            default -> "manual";
-        };
+        return WorkspaceTomlCodec.normalizeType(type);
     }
 
     public static String leafName(String path) {

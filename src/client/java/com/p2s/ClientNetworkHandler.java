@@ -62,6 +62,7 @@ public final class ClientNetworkHandler {
                     payload.currentWorkspaceToml(),
                     payload.workspaceFilesJson()
                 );
+                ClientAgentManager.onSessionViewChanged();
                 ClientAgentManager.maybeAutoApplyPendingPatch();
             });
         });
@@ -90,6 +91,7 @@ public final class ClientNetworkHandler {
                     payload.changedBlocks(),
                     payload.riskLevel()
                 );
+                ClientAgentManager.onSessionViewChanged();
                 ClientAgentManager.maybeAutoApplyPendingPatch();
             });
         });

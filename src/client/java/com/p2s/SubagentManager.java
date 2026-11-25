@@ -5,20 +5,28 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.p2s.agent.context.ContextBuilder;
+import com.p2s.agent.core.Agent;
+import com.p2s.agent.core.AgentEvent;
+import com.p2s.agent.core.AgentLoop;
+import com.p2s.agent.core.AgentLoopConfig;
+import com.p2s.agent.core.AgentMessage;
+import com.p2s.agent.llm.LlmRequestConfig;
+import com.p2s.agent.llm.OpenAiChatCompletions;
+import com.p2s.agent.llm.OpenAiMessageCodec;
+import com.p2s.agent.tool.RegistryTools;
+import com.p2s.agent.tool.ToolExecutors;
+import com.p2s.agent.tool.ToolRegistry;
 import com.p2s.store.SkillStore;
 import com.p2s.store.SubagentProfileStore;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -52,15 +60,7 @@ public final class SubagentManager {
 
     private static final ConcurrentHashMap<String, SubagentTask> TASKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, CopyOnWriteArrayList<String>> SESSION_INDEX = new ConcurrentHashMap<>();
-    private static final ExecutorService TOOL_EXECUTOR = Executors.newFixedThreadPool(4, r -> {
-        Thread t = new Thread(r, "p2s-subagent-tool");
-        t.setDaemon(true);
-        return t;
-    });
-    private static final Set<String> PARALLEL_SAFE_TOOLS = Set.of(
-            "list_skills", "read_skill", "read_subdoc", "search_skill", "update_plan",
-            "get_project_state", "read_workspace_file", "search_block_ids"
-    );
+    private static final int MAX_CONTEXT_MESSAGES = 60;
 
     private SubagentManager() {
     }
@@ -212,6 +212,27 @@ public final class SubagentManager {
         return payload;
     }
 
+    public static void cancelSession(String sessionId) {
+        String sid = sessionKey(sessionId);
+        for (SubagentTask task : TASKS.values()) {
+            synchronized (task) {
+                if (sid.equals(task.sessionId)
+                        && (task.status == SubagentStatus.RUNNING || task.status == SubagentStatus.QUEUED)) {
+                    task.cancelRequested = true;
+                    if (task.agent != null) {
+                        task.agent.abort("Parent session cancelled");
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean isTaskActive(SubagentTask task) {
+        synchronized (task) {
+            return !task.cancelRequested && task.status == SubagentStatus.RUNNING;
+        }
+    }
+
     public static JsonObject listSubagents(String sessionId, boolean includeDeleted) {
         String sid = sessionKey(sessionId);
         List<String> ids = SESSION_INDEX.getOrDefault(sid, new CopyOnWriteArrayList<>());
@@ -307,6 +328,9 @@ public final class SubagentManager {
             alreadyDeleted = task.status == SubagentStatus.DELETED;
             if (!alreadyDeleted) {
                 task.cancelRequested = true;
+                if (task.agent != null) {
+                    task.agent.abort("Deleted by parent agent");
+                }
                 task.status = SubagentStatus.DELETED;
                 task.summary = "Deleted";
                 if (task.error == null || task.error.isBlank()) {
@@ -411,6 +435,7 @@ public final class SubagentManager {
     }
 
     private static void runSubagent(SubagentTask task, SubagentProfileStore.SubagentProfile profile) {
+        List<JsonObject> history;
         synchronized (task) {
             if (task.cancelRequested || task.status == SubagentStatus.DELETED) {
                 task.status = SubagentStatus.DELETED;
@@ -427,169 +452,173 @@ public final class SubagentManager {
             task.summary = "Running (attempt " + task.attempt + ")";
             task.error = "";
             task.response = "";
+            history = deepCopyMessages(task.history);
         }
 
         int maxLoops = clamp(profile.maxLoops(), 1, MAX_TOOL_LOOPS);
         int timeoutSeconds = clamp(profile.timeoutSeconds(), 5, 300);
         Set<String> allowedTools = new LinkedHashSet<>(profile.allowedTools());
+        OpenAiMessageCodec.Decoded decoded = OpenAiMessageCodec.fromWire(history);
 
+        // Same core loop as the main agent, restricted by the profile's tools, turns and timeout.
+        AgentLoopConfig config = AgentLoopConfig.builder(new OpenAiChatCompletions(() -> {
+                    LlmRequestConfig base = P2SClientConfig.llmRequestConfig();
+                    return base.withTimeoutSeconds(timeoutSeconds).withStreaming(false);
+                }))
+                .transformContext(messages -> ContextBuilder.build(messages, MAX_CONTEXT_MESSAGES, null))
+                .shouldStopAfterTurn(turn -> turn.turnIndex() + 1 >= maxLoops)
+                .toolExecutor(ToolExecutors.shared())
+                .build();
+        List<com.p2s.agent.core.AgentTool> tools = P2SClientConfig.isToolsetV2()
+                ? AgentToolsV2.create(v2Host(task), v2AllowedTools(allowedTools)).agentTools(() -> isTaskActive(task), null)
+                : RegistryTools.from(createToolRegistry(task, allowedTools), () -> isTaskActive(task), null);
+        Agent agent = new Agent(config, decoded.systemPrompt(), tools, decoded.messages());
+        agent.subscribe(event -> {
+            if (event instanceof AgentEvent.ToolExecutionEnd end) {
+                appendTrace(task, end.toolCall().name(), end.result().content());
+                if (P2SMod.DEBUG) {
+                    P2SMod.LOGGER.info("[DEBUG] Subagent {} tool: name={}, args={}, result={}", task.id,
+                            end.toolCall().name(), end.toolCall().rawArguments(), GSON.toJson(end.result().content()));
+                }
+            }
+        });
+        synchronized (task) {
+            task.agent = agent;
+            if (task.cancelRequested) {
+                agent.abort("Cancelled before start");
+            }
+        }
+
+        AgentLoop.Outcome outcome;
         try {
-            for (int loop = 0; loop < maxLoops; loop++) {
-                if (shouldStop(task)) {
-                    return;
-                }
-
+            outcome = agent.continueRun();
+        } catch (RuntimeException e) {
+            synchronized (task) {
+                task.agent = null;
+            }
+            if (!shouldStop(task)) {
+                fail(task, formatError(e));
+                notifyParent(task);
+            }
+            return;
+        }
+        synchronized (task) {
+            task.agent = null;
+            task.history = new ArrayList<>(OpenAiMessageCodec.toWire(decoded.systemPrompt(),
+                    ContextBuilder.repair(agent.messages())));
+        }
+        if (shouldStop(task)) {
+            return;
+        }
+        switch (outcome.reason()) {
+            case COMPLETED, PAUSED -> {
+                String text = lastAssistantText(outcome.newMessages());
                 if (P2SMod.DEBUG) {
-                    int historySize;
-                    synchronized (task) {
-                        historySize = task.history == null ? 0 : task.history.size();
-                    }
-                    P2SMod.LOGGER.info("[DEBUG] Subagent {} loop iteration {} of {}, historySize={}", task.id, loop, maxLoops, historySize);
-                }
-
-                List<JsonObject> snapshot;
-                synchronized (task) {
-                    snapshot = deepCopyMessages(task.history);
-                }
-                LLMService.SessionResult result = LLMService.requestWithHistoryWithSkills(
-                                snapshot,
-                                P2SClientConfig.llmRequestConfig(),
-                                allowedTools
-                        )
-                        .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
-                        .join();
-
-                if (result == null) {
-                    fail(task, "Empty response");
-                    return;
-                }
-
-                if (result.rawAssistantMessage() != null) {
-                    synchronized (task) {
-                        task.history.add(result.rawAssistantMessage().deepCopy());
-                    }
-                }
-
-                List<LLMService.ToolCall> toolCalls = result.toolCalls() == null ? List.of() : result.toolCalls();
-                if (!toolCalls.isEmpty()) {
-                    if (P2SMod.DEBUG) {
-                        for (LLMService.ToolCall tc : toolCalls) {
-                            P2SMod.LOGGER.info("[DEBUG] Subagent {} tool call: name={}, args={}", task.id, tc.name(), tc.arguments());
-                        }
-                    }
-                    List<ToolCallResult> batchResults = executeToolCallsBatch(task, toolCalls, allowedTools);
-                    for (ToolCallResult tcr : batchResults) {
-                        synchronized (task) {
-                            task.history.add(buildToolMessage(tcr.call(), tcr.payload()));
-                        }
-                        appendTrace(task, tcr.call() == null ? "" : tcr.call().name(), tcr.payload());
-                        if (P2SMod.DEBUG) {
-                            P2SMod.LOGGER.info("[DEBUG] Subagent {} tool result: name={}, payload={}", task.id, tcr.call() == null ? "" : tcr.call().name(), GSON.toJson(tcr.payload()));
-                        }
-                    }
-                    continue;
-                }
-
-                String text = result.textContent();
-                if (text == null) {
-                    text = "";
-                }
-                if (P2SMod.DEBUG) {
-                    long durationMs = System.currentTimeMillis() - task.startedAt;
-                    P2SMod.LOGGER.info("[DEBUG] Subagent {} completed -> durationMs={}, loops={}, responseLen={}", task.id, durationMs, loop + 1, text.length());
-                    P2SMod.LOGGER.info("[DEBUG] Subagent {} final response: {}", task.id, text);
+                    P2SMod.LOGGER.info("[DEBUG] Subagent {} completed -> durationMs={}, responseLen={}", task.id,
+                            System.currentTimeMillis() - task.startedAt, text.length());
                 }
                 complete(task, text);
-                return;
             }
-            fail(task, "Reached max subagent loops (" + maxLoops + ")");
-            P2SMod.LOGGER.warn("Subagent {} reached max loops ({})", task.id, maxLoops);
-        } catch (Exception e) {
-            if (shouldStop(task)) {
-                return;
+            case STOPPED_BY_POLICY -> {
+                fail(task, "Reached max subagent loops (" + maxLoops + ")");
+                P2SMod.LOGGER.warn("Subagent {} reached max loops ({})", task.id, maxLoops);
             }
-            fail(task, formatError(e));
+            case ERROR -> fail(task, agent.errorMessage().isBlank() ? "Request failed" : agent.errorMessage());
+            case ABORTED -> fail(task, "Cancelled");
         }
+        notifyParent(task);
     }
 
-    private record ToolCallResult(LLMService.ToolCall call, JsonObject payload) {
+    /** Profiles list legacy tool names; v2 grants the tools that replace them, plus any v2 names given. */
+    static Set<String> v2AllowedTools(Set<String> allowed) {
+        Set<String> tools = new LinkedHashSet<>();
+        for (String name : allowed) {
+            tools.addAll(com.p2s.agent.tool.ToolCatalogV2.fromLegacy(name));
+        }
+        tools.removeAll(Set.of("ask_user", "task", "task_cancel"));
+        return tools;
     }
 
-    private static List<ToolCallResult> executeToolCallsBatch(SubagentTask task, List<LLMService.ToolCall> toolCalls, Set<String> allowedTools) {
-        if (toolCalls.size() == 1) {
-            LLMService.ToolCall call = toolCalls.get(0);
-            JsonObject payload = executeToolCall(task, call, allowedTools);
-            return List.of(new ToolCallResult(call, payload));
-        }
-
-        List<LLMService.ToolCall> parallelCalls = new ArrayList<>();
-        List<LLMService.ToolCall> serialCalls = new ArrayList<>();
-        for (LLMService.ToolCall call : toolCalls) {
-            if (call != null && call.name() != null && PARALLEL_SAFE_TOOLS.contains(call.name())) {
-                parallelCalls.add(call);
-            } else {
-                serialCalls.add(call);
+    private static AgentToolsV2.Host v2Host(SubagentTask task) {
+        return new AgentToolsV2.Host() {
+            @Override
+            public JsonObject server(String tool, JsonObject args) {
+                return callServerTool(task, tool, args);
             }
-        }
 
-        Map<LLMService.ToolCall, JsonObject> resultMap = new LinkedHashMap<>();
-
-        if (!parallelCalls.isEmpty()) {
-            List<CompletableFuture<ToolCallResult>> futures = new ArrayList<>();
-            for (LLMService.ToolCall call : parallelCalls) {
-                futures.add(CompletableFuture.supplyAsync(
-                        () -> new ToolCallResult(call, executeToolCall(task, call, allowedTools)),
-                        TOOL_EXECUTOR
-                ));
+            @Override
+            public JsonObject onClient(java.util.function.Supplier<JsonObject> action) {
+                net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+                return mc == null ? action.get() : mc.submit(action).join();
             }
-            for (CompletableFuture<ToolCallResult> future : futures) {
-                try {
-                    ToolCallResult tcr = future.join();
-                    resultMap.put(tcr.call(), tcr.payload());
-                } catch (Exception e) {
-                    P2SMod.LOGGER.warn("Subagent parallel tool call failed: {}", e.getMessage());
+
+            @Override
+            public String sessionId() {
+                synchronized (task) {
+                    return task.sessionId;
                 }
             }
-        }
 
-        for (LLMService.ToolCall call : serialCalls) {
-            JsonObject payload = executeToolCall(task, call, allowedTools);
-            resultMap.put(call, payload);
-        }
-
-        List<ToolCallResult> ordered = new ArrayList<>();
-        for (LLMService.ToolCall call : toolCalls) {
-            JsonObject payload = resultMap.get(call);
-            if (payload == null) {
-                payload = toolError(call == null ? "" : call.name(), "Execution failed");
+            @Override
+            public Set<String> skillScope() {
+                return scopedSkillSet(task);
             }
-            ordered.add(new ToolCallResult(call, payload));
-        }
-        return ordered;
+
+            @Override
+            public java.util.Map<String, JsonElement> scriptStore() {
+                return task.scriptStore;
+            }
+
+            @Override
+            public boolean isSubagent() {
+                return true;
+            }
+        };
     }
 
-    private static JsonObject executeToolCall(SubagentTask task, LLMService.ToolCall call, Set<String> allowedTools) {
-        if (call == null || call.name() == null || call.name().isBlank()) {
-            return toolError("unknown", "Invalid tool call");
+    private static String lastAssistantText(List<AgentMessage> messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            if (messages.get(i) instanceof AgentMessage.Assistant assistant && !assistant.failed()) {
+                return assistant.text();
+            }
         }
+        return "";
+    }
 
-        String toolName = call.name();
-        if (!allowedTools.contains(toolName)) {
-            return toolError(toolName, "Tool not allowed by profile: " + toolName);
+    /** Tell the parent session that this subagent reached a terminal state. */
+    private static void notifyParent(SubagentTask task) {
+        TaskSnapshot snapshot = snapshot(task);
+        if (snapshot.status == SubagentStatus.DELETED || snapshot.status == SubagentStatus.CANCELLED) {
+            return;
         }
+        String sessionId;
+        synchronized (task) {
+            sessionId = task.sessionId;
+        }
+        String notice = "[subagent_notice] Subagent " + snapshot.id + " (profile " + snapshot.profileId + ") finished with status "
+                + statusName(snapshot.status) + ". Summary: " + truncateText(
+                snapshot.status == SubagentStatus.FAILED && !snapshot.error.isBlank() ? snapshot.error : snapshot.summary,
+                MAX_SUMMARY_CHARS)
+                + " Call get_subagent with id \"" + snapshot.id + "\" for the full response.";
+        ClientAgentManager.onSubagentFinished(sessionId, snapshot.id, notice);
+    }
 
-        return switch (toolName) {
-            case "list_skills" -> listSkillsPayload(task);
-            case "read_skill" -> readSkillPayload(task, call.arguments());
-            case "read_subdoc" -> readSubdocPayload(task, call.arguments());
-            case "search_skill" -> searchSkillPayload(task, call.arguments());
-            case "update_plan" -> updatePlanPayload(call.arguments());
-            case "get_project_state", "read_workspace_file",
-                    "create_workspace_file", "rename_workspace_file", "delete_workspace_file",
-                    "propose_patch", "search_block_ids" ->
-                    callServerTool(toolName, normalizeArgsObject(call.arguments()));
-            default -> toolError(toolName, "Unsupported tool");
-        };
+    private static ToolRegistry createToolRegistry(SubagentTask task, Set<String> allowedTools) {
+        return ToolRegistry.builder()
+                .allowOnly(allowedTools)
+                .register("list_skills", call -> listSkillsPayload(task))
+                .register("read_skill", call -> readSkillPayload(task, call.arguments()))
+                .register("read_subdoc", call -> readSubdocPayload(task, call.arguments()))
+                .register("search_skill", call -> searchSkillPayload(task, call.arguments()))
+                .register("update_plan", call -> updatePlanPayload(call.arguments()))
+                .register("get_project_state", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .register("read_workspace_file", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .register("create_workspace_file", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .register("rename_workspace_file", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .register("delete_workspace_file", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .register("propose_patch", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .register("search_block_ids", call -> callServerTool(task, call.name(), normalizeArgsObject(call.arguments())))
+                .build();
     }
 
     private static JsonObject updatePlanPayload(JsonElement arguments) {
@@ -772,9 +801,9 @@ public final class SubagentManager {
         return payload;
     }
 
-    private static JsonObject callServerTool(String toolName, JsonObject args) {
+    private static JsonObject callServerTool(SubagentTask task, String toolName, JsonObject args) {
         try {
-            JsonObject payload = ClientToolBridge.call(toolName, args).join();
+            JsonObject payload = ClientToolBridge.call(toolName, args, () -> isTaskActive(task)).join();
             if (payload == null) {
                 return toolError(toolName, "Empty server response");
             }
@@ -793,6 +822,11 @@ public final class SubagentManager {
         sb.append("- Do not ask to create, list, or delete subagents.").append('\n');
         sb.append("- Use only available tools and prefer minimal tool calls.").append('\n');
         sb.append("- If insufficient context exists, explain precisely what is missing.").append('\n');
+        if (P2SClientConfig.isToolsetV2()) {
+            sb.append("- Files: workspace/ (project files, edits are staged for the player's review), skills/ and agents/")
+                    .append(" (read only). Use ls/read/grep/find to look, edit/write/set_part/sh/script to change.").append('\n');
+            sb.append("- Skills may mention propose_patch or read_skill; use the file tools instead.").append('\n');
+        }
         sb.append('\n');
         sb.append("Profile: ").append(profile.id()).append(" / ").append(profile.name()).append('\n');
         if (profile.systemPrompt() != null && !profile.systemPrompt().isBlank()) {
@@ -977,16 +1011,6 @@ public final class SubagentManager {
             }
             task.toolTrace.add(trace);
         }
-    }
-
-    private static JsonObject buildToolMessage(LLMService.ToolCall call, JsonObject payload) {
-        JsonObject toolMsg = new JsonObject();
-        toolMsg.addProperty("role", "tool");
-        if (call != null && call.id() != null && !call.id().isBlank()) {
-            toolMsg.addProperty("tool_call_id", call.id());
-        }
-        toolMsg.addProperty("content", payload == null ? "{}" : GSON.toJson(payload));
-        return toolMsg;
     }
 
     private static List<JsonObject> deepCopyMessages(List<JsonObject> source) {
@@ -1211,6 +1235,10 @@ public final class SubagentManager {
         long startedAt;
         long endedAt;
         boolean cancelRequested = false;
+        /** Running core agent, so cancel/delete can abort its request. */
+        Agent agent;
+        /** Values scripts keep across this subagent's calls. */
+        final java.util.Map<String, JsonElement> scriptStore = new ConcurrentHashMap<>();
     }
 
     private record TaskSnapshot(

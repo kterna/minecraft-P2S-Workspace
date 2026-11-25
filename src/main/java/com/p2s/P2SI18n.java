@@ -157,6 +157,9 @@ public final class P2SI18n {
             case "done" -> tr("status.p2s.done");
             case "blocked" -> tr("status.p2s.blocked");
             case "compacting" -> tr("status.p2s.compacting");
+            case "stopping" -> tr("status.p2s.stopping");
+            case "stopped" -> tr("status.p2s.stopped");
+            case "applying" -> tr("status.p2s.applying");
             default -> literalOrEmpty(status);
         };
     }

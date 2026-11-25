@@ -1,10 +1,12 @@
 package com.p2s;
 
 import com.google.gson.JsonObject;
+import com.p2s.agent.core.AbortSignal;
+import com.p2s.agent.llm.LlmRequestConfig;
+import com.p2s.agent.llm.OpenAiChatCompletions;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 final class ClientHistoryCompactor {
     static final String COMPACT_SUMMARY_MARKER = "[P2S_CONTEXT_COMPACTION_SUMMARY]";
@@ -86,9 +88,9 @@ final class ClientHistoryCompactor {
     static CompactionResult compactHistory(
             List<JsonObject> history,
             CompactTrigger trigger,
-            LLMService.RequestConfig config,
-            long timeoutSeconds
-    ) {
+            LlmRequestConfig config,
+            AbortSignal signal
+    ) throws java.io.IOException {
         List<JsonObject> snapshot = deepCopyMessages(history);
         if (!hasCompactableHistory(snapshot)) {
             throw new IllegalStateException("No non-system history to compact");
@@ -98,14 +100,13 @@ final class ClientHistoryCompactor {
         List<JsonObject> requestHistory = deepCopyMessages(snapshot);
         requestHistory.add(buildMessage("user", P2SClientConfig.getCompactPrompt()));
 
-        LLMService.SessionResult result = LLMService.requestPlainTextWithHistory(requestHistory, config)
-                .orTimeout(Math.max(1, timeoutSeconds), TimeUnit.SECONDS)
-                .join();
-
-        String summaryBody = extractSummaryBody(result);
-        if (summaryBody.isBlank()) {
+        // Compaction is a plain-text request: no tools are advertised. A blank summary must
+        // fail here; replacing the history with a placeholder would silently drop context.
+        String rawSummary = OpenAiChatCompletions.completeText(requestHistory, config, signal);
+        if (rawSummary == null || rawSummary.isBlank()) {
             throw new IllegalStateException("Compaction returned empty summary");
         }
+        String summaryBody = normalizeSummaryBody(rawSummary);
 
         List<JsonObject> replacementHistory = rebuildHistory(snapshot, summaryBody);
         int estimatedTokensAfter = estimateHistoryTokens(replacementHistory);
@@ -182,17 +183,6 @@ final class ClientHistoryCompactor {
             return trimmed.substring(0, Math.min(trimmed.length(), charBudget));
         }
         return trimmed.substring(0, Math.max(1, charBudget - 16)) + " ... [truncated]";
-    }
-
-    private static String extractSummaryBody(LLMService.SessionResult result) {
-        if (result == null) {
-            return "";
-        }
-        String text = result.textContent();
-        if ((text == null || text.isBlank()) && result.rawAssistantMessage() != null) {
-            text = contentOf(result.rawAssistantMessage());
-        }
-        return normalizeSummaryBody(text);
     }
 
     private static String normalizeSummaryBody(String text) {

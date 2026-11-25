@@ -5,22 +5,51 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.p2s.agent.context.ContextBuilder;
+import com.p2s.agent.core.AbortSignal;
+import com.p2s.agent.core.Agent;
+import com.p2s.agent.core.AgentEvent;
+import com.p2s.agent.core.AgentLoop;
+import com.p2s.agent.core.AgentLoopConfig;
+import com.p2s.agent.core.AgentMessage;
+import com.p2s.agent.core.AgentToolResult;
+import com.p2s.agent.core.AssistantMessageEvent;
+import com.p2s.agent.llm.OpenAiChatCompletions;
+import com.p2s.agent.llm.OpenAiMessageCodec;
+import com.p2s.agent.runtime.AgentRunGuard;
+import com.p2s.agent.runtime.AgentRunGuard.RunIdentity;
+import com.p2s.agent.tool.RegistryTools;
+import com.p2s.agent.tool.ToolExecutors;
+import com.p2s.agent.tool.ToolRegistry;
 import com.p2s.store.SessionPersistence;
 import com.p2s.store.SkillStore;
 import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
+/**
+ * Minecraft bridge for the main agent. Each chat session owns one {@link Agent} (the pi-style
+ * core) and this class translates between it and the client: UI commands become prompts,
+ * steering messages or aborts; agent events become chat, tool-log and status updates on the
+ * client thread. Runs are fenced by {@link AgentRunGuard} so late callbacks of a closed or
+ * replaced run never touch the current view.
+ */
 public final class ClientAgentManager {
     private static final Gson GSON = new Gson();
     private static final ExecutorService AGENT_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
@@ -28,8 +57,11 @@ public final class ClientAgentManager {
         t.setDaemon(true);
         return t;
     });
-    private static final int MAX_HISTORY = 40;
-    private static final int SAFETY_LOOP_LIMIT = 50;
+    /** Messages sent to the model per request (the stored transcript may be longer). */
+    private static final int MAX_CONTEXT_MESSAGES = 40;
+    /** Upper bound of the stored transcript between compactions. */
+    private static final int MAX_TRANSCRIPT_MESSAGES = 400;
+    private static final int SAFETY_TURN_LIMIT = 50;
     private static final int MAX_PLAN_ITEMS = 40;
     private static final int MAX_CHOICE_OPTIONS = 3;
     private static final String CLIENT_TOOL_CONTRACT = """
@@ -51,63 +83,110 @@ public final class ClientAgentManager {
             - Use `insert_part` when creating a brand-new part; `insert_actions` is only for appending actions to an existing part.
             - Use create_workspace_file / rename_workspace_file / delete_workspace_file for file management.
             - Propose edits with propose_patch and wait for user apply/discard decision.
+            - A successful propose_patch or request_user_choice pauses your turn; later calls in the same batch are not executed.
             - Use search_block_ids when unsure about block id names.
             - Use list_profiles/get_profile before creating subagents when profile choice matters.
-            - Use create_subagent for delegated tasks, then poll with get_subagent.
+            - Use create_subagent for delegated tasks. You are notified automatically when a subagent finishes; use get_subagent for its full result instead of polling repeatedly.
             - Use continue_subagent to continue a failed/completed/cancelled subagent with new instructions.
             - Use list_subagents to inspect current subagent states, and delete_subagent to stop/remove one.
             - Do not request recursive subagent creation from subagents.
+            - The user may send new instructions while you work; they appear as user messages between your turns. Follow the latest instruction.
             """;
-
-    private static final ExecutorService TOOL_EXECUTOR = Executors.newFixedThreadPool(4, r -> {
-        Thread t = new Thread(r, "p2s-tool-exec");
-        t.setDaemon(true);
-        return t;
-    });
-    private static final Set<String> PARALLEL_SAFE_TOOLS = Set.of(
-            "list_skills", "read_skill", "read_subdoc", "search_skill",
-            "update_plan",
-            "get_project_state", "read_workspace_file", "search_block_ids",
-            "list_subagents", "get_subagent", "list_profiles", "get_profile"
-    );
+    private static final String CLIENT_TOOL_CONTRACT_V2 = """
+            ## Client Agent Contract (tools v2)
+            - Files: workspace/ holds this project's workspace files (TOML); skills/ and agents/ are read-only references. Start with project_info, then ls/read/grep/find.
+            - Change workspace files with edit (exact text replacement), write (whole file), set_part (one part's actions), sh (bash-like text commands) or script (JavaScript: loops, geometry via geo.*, many tool calls in one go).
+            - Every change is staged, not built. When your turn ends the player reviews all staged files and applies or discards them; you then receive one message with their decisions. Do not ask the player to apply in the middle of your work; finish, then summarize what you staged.
+            - read returns the staged version, so later edits build on earlier ones. If a write fails because the file changed, read it again and redo the edit.
+            - Workspace TOML: a [workspace] header (do not change origin, size or type), [palette], and [[part]] tables with name and priority, each holding [[part.action]] entries: type box|plane|line|points, block, from/to (box, plane, line) or at (points: list of [x,y,z]), mode (box: solid|shell|walls; plane: solid|outline), axis (plane: x|y|z with from[axis] == to[axis]), facing. Coordinates are relative to the workspace origin.
+            - Change only the parts the task needs; keep unrelated parts untouched and give new parts clear names.
+            - For curved or repetitive shapes use script with geo.* instead of writing hundreds of points by hand. When you would otherwise make many small tool calls, use script with batch(...) or sh.
+            - Skills may mention propose_patch, patch_toml, read_skill or read_workspace_file; those tools are not available. Read skills as files under skills/ and apply their building rules with the tools above.
+            - Use inspect_world to see what is actually built before modifying an existing structure.
+            - Use update_plan for user-visible progress. Use ask_user before choosing between real alternatives; your turn pauses until the player answers.
+            - Use task to delegate work to a subagent; you are notified automatically when it finishes. Use task_status for its full result.
+            - The user may send new instructions while you work; they appear as user messages between your turns. Follow the latest instruction.
+            """;
 
     private static final Object LOCK = new Object();
     private static LocalSession currentSession;
     private static boolean autoRestoreAttempted = false;
+    private static long connectionEpoch;
+    private static final Map<String, SessionPersistence.SavedSession> PENDING_SAVES = new ConcurrentHashMap<>();
+    private static final ExecutorService SAVE_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "p2s-session-save");
+        t.setDaemon(true);
+        return t;
+    });
 
     private ClientAgentManager() {
     }
 
+    // ---------------------------------------------------------------- UI commands
+
+    public static boolean isAgentRunning() {
+        synchronized (LOCK) {
+            return currentSession != null && currentSession.runs.isRunning();
+        }
+    }
+
+    /** Stop the current run: abort the model request, skip unstarted tools, cancel subagents. */
+    public static void stopCurrentRun() {
+        LocalSession session;
+        synchronized (LOCK) {
+            session = currentSession;
+            if (session == null || !session.runs.isRunning()) {
+                return;
+            }
+            AbortSignal runSignal = session.runSignal;
+            if (runSignal != null) {
+                runSignal.abort("Stopped by user");
+            }
+            session.agent.abort("Stopped by user");
+        }
+        SubagentManager.cancelSession(session.id);
+        postToClient(() -> ClientSessionState.setStatus("stopping"));
+    }
+
+    /** Polled by the chat screen every frame, so it only checks for a non-empty transcript. */
     public static boolean canManualCompact() {
         synchronized (LOCK) {
-            return canManualCompactLocked();
+            return currentSession != null
+                    && !currentSession.runs.isRunning()
+                    && !currentSession.agent.messages().isEmpty();
         }
     }
 
     public static void submitManualCompact() {
         LocalSession session;
+        RunIdentity run;
         synchronized (LOCK) {
             if (currentSession == null) {
                 postToClient(() -> ClientSessionState.addSystemMessage(P2SI18n.tr("screen.p2s.chat.no_active_session").getString()));
                 return;
             }
-            if (currentSession.inFlight) {
+            if (currentSession.runs.isRunning()) {
                 postToClient(() -> ClientSessionState.setStatus("busy"));
                 return;
             }
-            if (!ClientHistoryCompactor.hasCompactableHistory(currentSession.history)) {
+            if (!ClientHistoryCompactor.hasCompactableHistory(wireHistory(currentSession))) {
                 postToClient(() -> {
                     ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.nothing_to_compact").getString());
                     ClientSessionState.setStatus("done");
                 });
                 return;
             }
-            currentSession.inFlight = true;
             session = currentSession;
+            run = beginRunLocked(session);
         }
-
-        postToClient(() -> ClientSessionState.setStatus("compacting"));
-        AGENT_EXECUTOR.execute(() -> runManualCompact(session));
+        postToClient(session, run, () -> ClientSessionState.setStatus("compacting"));
+        startRun(session, run, () -> {
+            boolean compacted = performCompaction(session, run, ClientHistoryCompactor.CompactTrigger.MANUAL, false);
+            if (!compacted) {
+                postToClient(session, run, () -> ClientSessionState.setStatus("done"));
+            }
+            return AgentEvent.EndReason.COMPLETED;
+        });
     }
 
     public static void submitUserMessage(String text) {
@@ -123,7 +202,7 @@ public final class ClientAgentManager {
         if (visible.isBlank()) {
             visible = msg;
         }
-        if (ClientSessionState.hasPendingPatch()) {
+        if (ClientSessionState.hasAnyPendingPatch()) {
             postToClient(() -> ClientSessionState.onChatResponse(
                     "Pending patch awaiting decision. Use Apply or Discard first.",
                     false,
@@ -140,130 +219,157 @@ public final class ClientAgentManager {
             return;
         }
 
+        String finalVisible = visible;
         LocalSession session;
+        RunIdentity run;
         synchronized (LOCK) {
             session = ensureSessionLocked();
             if (session == null) {
                 return;
             }
-            if (session.inFlight) {
-                postToClient(() -> ClientSessionState.setStatus("busy"));
+            if (session.runs.isRunning()) {
+                // pi steering: delivered after the current turn's tool calls finish.
+                session.agent.steer(AgentMessage.User.of(msg));
+                postToClient(() -> {
+                    ClientSessionState.addUserMessage(finalVisible);
+                    ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.agent.queued").getString());
+                });
                 return;
             }
-            session.inFlight = true;
+            run = beginRunLocked(session);
         }
 
-        String finalVisible = visible;
-        postToClient(() -> {
+        postToClient(session, run, () -> {
             ClientSessionState.addUserMessage(finalVisible);
             ClientSessionState.setStatus("planning");
         });
-
-        AGENT_EXECUTOR.execute(() -> runUserTurn(session, msg));
+        startRun(session, run, () -> {
+            maybeRunAutomaticCompaction(session, run, ClientHistoryCompactor.CompactTrigger.AUTO_PRE_TURN);
+            if (!isCurrentRun(session, run) || isRunAborted(session)) {
+                return AgentEvent.EndReason.ABORTED;
+            }
+            return promptAgent(session, run, List.of(AgentMessage.User.of(msg)));
+        });
     }
 
+    /** Apply the selected pending file. */
     public static void submitPatchApply() {
-        if (!ClientSessionState.hasPendingPatch()) {
-            return;
-        }
-        String summary = ClientSessionState.getPendingSummary();
-        String pendingPath = ClientSessionState.getPendingPath();
+        submitPatchDecision(true, "", false);
+    }
 
-        JsonObject payload = new JsonObject();
-        if (pendingPath != null && !pendingPath.isBlank()) {
-            payload.addProperty("path", pendingPath);
-        }
-        if (!ClientServerBridge.sendSessionAction("apply", payload.toString())) {
-            return;
-        }
-        ClientSessionState.clearPendingPatch();
-
-        String historyContent = "User APPLIED the proposed patch. Summary: " + summary + " Continue with the next step.";
-        String userMessageText = "Applied patch: " + summary;
-
-        LocalSession session;
-        synchronized (LOCK) {
-            session = ensureSessionLocked();
-            if (session == null) {
-                return;
-            }
-            if (session.inFlight) {
-                postToClient(() -> ClientSessionState.setStatus("busy"));
-                return;
-            }
-            session.inFlight = true;
-
-            JsonObject user = new JsonObject();
-            user.addProperty("role", "user");
-            user.addProperty("content", historyContent);
-            session.history.add(user);
-            trimHistoryLocked(session);
-        }
-
-        postToClient(() -> {
-            ClientSessionState.addUserMessage(userMessageText);
-            ClientSessionState.setStatus("planning");
-        });
-
-        AGENT_EXECUTOR.execute(() -> runAgentLoop(session));
+    /** Apply every file with a staged change (Shift+Apply and auto-apply). */
+    public static void submitPatchApplyAll() {
+        submitPatchDecision(true, "", true);
     }
 
     public static void submitPatchDiscard(String reason) {
-        if (!ClientSessionState.hasPendingPatch()) {
+        submitPatchDecision(false, reason, false);
+    }
+
+    /**
+     * Apply / Discard. The server commits or drops each file and returns a receipt; only receipts
+     * reach the model, so "applied" always means committed. While other files still have staged
+     * changes the agent is not woken: decisions are collected and reported in one message once
+     * nothing is left to review, so the agent never works on top of half-reviewed changes.
+     */
+    private static void submitPatchDecision(boolean apply, String reason, boolean all) {
+        List<String> paths = all ? ClientSessionState.getPendingWorkspacePaths()
+                : ClientSessionState.hasPendingPatch() ? List.of(ClientSessionState.getPendingPath()) : List.of();
+        if (paths.isEmpty()) {
             return;
         }
-        String summary = ClientSessionState.getPendingSummary();
-        String pendingPath = ClientSessionState.getPendingPath();
-
+        String selectedSummary = ClientSessionState.getPendingSummary();
         String safeReason = reason == null ? "" : reason.trim();
-        JsonObject payload = new JsonObject();
-        if (pendingPath != null && !pendingPath.isBlank()) {
-            payload.addProperty("path", pendingPath);
-        }
-        if (!safeReason.isBlank()) {
-            payload.addProperty("reason", safeReason);
-        }
-        if (!ClientServerBridge.sendSessionAction("discard", payload.toString())) {
-            return;
-        }
-        ClientSessionState.clearPendingPatch();
 
-        String historyContent = "User DISCARDED the proposed patch. Summary: " + summary;
-        if (!safeReason.isEmpty()) {
-            historyContent += " Reason: " + safeReason;
-        }
-        historyContent += " Please revise your approach.";
-
-        String userMessageText = safeReason.isEmpty()
-                ? "Discarded patch: " + summary
-                : "Discarded patch: " + summary + " (Reason: " + safeReason + ")";
-
-        String finalHistoryContent = historyContent;
         LocalSession session;
+        RunIdentity run;
+        PendingApproval approval;
         synchronized (LOCK) {
             session = ensureSessionLocked();
             if (session == null) {
                 return;
             }
-            if (session.inFlight) {
+            if (session.runs.isRunning()) {
                 postToClient(() -> ClientSessionState.setStatus("busy"));
                 return;
             }
-            session.inFlight = true;
-
-            JsonObject user = new JsonObject();
-            user.addProperty("role", "user");
-            user.addProperty("content", finalHistoryContent);
-            session.history.add(user);
-            trimHistoryLocked(session);
+            run = beginRunLocked(session);
+            approval = session.pendingApproval;
         }
 
-        postToClient(() -> {
-            ClientSessionState.addUserMessage(userMessageText);
-            ClientSessionState.setStatus("planning");
+        String visible = (apply ? "Applied" : "Discarded") + (paths.size() > 1 ? " " + paths.size() + " files" : " patch: " + selectedSummary)
+                + (safeReason.isEmpty() ? "" : " (Reason: " + safeReason + ")");
+        postToClient(session, run, () -> {
+            ClientSessionState.addUserMessage(visible);
+            ClientSessionState.setStatus(apply ? "applying" : "planning");
         });
 
-        AGENT_EXECUTOR.execute(() -> runAgentLoop(session));
+        startRun(session, run, () -> {
+            int failures = 0;
+            for (String path : paths) {
+                JsonObject args = new JsonObject();
+                if (path != null && !path.isBlank()) {
+                    args.addProperty("path", path);
+                }
+                if (apply && approval != null && approval.path().equals(path) && !approval.revision().isBlank()) {
+                    args.addProperty("expected_revision", approval.revision());
+                }
+                if (!apply && !safeReason.isBlank()) {
+                    args.addProperty("reason", safeReason);
+                }
+                JsonObject receipt = callServerTool(session, run, apply ? "session_apply_patch" : "session_discard_patch", args);
+                if (!isCurrentRun(session, run) || isRunAborted(session)) {
+                    return AgentEvent.EndReason.ABORTED;
+                }
+                if (AgentToolResult.isErrorPayload(receipt)) {
+                    failures++;
+                    String error = asString(receipt, "error");
+                    postToClient(session, run, () -> ClientSessionState.onChatResponse(
+                            P2SI18n.tr(apply ? "message.p2s.agent.apply_failed" : "message.p2s.agent.discard_failed",
+                                    path + ": " + (error.isBlank() ? "unknown error" : error)).getString(),
+                            false, "error"));
+                    continue;
+                }
+                String shown = ClientVirtualFs.toVfs(asString(receipt, "path").isBlank() ? path : asString(receipt, "path"));
+                String summary = asString(receipt, "summary");
+                String decision = apply
+                        ? "APPLIED " + shown + " (committed as revision " + asString(receipt, "revision") + ")"
+                        : "DISCARDED " + shown + (safeReason.isEmpty() ? "" : " - reason: " + safeReason);
+                synchronized (LOCK) {
+                    session.reviewDecisions.add(decision + (summary.isBlank() ? "" : ": " + summary));
+                    if (approval != null && approval.path().equals(path)) {
+                        session.pendingApproval = null;
+                    }
+                }
+            }
+            if (failures == paths.size()) {
+                return AgentEvent.EndReason.ERROR;
+            }
+            JsonObject state = callServerTool(session, run, "get_project_state", new JsonObject());
+            java.util.Set<String> remaining = ClientVirtualFs.pendingPaths(state);
+            if (!AgentToolResult.isErrorPayload(state) && !remaining.isEmpty()) {
+                int left = remaining.size();
+                postToClient(session, run, () -> ClientSessionState.addSystemMessage(
+                        P2SI18n.tr("message.p2s.agent.review_remaining", left).getString()));
+                return AgentEvent.EndReason.COMPLETED;
+            }
+            List<String> decisions;
+            synchronized (LOCK) {
+                decisions = List.copyOf(session.reviewDecisions);
+                session.reviewDecisions.clear();
+            }
+            if (decisions.isEmpty()) {
+                return AgentEvent.EndReason.COMPLETED;
+            }
+            StringBuilder history = new StringBuilder("Player review of your staged changes:");
+            for (String decision : decisions) {
+                history.append("\n- ").append(decision);
+            }
+            boolean anyDiscarded = decisions.stream().anyMatch(d -> d.startsWith("DISCARDED"));
+            history.append(anyDiscarded ? "\nRevise the discarded changes, then continue." : "\nContinue with the next step.");
+            postToClient(session, run, () -> ClientSessionState.setStatus("planning"));
+            return promptAgent(session, run, List.of(AgentMessage.User.of(history.toString())));
+        });
     }
 
     public static void submitChoiceSelection(String optionId) {
@@ -324,407 +430,420 @@ public final class ClientAgentManager {
         if (choice == null) {
             return;
         }
-        ClientSessionState.clearPendingChoice();
-
         LocalSession session;
+        RunIdentity run;
         synchronized (LOCK) {
             session = ensureSessionLocked();
             if (session == null) {
                 return;
             }
-            if (session.inFlight) {
+            if (session.runs.isRunning()) {
                 postToClient(() -> ClientSessionState.setStatus("busy"));
                 return;
             }
-            session.inFlight = true;
-
-            JsonObject user = new JsonObject();
-            user.addProperty("role", "user");
-            user.addProperty("content", historyContent == null ? "" : historyContent);
-            session.history.add(user);
-            trimHistoryLocked(session);
+            run = beginRunLocked(session);
+            ClientSessionState.clearPendingChoice();
         }
 
-        postToClient(() -> {
+        postToClient(session, run, () -> {
             ClientSessionState.addUserMessage(userMessageText);
             ClientSessionState.setStatus("planning");
         });
-
-        AGENT_EXECUTOR.execute(() -> runAgentLoop(session));
+        String content = historyContent == null ? "" : historyContent;
+        startRun(session, run, () -> promptAgent(session, run, List.of(AgentMessage.User.of(content))));
     }
 
-    private static void runAgentLoop(LocalSession session) {
-        int iterations = 0;
-        try {
-            while (iterations < SAFETY_LOOP_LIMIT) {
-                if (P2SMod.DEBUG) {
-                    int historySize;
-                    synchronized (LOCK) {
-                        historySize = session.history == null ? 0 : session.history.size();
-                    }
-                    P2SMod.LOGGER.info("[DEBUG] ClientAgent loop start -> iteration={}, sessionId={}, historySize={}, inFlight={}", iterations, session.id, historySize, session.inFlight);
-                }
-                List<JsonObject> snapshot;
-                synchronized (LOCK) {
-                    if (session != currentSession) {
-                        return;
-                    }
-                    snapshot = deepCopyMessages(session.history);
-                }
-
-                long timeoutSeconds = Math.max(1, Math.max(
-                        P2SClientConfig.getSessionJobTimeoutSeconds(),
-                        P2SClientConfig.getHttpTimeoutSeconds() + 5
-                ));
-
-                LLMService.SessionResult result;
-                if (P2SClientConfig.getUseStreaming()) {
-                    if (P2SMod.DEBUG) {
-                        P2SMod.LOGGER.info("[DEBUG] ClientAgent using streaming path");
-                    }
-                    postToClient(ClientSessionState::beginStreaming);
-                    try {
-                        result = LLMService.requestWithHistoryStreaming(
-                                        snapshot,
-                                        P2SClientConfig.llmRequestConfig(),
-                                        token -> postToClient(() -> ClientSessionState.appendStreamingToken(token))
-                                )
-                                .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
-                                .join();
-                    } finally {
-                        postToClient(ClientSessionState::endStreaming);
-                    }
-                } else {
-                    if (P2SMod.DEBUG) {
-                        P2SMod.LOGGER.info("[DEBUG] ClientAgent using non-streaming path");
-                    }
-                    result = LLMService.requestWithHistoryWithSkills(
-                                    snapshot,
-                                    P2SClientConfig.llmRequestConfig()
-                            )
-                            .orTimeout(timeoutSeconds, TimeUnit.SECONDS)
-                            .join();
-                }
-
-                boolean continueLoop = handleResult(session, result);
-                if (!continueLoop) {
-                    break;
-                }
-                maybeRunAutomaticCompaction(session, ClientHistoryCompactor.CompactTrigger.AUTO_MID_TURN);
-                iterations++;
-            }
-            if (iterations >= SAFETY_LOOP_LIMIT) {
-                P2SMod.LOGGER.warn("Agent loop reached safety limit of {} iterations", SAFETY_LOOP_LIMIT);
-                postToClient(() -> ClientSessionState.onChatResponse(
-                        "Agent loop reached safety limit (" + SAFETY_LOOP_LIMIT + " iterations). Stopping.",
-                        false,
-                        "error"
-                ));
-            }
-        } catch (Exception ex) {
-            String error = formatAgentError(ex);
-            postToClient(() -> ClientSessionState.onChatResponse("Request failed: " + error, false, "error"));
-        } finally {
+    /**
+     * A subagent of the current session finished. While the main agent runs, the notice is
+     * steered into its next turn; while it waits for the user, the notice is queued for the
+     * next run; when idle, it starts a run so delegated work continues without polling.
+     */
+    static void onSubagentFinished(String sessionId, String subagentId, String notice) {
+        postToClient(() -> {
+            LocalSession session;
+            RunIdentity run;
             synchronized (LOCK) {
-                if (session == currentSession) {
-                    session.inFlight = false;
+                session = currentSession;
+                if (session == null || sessionId == null || !sessionId.equals(session.id)) {
+                    return;
                 }
+                AgentMessage.User message = AgentMessage.User.of(notice);
+                if (session.runs.isRunning() || ClientSessionState.hasAnyPendingPatch()
+                        || ClientSessionState.hasPendingChoice()) {
+                    session.agent.steer(message);
+                    return;
+                }
+                run = beginRunLocked(session);
             }
-            postToClient(ClientAgentManager::maybeAutoApplyPendingPatch);
-            autoSaveSession(session);
-        }
+            postToClient(session, run, () -> {
+                ClientSessionState.addSystemMessage(
+                        P2SI18n.tr("message.p2s.agent.subagent_resume", subagentId).getString());
+                ClientSessionState.setStatus("planning");
+            });
+            startRun(session, run, () -> promptAgent(session, run, List.of(AgentMessage.User.of(notice))));
+        });
     }
 
-    private static boolean handleResult(LocalSession session, LLMService.SessionResult result) {
-        if (result == null) {
-            postToClient(() -> ClientSessionState.onChatResponse("Request failed: empty response", false, "error"));
-            return false;
-        }
+    // ---------------------------------------------------------------- run lifecycle
 
-        if (P2SMod.DEBUG) {
-            P2SMod.LOGGER.info("[DEBUG] ClientAgent handleResult -> text={}, toolCalls={}, rawAssistant={}",
-                    result.textContent() == null ? "null" : result.textContent().length() + " chars",
-                    result.toolCalls() == null ? 0 : result.toolCalls().size(),
-                    result.rawAssistantMessage());
-        }
+    private static RunIdentity beginRunLocked(LocalSession session) {
+        RunIdentity run = session.runs.beginRun();
+        session.runSignal = AbortSignal.create();
+        session.activeRun = run;
+        return run;
+    }
 
+    private static boolean isRunAborted(LocalSession session) {
         synchronized (LOCK) {
-            if (result.rawAssistantMessage() != null) {
-                session.history.add(result.rawAssistantMessage().deepCopy());
-                trimHistoryLocked(session);
-            }
+            return session.runSignal != null && session.runSignal.isAborted();
         }
+    }
 
-        List<LLMService.ToolCall> toolCalls = result.toolCalls() == null ? List.of() : result.toolCalls();
-        if (!toolCalls.isEmpty()) {
-            String text = result.textContent();
-            if (text != null && !text.isBlank()) {
-                postToClient(() -> ClientSessionState.onChatResponse(text, false, null));
-            }
+    @FunctionalInterface
+    private interface RunBody {
+        AgentEvent.EndReason run() throws Exception;
+    }
 
-            List<ToolCallResult> results = executeToolCallsBatch(session, toolCalls);
-            postVisibleToolResults(results);
-            for (ToolCallResult tcr : results) {
-                if (P2SMod.DEBUG) {
-                    P2SMod.LOGGER.info("[DEBUG] ClientAgent tool call -> name={}, args={}, result={}", tcr.call().name(), tcr.call().arguments(), GSON.toJson(tcr.payload()));
-                }
-                JsonObject toolMsg = buildToolMessage(tcr.call(), tcr.payload());
-                synchronized (LOCK) {
-                    session.history.add(toolMsg);
-                    trimHistoryLocked(session);
-                    if (P2SMod.DEBUG) {
-                        P2SMod.LOGGER.info("[DEBUG] ClientAgent history size after tool msg: {}", session.history.size());
-                    }
-                }
+    private static void startRun(LocalSession session, RunIdentity run, RunBody body) {
+        AGENT_EXECUTOR.execute(() -> {
+            AgentEvent.EndReason reason = AgentEvent.EndReason.ERROR;
+            try {
+                reason = body.run();
+            } catch (Exception ex) {
+                String error = formatAgentError(ex);
+                postToClient(session, run, () -> ClientSessionState.onChatResponse("Request failed: " + error, false, "error"));
+            } finally {
+                finishRun(session, run, reason);
             }
+        });
+    }
 
-            postToClient(() -> ClientSessionState.setStatus(statusAfterToolCalls()));
-
-            if (ClientSessionState.hasPendingChoice()) {
-                return false;
-            }
-            if (ClientSessionState.hasPendingPatch()) {
-                return false;
-            }
-            return true;
+    /** Runs the core agent for one prompt and bridges its events to the client. */
+    private static AgentEvent.EndReason promptAgent(LocalSession session, RunIdentity run, List<AgentMessage> prompts) {
+        if (!isCurrentRun(session, run)) {
+            return AgentEvent.EndReason.ABORTED;
         }
-
-        String text = result.textContent();
-        if (text != null && !text.isBlank()) {
-            postToClient(() -> ClientSessionState.onChatResponse(
-                    text,
-                    false,
-                    ClientSessionState.hasPendingPatch() ? "awaiting_confirm" : "done"
-            ));
+        session.agent.setSystemPrompt(systemPrompt());
+        if (P2SClientConfig.isToolsetV2()) {
+            session.agent.setTools(AgentToolsV2.create(v2Host(session, run), null).agentTools(
+                    () -> isCurrentRun(session, run), (name, payload) -> interactionControl(session, name, payload)));
         } else {
-            postToClient(() -> ClientSessionState.setStatus(
-                    ClientSessionState.hasPendingPatch() ? "awaiting_confirm" : "done"
-            ));
+            session.agent.setTools(RegistryTools.from(createToolRegistry(session, run),
+                    () -> isCurrentRun(session, run), (name, payload) -> interactionControl(session, name, payload)));
         }
-        return false;
-    }
-
-    private record ToolCallResult(LLMService.ToolCall call, JsonObject payload) {
-    }
-
-    private record ToolLogPresentation(String summary, String detail, boolean error) {
-    }
-
-    private static void runUserTurn(LocalSession session, String message) {
-        boolean delegated = false;
+        Runnable unsubscribe = session.agent.subscribe(event -> onAgentEvent(session, run, event));
         try {
-            maybeRunAutomaticCompaction(session, ClientHistoryCompactor.CompactTrigger.AUTO_PRE_TURN);
+            if (isRunAborted(session)) {
+                return AgentEvent.EndReason.ABORTED;
+            }
+            AgentLoop.Outcome outcome = session.agent.prompt(prompts);
+            return outcome.reason();
+        } finally {
+            unsubscribe.run();
+        }
+    }
+
+    /** Successful approvals and choices hand control to the user and pause the run. */
+    private static AgentToolResult.Control interactionControl(LocalSession session, String toolName, JsonObject payload) {
+        if ("propose_patch".equals(toolName)) {
+            String path = asString(payload, "path");
+            String revision = asString(payload, "pending_revision");
+            if (session != null) {
+                synchronized (LOCK) {
+                    session.pendingApproval = new PendingApproval(path, revision);
+                }
+            }
+            return AgentToolResult.Control.PAUSE;
+        }
+        if ("request_user_choice".equals(toolName) || "ask_user".equals(toolName)) {
+            return AgentToolResult.Control.PAUSE;
+        }
+        return AgentToolResult.Control.NONE;
+    }
+
+    private static void onAgentEvent(LocalSession session, RunIdentity run, AgentEvent event) {
+        if (event instanceof AgentEvent.MessageStart start && start.message() instanceof AgentMessage.Assistant) {
+            if (P2SClientConfig.getUseStreaming()) {
+                postToClient(session, run, ClientSessionState::beginStreaming, false);
+            }
+            postToClient(session, run, () -> ClientSessionState.setStatus("thinking"), false);
+        } else if (event instanceof AgentEvent.MessageUpdate update
+                && update.event() instanceof AssistantMessageEvent.TextDelta delta) {
+            postToClient(session, run, () -> ClientSessionState.appendStreamingToken(delta.delta()), false);
+        } else if (event instanceof AgentEvent.MessageEnd end && end.message() instanceof AgentMessage.Assistant assistant) {
+            postToClient(session, run, ClientSessionState::endStreaming, false);
+            if (assistant.stopReason() == AgentMessage.StopReason.ABORTED) {
+                postToClient(session, run, () -> ClientSessionState.addSystemMessage(
+                        P2SI18n.tr("message.p2s.agent.stopped").getString()));
+            } else if (assistant.failed()) {
+                String error = assistant.errorMessage().isBlank() ? "Unknown error" : assistant.errorMessage();
+                postToClient(session, run, () -> ClientSessionState.onChatResponse("Request failed: " + error, false, "error"));
+            } else if (!assistant.text().isBlank()) {
+                String text = assistant.text();
+                postToClient(session, run, () -> ClientSessionState.onChatResponse(text, false, null));
+            }
+            if (P2SMod.DEBUG) {
+                P2SMod.LOGGER.info("[DEBUG] ClientAgent assistant -> stop={}, toolCalls={}, textLen={}",
+                        assistant.stopReason(), assistant.toolCalls().size(), assistant.text().length());
+            }
+        } else if (event instanceof AgentEvent.ToolExecutionEnd toolEnd) {
+            AgentMessage.ToolCall call = toolEnd.toolCall();
+            JsonObject resultPayload = toolEnd.result().content();
+            if (P2SMod.DEBUG) {
+                P2SMod.LOGGER.info("[DEBUG] ClientAgent tool call -> name={}, args={}, result={}",
+                        call.name(), call.rawArguments(), GSON.toJson(resultPayload));
+            }
+            postToClient(session, run, () -> {
+                ToolLogPresentation presentation = buildToolLogPresentation(call, resultPayload);
+                if (presentation.error()) {
+                    ClientSessionState.addToolErrorMessage(presentation.summary(), presentation.detail());
+                } else {
+                    ClientSessionState.addToolCallMessage(presentation.summary(), presentation.detail());
+                }
+            });
+        } else if (event instanceof AgentEvent.TurnEnd turnEnd && !turnEnd.toolResults().isEmpty()) {
+            postToClient(session, run, () -> ClientSessionState.setStatus(statusAfterToolCalls()));
+        }
+    }
+
+    private static void finishRun(LocalSession session, RunIdentity run, AgentEvent.EndReason reason) {
+        postToClient(() -> {
             synchronized (LOCK) {
-                if (session != currentSession) {
+                if (!isCurrentRunLocked(session, run) || !session.runs.finishRun(run)) {
                     return;
                 }
-                appendUserMessageLocked(session, message);
-            }
-            delegated = true;
-            runAgentLoop(session);
-        } catch (Exception ex) {
-            String error = formatAgentError(ex);
-            postToClient(() -> ClientSessionState.onChatResponse("Request failed: " + error, false, "error"));
-        } finally {
-            if (!delegated) {
-                synchronized (LOCK) {
-                    if (session == currentSession) {
-                        session.inFlight = false;
+                session.activeRun = null;
+                session.runSignal = null;
+                boolean sameProject = session.projectId.equals(ClientSessionState.getProjectId());
+                if (sameProject) {
+                    // Queued after the final text/tool/UI updates of this run.
+                    ClientSessionState.endStreaming();
+                    ClientSessionState.setStatus(statusAfterRun(reason));
+                    if (reason == AgentEvent.EndReason.STOPPED_BY_POLICY) {
+                        ClientSessionState.addSystemMessage(
+                                P2SI18n.tr("message.p2s.agent.safety_limit", SAFETY_TURN_LIMIT).getString());
                     }
                 }
-                autoSaveSession(session);
-            }
-        }
-    }
-
-    private static void runManualCompact(LocalSession session) {
-        try {
-            List<JsonObject> snapshot;
-            synchronized (LOCK) {
-                if (session != currentSession) {
+                capTranscriptLocked(session);
+                saveSessionLocked(session);
+                if (!sameProject) {
                     return;
                 }
-                snapshot = deepCopyMessages(session.history);
-            }
-            if (!ClientHistoryCompactor.hasCompactableHistory(snapshot)) {
-                postToClient(() -> ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.nothing_to_compact").getString()));
-                return;
-            }
-            boolean compacted = performCompaction(session, snapshot, ClientHistoryCompactor.CompactTrigger.MANUAL, false);
-            if (!compacted) {
-                postToClient(() -> ClientSessionState.setStatus("done"));
-            }
-        } finally {
-            synchronized (LOCK) {
-                if (session == currentSession) {
-                    session.inFlight = false;
+                boolean waitingForUser = ClientSessionState.hasAnyPendingPatch() || ClientSessionState.hasPendingChoice();
+                if (reason != AgentEvent.EndReason.ABORTED && reason != AgentEvent.EndReason.PAUSED
+                        && !waitingForUser && session.agent.hasQueuedMessages()) {
+                    // Messages steered after the agent's last check: run them now instead of
+                    // leaving them invisible to the model until the next user action.
+                    List<AgentMessage> queued = new ArrayList<>(session.agent.clearSteeringQueue());
+                    queued.addAll(session.agent.clearFollowUpQueue());
+                    RunIdentity next = beginRunLocked(session);
+                    ClientSessionState.setStatus("planning");
+                    startRun(session, next, () -> promptAgent(session, next, queued));
+                    return;
+                }
+                // Not after a failed run: a rejected auto-apply would otherwise retry forever.
+                if (reason != AgentEvent.EndReason.ERROR) {
+                    maybeAutoApplyPendingPatch();
                 }
             }
-            autoSaveSession(session);
-        }
+        });
     }
 
-    private static boolean maybeRunAutomaticCompaction(
-            LocalSession session,
-            ClientHistoryCompactor.CompactTrigger trigger
-    ) {
+    private static String statusAfterRun(AgentEvent.EndReason reason) {
+        return switch (reason) {
+            case PAUSED, COMPLETED -> {
+                String waiting = statusAfterToolCalls();
+                yield "thinking".equals(waiting) ? "done" : waiting;
+            }
+            case ABORTED -> "stopped";
+            case ERROR, STOPPED_BY_POLICY -> "error";
+        };
+    }
+
+    // ---------------------------------------------------------------- compaction
+
+    private static boolean maybeRunAutomaticCompaction(LocalSession session, RunIdentity run,
+                                                       ClientHistoryCompactor.CompactTrigger trigger) {
         if (!P2SClientConfig.isAutoCompactEnabled()) {
             return false;
         }
-
-        List<JsonObject> snapshot;
-        synchronized (LOCK) {
-            if (session != currentSession) {
-                return false;
-            }
-            snapshot = deepCopyMessages(session.history);
-        }
-
-        if (!ClientHistoryCompactor.hasCompactableHistory(snapshot)) {
+        List<JsonObject> wire = wireHistory(session);
+        if (!ClientHistoryCompactor.hasCompactableHistory(wire)
+                || !ClientHistoryCompactor.hasNonSummaryNonSystemMessages(wire)
+                || ClientHistoryCompactor.estimateHistoryTokens(wire) < P2SClientConfig.getAutoCompactTokenLimit()) {
             return false;
         }
-        if (!ClientHistoryCompactor.hasNonSummaryNonSystemMessages(snapshot)) {
-            return false;
-        }
-        if (ClientHistoryCompactor.estimateHistoryTokens(snapshot) < P2SClientConfig.getAutoCompactTokenLimit()) {
-            return false;
-        }
-        return performCompaction(session, snapshot, trigger, true);
+        return performCompaction(session, run, trigger, true);
     }
 
-    private static boolean performCompaction(
-            LocalSession session,
-            List<JsonObject> snapshot,
-            ClientHistoryCompactor.CompactTrigger trigger,
-            boolean requireReduction
-    ) {
-        long timeoutSeconds = Math.max(1, Math.max(
-                P2SClientConfig.getSessionJobTimeoutSeconds(),
-                P2SClientConfig.getHttpTimeoutSeconds() + 5L
-        ));
-        postToClient(() -> ClientSessionState.setStatus("compacting"));
+    /** Mid-run compaction hook (pi prepareNextTurn); returns the replacement transcript or null. */
+    private static List<AgentMessage> compactBetweenTurns(LocalSession session, List<AgentMessage> messages) {
+        RunIdentity run;
+        synchronized (LOCK) {
+            run = session.activeRun;
+        }
+        if (run == null || !P2SClientConfig.isAutoCompactEnabled()) {
+            return null;
+        }
+        List<JsonObject> wire = OpenAiMessageCodec.toWire(systemPrompt(), ContextBuilder.repair(messages));
+        if (!ClientHistoryCompactor.hasNonSummaryNonSystemMessages(wire)
+                || ClientHistoryCompactor.estimateHistoryTokens(wire) < P2SClientConfig.getAutoCompactTokenLimit()) {
+            return null;
+        }
+        CompactionOutcome outcome = compact(session, run, wire, ClientHistoryCompactor.CompactTrigger.AUTO_MID_TURN, true);
+        return outcome == null ? null : outcome.messages();
+    }
+
+    /** Compaction while the agent is idle (manual or before a turn). */
+    private static boolean performCompaction(LocalSession session, RunIdentity run,
+                                             ClientHistoryCompactor.CompactTrigger trigger, boolean requireReduction) {
+        CompactionOutcome outcome = compact(session, run, wireHistory(session), trigger, requireReduction);
+        if (outcome == null) {
+            return false;
+        }
+        session.agent.replaceMessages(outcome.messages());
+        return true;
+    }
+
+    private static CompactionOutcome compact(LocalSession session, RunIdentity run, List<JsonObject> wire,
+                                             ClientHistoryCompactor.CompactTrigger trigger, boolean requireReduction) {
+        if (!isCurrentRun(session, run)) {
+            return null;
+        }
+        AbortSignal signal;
+        synchronized (LOCK) {
+            signal = session.runSignal == null ? AbortSignal.none() : session.runSignal;
+        }
+        postToClient(session, run, () -> ClientSessionState.setStatus("compacting"));
         try {
             ClientHistoryCompactor.CompactionResult result = ClientHistoryCompactor.compactHistory(
-                    snapshot,
-                    trigger,
-                    P2SClientConfig.llmRequestConfig(),
-                    timeoutSeconds
-            );
+                    wire, trigger, P2SClientConfig.llmRequestConfig(), signal);
             if (requireReduction && result.estimatedTokensAfter() >= result.estimatedTokensBefore()) {
-                return false;
+                return null;
             }
-
-            synchronized (LOCK) {
-                if (session != currentSession) {
-                    return false;
-                }
-                session.history = deepCopyMessages(result.replacementHistory());
-                trimHistoryLocked(session);
+            if (!isCurrentRun(session, run)) {
+                return null;
             }
-
-            postToClient(() -> {
+            List<AgentMessage> replacement = OpenAiMessageCodec.fromWire(result.replacementHistory()).messages();
+            postToClient(session, run, () -> {
                 ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.done").getString() + "\n" + result.summaryBody());
                 if (trigger == ClientHistoryCompactor.CompactTrigger.MANUAL) {
                     ClientSessionState.setStatus("done");
                 }
             });
-            return true;
+            return new CompactionOutcome(replacement);
         } catch (Exception ex) {
             String error = formatAgentError(ex);
             P2SMod.LOGGER.warn("History compaction failed ({}): {}", trigger, error);
-            synchronized (LOCK) {
-                if (session == currentSession) {
-                    trimHistoryLocked(session);
-                }
-            }
-            postToClient(() -> ClientSessionState.addSystemMessage(
+            postToClient(session, run, () -> ClientSessionState.addSystemMessage(
                     P2SI18n.tr("message.p2s.compact.failed_fallback").getString() + " " + error
             ));
-            return false;
+            return null;
         }
     }
 
-    private static List<ToolCallResult> executeToolCallsBatch(LocalSession session, List<LLMService.ToolCall> toolCalls) {
-        if (toolCalls.size() == 1) {
-            LLMService.ToolCall call = toolCalls.get(0);
-            JsonObject payload = executeToolCall(session, call);
-            return List.of(new ToolCallResult(call, payload));
-        }
-
-        List<LLMService.ToolCall> parallelCalls = new ArrayList<>();
-        List<LLMService.ToolCall> serialCalls = new ArrayList<>();
-        for (LLMService.ToolCall call : toolCalls) {
-            if (call != null && call.name() != null && PARALLEL_SAFE_TOOLS.contains(call.name())) {
-                parallelCalls.add(call);
-            } else {
-                serialCalls.add(call);
-            }
-        }
-
-        Map<LLMService.ToolCall, JsonObject> resultMap = new LinkedHashMap<>();
-
-        if (!parallelCalls.isEmpty()) {
-            List<CompletableFuture<ToolCallResult>> futures = new ArrayList<>();
-            for (LLMService.ToolCall call : parallelCalls) {
-                futures.add(CompletableFuture.supplyAsync(
-                        () -> new ToolCallResult(call, executeToolCall(session, call)),
-                        TOOL_EXECUTOR
-                ));
-            }
-            for (CompletableFuture<ToolCallResult> future : futures) {
-                try {
-                    ToolCallResult tcr = future.join();
-                    resultMap.put(tcr.call(), tcr.payload());
-                } catch (Exception e) {
-                    P2SMod.LOGGER.warn("Parallel tool call failed: {}", e.getMessage());
-                }
-            }
-        }
-
-        for (LLMService.ToolCall call : serialCalls) {
-            JsonObject payload = executeToolCall(session, call);
-            resultMap.put(call, payload);
-        }
-
-        List<ToolCallResult> ordered = new ArrayList<>();
-        for (LLMService.ToolCall call : toolCalls) {
-            JsonObject payload = resultMap.get(call);
-            if (payload == null) {
-                payload = toolError(call == null ? "" : call.name(), "Execution failed");
-            }
-            ordered.add(new ToolCallResult(call, payload));
-        }
-        return ordered;
+    private record CompactionOutcome(List<AgentMessage> messages) {
     }
 
-    private static JsonObject executeToolCall(LocalSession session, LLMService.ToolCall call) {
-        if (call == null || call.name() == null) {
-            return toolError("", "Invalid tool call");
-        }
+    // ---------------------------------------------------------------- agent wiring
 
-        String toolName = call.name();
-        return switch (toolName) {
-            case "list_skills" -> listSkillsPayload();
-            case "read_skill" -> readSkillPayload(call.arguments());
-            case "read_subdoc" -> readSubdocPayload(call.arguments());
-            case "search_skill" -> searchSkillPayload(call.arguments());
-            case "update_plan" -> updatePlanPayload(call.arguments());
-            case "request_user_choice" -> requestUserChoicePayload(call.arguments());
-            case "clear_user_choice" -> clearUserChoicePayload();
-            case "list_subagents" -> listSubagentsPayload(session, call.arguments());
-            case "create_subagent" -> createSubagentPayload(session, call.arguments());
-            case "continue_subagent" -> continueSubagentPayload(session, call.arguments());
-            case "get_subagent" -> getSubagentPayload(session, call.arguments());
-            case "delete_subagent" -> deleteSubagentPayload(session, call.arguments());
-            case "list_profiles" -> SubagentManager.listProfiles();
-            case "get_profile" -> getProfilePayload(call.arguments());
-            case "get_project_state", "read_workspace_file",
-                    "create_workspace_file", "rename_workspace_file", "delete_workspace_file",
-                    "propose_patch", "search_block_ids" ->
-                    callServerTool(toolName, normalizeArgsObject(call.arguments()));
-            default -> toolError(toolName, "Unknown tool");
+    private static Agent createAgent(LocalSession session, List<AgentMessage> transcript) {
+        AgentLoopConfig config = AgentLoopConfig.builder(new OpenAiChatCompletions(P2SClientConfig::llmRequestConfig))
+                .transformContext(messages -> ContextBuilder.build(messages, MAX_CONTEXT_MESSAGES,
+                        ClientAgentManager::isPinnedMessage))
+                .prepareNextTurn(turn -> compactBetweenTurns(session, turn.messages()))
+                .shouldStopAfterTurn(turn -> turn.turnIndex() + 1 >= SAFETY_TURN_LIMIT)
+                .toolExecutor(ToolExecutors.shared())
+                .build();
+        return new Agent(config, systemPrompt(), List.of(), transcript);
+    }
+
+    private static String systemPrompt() {
+        return P2SClientConfig.getSystemPrompt() + "\n\n"
+                + (P2SClientConfig.isToolsetV2() ? CLIENT_TOOL_CONTRACT_V2 : CLIENT_TOOL_CONTRACT);
+    }
+
+    /** v2 tools for the main agent of {@code session}, fenced by {@code run}. */
+    private static AgentToolsV2.Host v2Host(LocalSession session, RunIdentity run) {
+        return new AgentToolsV2.Host() {
+            @Override
+            public JsonObject server(String tool, JsonObject args) {
+                return callServerTool(session, run, tool, args);
+            }
+
+            @Override
+            public JsonObject onClient(Supplier<JsonObject> action) {
+                return callOnClient(session, run, action);
+            }
+
+            @Override
+            public String sessionId() {
+                return ClientAgentManager.sessionId(session);
+            }
+
+            @Override
+            public Set<String> skillScope() {
+                return Set.of();
+            }
+
+            @Override
+            public Map<String, JsonElement> scriptStore() {
+                return session.scriptStore;
+            }
+
+            @Override
+            public boolean isSubagent() {
+                return false;
+            }
         };
     }
+
+    private static boolean isPinnedMessage(AgentMessage message) {
+        return message instanceof AgentMessage.User user && ClientHistoryCompactor.isSummaryContent(user.content());
+    }
+
+    private static List<JsonObject> wireHistory(LocalSession session) {
+        return OpenAiMessageCodec.toWire(systemPrompt(), ContextBuilder.repair(session.agent.messages()));
+    }
+
+    private static void capTranscriptLocked(LocalSession session) {
+        if (session.agent.isRunning()) {
+            return;
+        }
+        List<AgentMessage> messages = session.agent.messages();
+        if (messages.size() > MAX_TRANSCRIPT_MESSAGES) {
+            session.agent.replaceMessages(ContextBuilder.limit(ContextBuilder.repair(messages),
+                    MAX_TRANSCRIPT_MESSAGES, ClientAgentManager::isPinnedMessage));
+        }
+    }
+
+    private static ToolRegistry createToolRegistry(LocalSession session, RunIdentity run) {
+        return ToolRegistry.builder()
+                .register("list_skills", call -> listSkillsPayload())
+                .register("read_skill", call -> readSkillPayload(call.arguments()))
+                .register("read_subdoc", call -> readSubdocPayload(call.arguments()))
+                .register("search_skill", call -> searchSkillPayload(call.arguments()))
+                .register("update_plan", call -> callOnClient(session, run, () -> updatePlanPayload(call.arguments())))
+                .register("request_user_choice", call -> callOnClient(session, run, () -> requestUserChoicePayload(call.arguments())))
+                .register("clear_user_choice", call -> callOnClient(session, run, ClientAgentManager::clearUserChoicePayload))
+                .register("list_subagents", call -> listSubagentsPayload(session, call.arguments()))
+                .register("create_subagent", call -> callOnClient(session, run, () -> createSubagentPayload(session, call.arguments())))
+                .register("continue_subagent", call -> callOnClient(session, run, () -> continueSubagentPayload(session, call.arguments())))
+                .register("get_subagent", call -> getSubagentPayload(session, call.arguments()))
+                .register("delete_subagent", call -> deleteSubagentPayload(session, call.arguments()))
+                .register("list_profiles", call -> SubagentManager.listProfiles())
+                .register("get_profile", call -> getProfilePayload(call.arguments()))
+                .register("get_project_state", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .register("read_workspace_file", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .register("create_workspace_file", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .register("rename_workspace_file", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .register("delete_workspace_file", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .register("propose_patch", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .register("search_block_ids", call -> callServerTool(session, run, call.name(), normalizeArgsObject(call.arguments())))
+                .build();
+    }
+
+    // ---------------------------------------------------------------- tool handlers
 
     private static JsonObject listSubagentsPayload(LocalSession session, JsonElement arguments) {
         JsonObject args = normalizeArgsObject(arguments);
@@ -873,7 +992,7 @@ public final class ClientAgentManager {
         return payload;
     }
 
-    private static JsonObject updatePlanPayload(JsonElement arguments) {
+    static JsonObject updatePlanPayload(JsonElement arguments) {
         JsonObject args = normalizeArgsObject(arguments);
         if (!args.has("plan") || !args.get("plan").isJsonArray()) {
             return toolError("update_plan", "Missing plan array");
@@ -909,7 +1028,7 @@ public final class ClientAgentManager {
         return items;
     }
 
-    private static JsonObject requestUserChoicePayload(JsonElement arguments) {
+    static JsonObject requestUserChoicePayload(JsonElement arguments) {
         JsonObject args = normalizeArgsObject(arguments);
         String prompt = asString(args, "prompt");
         if (prompt.isBlank()) {
@@ -962,7 +1081,7 @@ public final class ClientAgentManager {
         String finalPrompt = prompt.trim();
         List<ClientSessionState.ChoiceOption> finalOptions = List.copyOf(options);
         ClientSessionState.setPendingChoice(finalRequestId, finalPrompt, finalOptions);
-        postToClient(() -> ClientSessionState.setStatus("awaiting_choice"));
+        ClientSessionState.setStatus("awaiting_choice");
 
         JsonObject payload = toolOk("request_user_choice");
         payload.addProperty("request_id", finalRequestId);
@@ -978,15 +1097,33 @@ public final class ClientAgentManager {
         return payload;
     }
 
-    private static JsonObject callServerTool(String toolName, JsonObject args) {
+    /**
+     * Sends a server tool request and waits for its response while the run stays current.
+     * When the run is stopped the wait ends early; a request already sent may still be
+     * completed by the server, and the result says so.
+     */
+    private static JsonObject callServerTool(LocalSession session, RunIdentity run, String toolName, JsonObject args) {
+        BooleanSupplier active = () -> isCurrentRun(session, run) && !isRunAborted(session);
+        CompletableFuture<JsonObject> future = ClientToolBridge.call(toolName, args, active);
         try {
-            JsonObject payload = ClientToolBridge.call(toolName, args).join();
-            if (payload == null) {
-                return toolError(toolName, "Empty server response");
+            while (true) {
+                try {
+                    JsonObject payload = future.get(100, TimeUnit.MILLISECONDS);
+                    return payload == null ? toolError(toolName, "Empty server response") : payload;
+                } catch (TimeoutException ignored) {
+                    if (!active.getAsBoolean()) {
+                        JsonObject cancelled = toolError(toolName,
+                                "Stopped while waiting for the server; the request may still have been applied");
+                        cancelled.addProperty("error_code", "cancelled");
+                        return cancelled;
+                    }
+                }
             }
-            return payload;
-        } catch (Exception e) {
-            return toolError(toolName, "Server tool failed: " + formatAgentError(e));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return toolError(toolName, "Interrupted");
+        } catch (ExecutionException e) {
+            return toolError(toolName, "Server tool failed: " + formatAgentError(e.getCause()));
         }
     }
 
@@ -1117,30 +1254,12 @@ public final class ClientAgentManager {
         return message == null || message.isBlank() ? "Unknown error" : message;
     }
 
+    // ---------------------------------------------------------------- tool log presentation
 
-    private static void postVisibleToolResults(List<ToolCallResult> results) {
-        if (results == null || results.isEmpty()) {
-            return;
-        }
-        postToClient(() -> {
-            for (ToolCallResult result : results) {
-                ToolLogPresentation presentation = buildToolLogPresentation(
-                        result == null ? null : result.call(),
-                        result == null ? null : result.payload()
-                );
-                if (presentation == null || presentation.summary() == null || presentation.summary().isBlank()) {
-                    continue;
-                }
-                if (presentation.error()) {
-                    ClientSessionState.addToolErrorMessage(presentation.summary(), presentation.detail());
-                } else {
-                    ClientSessionState.addToolCallMessage(presentation.summary(), presentation.detail());
-                }
-            }
-        });
+    private record ToolLogPresentation(String summary, String detail, boolean error) {
     }
 
-    private static ToolLogPresentation buildToolLogPresentation(LLMService.ToolCall call, JsonObject payload) {
+    private static ToolLogPresentation buildToolLogPresentation(AgentMessage.ToolCall call, JsonObject payload) {
         boolean error = payload == null || !asBoolean(payload, "ok", true);
         String summary = error
                 ? P2SI18n.tr("message.p2s.agent.tool.failed", toolSummaryText(call)).getString()
@@ -1149,7 +1268,7 @@ public final class ClientAgentManager {
         return new ToolLogPresentation(summary, detail, error);
     }
 
-    private static String toolSummaryText(LLMService.ToolCall call) {
+    private static String toolSummaryText(AgentMessage.ToolCall call) {
         String key = toolSummaryKey(call);
         if (key == null || key.isBlank()) {
             return rawToolName(call);
@@ -1157,7 +1276,7 @@ public final class ClientAgentManager {
         return P2SI18n.tr(key).getString();
     }
 
-    private static String toolSummaryKey(LLMService.ToolCall call) {
+    private static String toolSummaryKey(AgentMessage.ToolCall call) {
         String toolName = rawToolName(call);
         return switch (toolName) {
             case "list_skills" -> "message.p2s.agent.tool.summary.list_skills";
@@ -1185,7 +1304,7 @@ public final class ClientAgentManager {
         };
     }
 
-    private static String rawToolName(LLMService.ToolCall call) {
+    private static String rawToolName(AgentMessage.ToolCall call) {
         if (call == null || call.name() == null) {
             return "unknown";
         }
@@ -1193,7 +1312,7 @@ public final class ClientAgentManager {
         return name.isBlank() ? "unknown" : name;
     }
 
-    private static String buildToolDetail(LLMService.ToolCall call, JsonObject payload) {
+    private static String buildToolDetail(AgentMessage.ToolCall call, JsonObject payload) {
         List<String> lines = new ArrayList<>();
         lines.add(P2SI18n.tr("message.p2s.agent.tool.detail.name", rawToolName(call)).getString());
         appendToolArgumentDetails(lines, normalizeArgsObject(call == null ? null : call.arguments()));
@@ -1261,29 +1380,7 @@ public final class ClientAgentManager {
         return normalized;
     }
 
-    private static JsonObject buildToolMessage(LLMService.ToolCall call, JsonObject payload) {
-        JsonObject toolMsg = new JsonObject();
-        toolMsg.addProperty("role", "tool");
-        if (call != null && call.id() != null && !call.id().isBlank()) {
-            toolMsg.addProperty("tool_call_id", call.id());
-        }
-        toolMsg.addProperty("content", payload == null ? "{}" : GSON.toJson(payload));
-        return toolMsg;
-    }
-
-    private static boolean canManualCompactLocked() {
-        return currentSession != null
-                && !currentSession.inFlight
-                && ClientHistoryCompactor.hasCompactableHistory(currentSession.history);
-    }
-
-    private static void appendUserMessageLocked(LocalSession session, String content) {
-        JsonObject user = new JsonObject();
-        user.addProperty("role", "user");
-        user.addProperty("content", content == null ? "" : content);
-        session.history.add(user);
-        trimHistoryLocked(session);
-    }
+    // ---------------------------------------------------------------- session persistence
 
     private static String sessionId(LocalSession session) {
         if (session == null || session.id == null || session.id.isBlank()) {
@@ -1292,196 +1389,139 @@ public final class ClientAgentManager {
         return session.id;
     }
 
-    private static void trimHistoryLocked(LocalSession session) {
-        while (session.history.size() > MAX_HISTORY && session.history.size() > 1) {
-            int end = findTurnGroupEnd(session.history);
-            if (end <= 0) break;
-            session.history.subList(1, end + 1).clear();
-        }
-    }
-
-    /**
-     * Find the end index (inclusive) of the first complete turn group starting at index 1.
-     * Returns -1 if no complete group can be safely removed.
-     */
-    private static int findTurnGroupEnd(List<JsonObject> history) {
-        int size = history.size();
-        if (size <= 2) return -1;
-
-        int i = 1;
-
-        // 1) Skip orphan tool messages (compat with corrupted old history)
-        if ("tool".equals(role(history, i))) {
-            while (i < size && "tool".equals(role(history, i))) i++;
-            return (i < size) ? i - 1 : -1;
-        }
-
-        // 2) Consume user messages
-        while (i < size && "user".equals(role(history, i))) i++;
-
-        // 3) Expect assistant message
-        if (i >= size || !"assistant".equals(role(history, i))) {
-            return (i > 1 && i < size) ? i - 1 : -1;
-        }
-
-        // 4) Check if assistant has tool_calls
-        JsonObject asst = history.get(i);
-        boolean hasTools = asst.has("tool_calls")
-                && asst.get("tool_calls").isJsonArray()
-                && asst.getAsJsonArray("tool_calls").size() > 0;
-        i++;
-
-        // 5) Consume tool messages
-        if (hasTools) {
-            int before = i;
-            while (i < size && "tool".equals(role(history, i))) i++;
-            if (i == before) {
-                // assistant has tool_calls but no following tool messages → incomplete, skip
-                return -1;
-            }
-        }
-
-        // 6) Ensure we don't remove everything (keep system + at least 1 message)
-        return (i < size) ? i - 1 : -1;
-    }
-
-    private static String role(List<JsonObject> history, int index) {
-        JsonObject msg = history.get(index);
-        return msg != null && msg.has("role") ? msg.get("role").getAsString() : "";
-    }
-
-    private static List<JsonObject> deepCopyMessages(List<JsonObject> source) {
-        if (source == null || source.isEmpty()) {
-            return new ArrayList<>();
-        }
-        List<JsonObject> copy = new ArrayList<>(source.size());
-        for (JsonObject message : source) {
-            copy.add(message == null ? null : message.deepCopy());
-        }
-        return copy;
-    }
-
-    private static void autoSaveSession(LocalSession session) {
-        if (session == null || session.id == null || session.id.isBlank()) {
-            return;
-        }
+    // Called on the client thread while LOCK is held. No worker may read the
+    // singleton UI state to save a detached session.
+    private static void saveSessionLocked(LocalSession session) {
         try {
-            List<JsonObject> historyCopy;
-            synchronized (LOCK) {
-                historyCopy = deepCopyMessages(session.history);
+            refreshSessionViewLocked(session);
+            ClientSessionState.SessionViewSnapshot view = session.lastView;
+            if (view == null) {
+                return;
             }
-
-            List<ClientSessionState.ChatMessage> chatMessages = ClientSessionState.getMessages();
             List<SessionPersistence.ChatMessageEntry> chatLog = new ArrayList<>();
-            for (ClientSessionState.ChatMessage message : chatMessages) {
-                chatLog.add(new SessionPersistence.ChatMessageEntry(
-                        message.id(),
-                        message.role(),
-                        message.text(),
-                        message.kind(),
-                        message.detail()
-                ));
-            }
-
-            List<SessionPersistence.PlanItemEntry> planEntries = new ArrayList<>();
-            for (ClientSessionState.PlanItem item : ClientSessionState.getPlanItems()) {
-                planEntries.add(new SessionPersistence.PlanItemEntry(item.step(), item.status()));
-            }
-
-            SessionPersistence.ChoiceRequestEntry pendingChoiceEntry = null;
-            ClientSessionState.ChoiceRequest pendingChoice = ClientSessionState.getPendingChoice();
-            if (pendingChoice != null && pendingChoice.options() != null && !pendingChoice.options().isEmpty()) {
-                List<SessionPersistence.ChoiceOptionEntry> optionEntries = new ArrayList<>();
-                for (ClientSessionState.ChoiceOption option : pendingChoice.options()) {
-                    if (option == null) {
-                        continue;
-                    }
-                    optionEntries.add(new SessionPersistence.ChoiceOptionEntry(option.id(), option.label(), option.description()));
-                }
-                pendingChoiceEntry = new SessionPersistence.ChoiceRequestEntry(
-                        pendingChoice.requestId(),
-                        pendingChoice.prompt(),
-                        optionEntries
-                );
-            }
-
             String title = "";
-            for (ClientSessionState.ChatMessage message : chatMessages) {
-                if (!P2SI18n.isUserRole(message.role()) || message.text() == null || message.text().isBlank()) {
-                    continue;
+            for (ClientSessionState.ChatMessage message : view.messages()) {
+                chatLog.add(new SessionPersistence.ChatMessageEntry(message.id(), message.role(),
+                        message.text(), message.kind(), message.detail()));
+                if (title.isBlank() && P2SI18n.isUserRole(message.role())) {
+                    title = message.text().trim();
                 }
-                title = message.text().trim();
-                if (title.length() > 60) {
-                    title = title.substring(0, 57) + "...";
-                }
-                break;
+            }
+            if (title.length() > 60) {
+                title = title.substring(0, 57) + "...";
             }
             if (title.isBlank()) {
-                title = P2SI18n.tr("screen.p2s.sessions.default_title", session.id.substring(0, Math.min(8, session.id.length()))).getString();
+                title = P2SI18n.tr("screen.p2s.sessions.default_title",
+                        session.id.substring(0, Math.min(8, session.id.length()))).getString();
             }
-
-            String projectId = session.projectId == null || session.projectId.isBlank()
-                    ? ClientSessionState.getProjectId()
-                    : session.projectId;
-            String selectedWorkspacePath = ClientSessionState.getSelectedWorkspacePath();
-            if (selectedWorkspacePath == null || selectedWorkspacePath.isBlank()) {
-                selectedWorkspacePath = session.selectedWorkspacePath == null ? "" : session.selectedWorkspacePath;
+            List<SessionPersistence.PlanItemEntry> plan = new ArrayList<>();
+            for (ClientSessionState.PlanItem item : view.planItems()) {
+                plan.add(new SessionPersistence.PlanItemEntry(item.step(), item.status()));
             }
-            session.projectId = projectId == null ? "" : projectId;
-            session.selectedWorkspacePath = selectedWorkspacePath == null ? "" : selectedWorkspacePath;
-
+            SessionPersistence.ChoiceRequestEntry choice = null;
+            if (view.pendingChoice() != null) {
+                List<SessionPersistence.ChoiceOptionEntry> options = new ArrayList<>();
+                for (ClientSessionState.ChoiceOption option : view.pendingChoice().options()) {
+                    options.add(new SessionPersistence.ChoiceOptionEntry(option.id(), option.label(), option.description()));
+                }
+                choice = new SessionPersistence.ChoiceRequestEntry(view.pendingChoice().requestId(),
+                        view.pendingChoice().prompt(), List.copyOf(options));
+            }
+            session.selectedWorkspacePath = view.selectedWorkspacePath();
+            // The persisted history keeps the previous wire format: system message first.
+            List<JsonObject> history = OpenAiMessageCodec.toWire(systemPrompt(),
+                    ContextBuilder.repair(session.agent.messages()));
             SessionPersistence.SavedSession saved = new SessionPersistence.SavedSession(
-                    session.id,
-                    session.projectId,
-                    title,
-                    session.createdAt,
-                    System.currentTimeMillis(),
-                    chatLog.size(),
-                    historyCopy,
-                    chatLog,
-                    planEntries,
-                    ClientSessionState.getPlanExplanation(),
-                    session.selectedWorkspacePath,
-                    pendingChoiceEntry
-            );
-            CompletableFuture.runAsync(() -> SessionPersistence.saveSession(saved));
+                    session.id, session.projectId, title, session.createdAt, System.currentTimeMillis(),
+                    chatLog.size(), history, List.copyOf(chatLog), List.copyOf(plan),
+                    view.planExplanation(), session.selectedWorkspacePath, choice, scriptStoreJson(session));
+            // A single writer preserves capture order even when the same session
+            // finishes, closes, and is restored in quick succession.
+            PENDING_SAVES.put(saved.id(), saved);
+            SAVE_EXECUTOR.execute(() -> {
+                try {
+                    SessionPersistence.saveSession(saved);
+                } finally {
+                    PENDING_SAVES.remove(saved.id(), saved);
+                }
+            });
         } catch (Exception e) {
             P2SMod.LOGGER.warn("Auto-save session failed: {}", e.getMessage());
         }
     }
 
-    public static void onClientJoin() {
+    private static JsonObject scriptStoreJson(LocalSession session) {
+        JsonObject store = new JsonObject();
+        session.scriptStore.forEach((key, value) -> store.add(key, value.deepCopy()));
+        return store;
+    }
+
+    public static void onSessionViewChanged() {
         synchronized (LOCK) {
-            autoRestoreAttempted = false;
+            if (currentSession != null) {
+                refreshSessionViewLocked(currentSession);
+            }
         }
-        if (!ClientServerBridge.hasRequiredServer()) {
-            postToClient(() -> {
-                clearLocalSessionView();
-                ClientServerBridge.notifyMissingServer();
-            });
+    }
+
+    private static void refreshSessionViewLocked(LocalSession session) {
+        if (session != currentSession) {
             return;
         }
+        ClientSessionState.SessionViewSnapshot view = ClientSessionState.captureSessionView();
+        if (session.projectId.equals(view.projectId())) {
+            session.lastView = view;
+        }
+    }
+
+    public static void onClientJoin() {
+        long epoch;
+        synchronized (LOCK) {
+            if (currentSession != null) {
+                closeSessionLocked(currentSession);
+                currentSession = null;
+            }
+            epoch = ++connectionEpoch;
+            autoRestoreAttempted = false;
+        }
         postToClient(() -> {
-            if (!autoRestoreAttempted) {
-                restoreLatestSession(null, false);
+            synchronized (LOCK) {
+                if (epoch != connectionEpoch) {
+                    return;
+                }
+                if (!ClientServerBridge.hasRequiredServer()) {
+                    clearLocalSessionView();
+                    ClientServerBridge.notifyMissingServer();
+                } else if (!autoRestoreAttempted) {
+                    restoreLatestSession(null, false);
+                }
             }
         });
     }
 
     public static void onClientDisconnect() {
-        LocalSession previous;
         synchronized (LOCK) {
-            previous = currentSession;
-            currentSession = null;
+            if (currentSession != null) {
+                closeSessionLocked(currentSession);
+                currentSession = null;
+            }
+            connectionEpoch++;
             autoRestoreAttempted = false;
-        }
-        if (previous != null) {
-            autoSaveSession(previous);
-        }
-        postToClient(() -> {
+            ClientToolBridge.onDisconnect();
             clearLocalSessionView();
             ClientSessionState.resetAll();
-        });
+        }
+    }
+
+    /** Save, fence and abort a session that is being replaced or detached. */
+    private static void closeSessionLocked(LocalSession session) {
+        saveSessionLocked(session);
+        session.runs.close();
+        if (session.runSignal != null) {
+            session.runSignal.abort("Session closed");
+        }
+        session.agent.abort("Session closed");
+        SubagentManager.cancelSession(session.id);
     }
 
     public static void restoreLatestSession(String projectId, boolean notifyOnFailure) {
@@ -1490,40 +1530,49 @@ public final class ClientAgentManager {
         }
         synchronized (LOCK) {
             autoRestoreAttempted = true;
-            if (currentSession != null && currentSession.inFlight) {
-                return;
-            }
             if (currentSession != null) {
                 return;
             }
         }
 
-        List<SessionPersistence.SessionIndexEntry> sessions = (projectId == null || projectId.isBlank())
+        List<SessionPersistence.SessionIndexEntry> stored = (projectId == null || projectId.isBlank())
                 ? SessionPersistence.listSessions()
                 : SessionPersistence.listSessions(projectId);
-        if (sessions == null || sessions.isEmpty()) {
+        Map<String, SessionPersistence.SessionIndexEntry> latest = new LinkedHashMap<>();
+        for (SessionPersistence.SessionIndexEntry entry : stored) {
+            latest.put(entry.id(), entry);
+        }
+        for (SessionPersistence.SavedSession pending : PENDING_SAVES.values()) {
+            if (projectId == null || projectId.isBlank() || projectId.equals(pending.projectId())) {
+                latest.put(pending.id(), new SessionPersistence.SessionIndexEntry(pending.id(), pending.projectId(),
+                        pending.title(), pending.createdAt(), pending.updatedAt(), pending.messageCount()));
+            }
+        }
+        List<SessionPersistence.SessionIndexEntry> sessions = new ArrayList<>(latest.values());
+        sessions.sort(Comparator.comparingLong(SessionPersistence.SessionIndexEntry::updatedAt).reversed());
+        if (sessions.isEmpty()) {
             if (notifyOnFailure) {
                 postToClient(() -> ClientSessionState.setStatus(""));
             }
             return;
         }
-        SessionPersistence.SessionIndexEntry latest = sessions.get(0);
-        if (latest == null || latest.id() == null || latest.id().isBlank()) {
+        SessionPersistence.SessionIndexEntry latestEntry = sessions.get(0);
+        if (latestEntry == null || latestEntry.id() == null || latestEntry.id().isBlank()) {
             return;
         }
-        restoreSession(latest.id());
+        restoreSession(latestEntry.id());
     }
 
     public static void maybeAutoApplyPendingPatch() {
-        if (!P2SClientConfig.getAutoApplyPatch() || !ClientSessionState.hasPendingPatch()) {
+        if (!P2SClientConfig.getAutoApplyPatch() || !ClientSessionState.hasAnyPendingPatch()) {
             return;
         }
         synchronized (LOCK) {
-            if (currentSession == null || currentSession.inFlight) {
+            if (currentSession == null || currentSession.runs.isRunning()) {
                 return;
             }
         }
-        submitPatchApply();
+        submitPatchApplyAll();
     }
 
     public static void restoreSession(String sessionId) {
@@ -1536,7 +1585,7 @@ public final class ClientAgentManager {
         }
 
         synchronized (LOCK) {
-            if (currentSession != null && currentSession.inFlight) {
+            if (currentSession != null && currentSession.runs.isRunning()) {
                 postToClient(() -> ClientSessionState.onChatResponse(
                         "Cannot restore session while agent is running.",
                         false,
@@ -1546,7 +1595,8 @@ public final class ClientAgentManager {
             }
         }
 
-        SessionPersistence.SavedSession saved = SessionPersistence.loadSession(sessionId);
+        SessionPersistence.SavedSession pending = PENDING_SAVES.get(sessionId);
+        SessionPersistence.SavedSession saved = pending == null ? SessionPersistence.loadSession(sessionId) : pending;
         if (saved == null) {
             postToClient(() -> ClientSessionState.onChatResponse(
                     "Failed to load session.",
@@ -1560,18 +1610,39 @@ public final class ClientAgentManager {
 
         LocalSession session = new LocalSession();
         session.id = saved.id();
-        session.history = new ArrayList<>(saved.llmHistory());
-        session.inFlight = false;
+        session.runs = new AgentRunGuard(session.id, connectionEpoch);
+        // The saved system message is replaced by the current prompt and contract.
+        List<AgentMessage> transcript = OpenAiMessageCodec.fromWire(saved.llmHistory()).messages();
+        session.agent = createAgent(session, transcript);
+        saved.scriptStore().entrySet().forEach(entry -> session.scriptStore.put(entry.getKey(), entry.getValue().deepCopy()));
         session.createdAt = saved.createdAt();
         session.serverSessionStarted = false;
         session.projectId = saved.projectId() == null ? "" : saved.projectId();
         session.selectedWorkspacePath = saved.selectedWorkspacePath() == null ? "" : saved.selectedWorkspacePath();
+        List<ClientSessionState.ChatMessage> savedMessages = new ArrayList<>();
+        for (SessionPersistence.ChatMessageEntry message : saved.chatLog()) {
+            savedMessages.add(new ClientSessionState.ChatMessage(message.id(), message.role(), message.text(), message.kind(), message.detail()));
+        }
+        List<ClientSessionState.PlanItem> savedPlan = new ArrayList<>();
+        for (SessionPersistence.PlanItemEntry item : saved.planItems()) {
+            savedPlan.add(new ClientSessionState.PlanItem(item.step(), item.status()));
+        }
+        ClientSessionState.ChoiceRequest savedChoice = null;
+        if (saved.pendingChoice() != null) {
+            List<ClientSessionState.ChoiceOption> options = new ArrayList<>();
+            for (SessionPersistence.ChoiceOptionEntry option : saved.pendingChoice().options()) {
+                options.add(new ClientSessionState.ChoiceOption(option.id(), option.label(), option.description()));
+            }
+            savedChoice = new ClientSessionState.ChoiceRequest(saved.pendingChoice().requestId(), saved.pendingChoice().prompt(), options);
+        }
+        session.lastView = new ClientSessionState.SessionViewSnapshot(session.projectId, session.selectedWorkspacePath,
+                savedMessages, saved.planExplanation(), savedPlan, savedChoice);
 
         synchronized (LOCK) {
             currentSession = session;
         }
 
-        postToClient(() -> {
+        postToClient(session, () -> {
             clearLocalSessionView();
             if (saved.chatLog() != null) {
                 for (SessionPersistence.ChatMessageEntry entry : saved.chatLog()) {
@@ -1606,16 +1677,17 @@ public final class ClientAgentManager {
         if (!session.serverSessionStarted) {
             synchronized (LOCK) {
                 if (currentSession == session) {
+                    session.runs.close();
                     currentSession = null;
+                    clearLocalSessionView();
                 }
             }
-            postToClient(ClientAgentManager::clearLocalSessionView);
         }
     }
 
     public static void newSession() {
         synchronized (LOCK) {
-            if (currentSession != null && currentSession.inFlight) {
+            if (currentSession != null && currentSession.runs.isRunning()) {
                 postToClient(() -> ClientSessionState.onChatResponse(
                         "Cannot start new session while agent is running.",
                         false,
@@ -1629,7 +1701,7 @@ public final class ClientAgentManager {
 
     public static void closeCurrentSession() {
         synchronized (LOCK) {
-            if (currentSession != null && currentSession.inFlight) {
+            if (currentSession != null && currentSession.runs.isRunning()) {
                 postToClient(() -> ClientSessionState.onChatResponse(
                         "Cannot close session while agent is running.",
                         false,
@@ -1642,16 +1714,8 @@ public final class ClientAgentManager {
     }
 
     public static void onProjectChanged() {
-        synchronized (LOCK) {
-            if (currentSession != null && currentSession.inFlight) {
-                postToClient(() -> ClientSessionState.onChatResponse(
-                        "Cannot switch project while agent is running.",
-                        false,
-                        "busy"
-                ));
-                return;
-            }
-        }
+        // The server may already have switched projects. Fence the previous run
+        // rather than leaving it able to dispatch tools against the new project.
         closeCurrentSessionInternal(false);
         String projectId = ClientSessionState.getProjectId();
         if (projectId != null && !projectId.isBlank()) {
@@ -1661,20 +1725,26 @@ public final class ClientAgentManager {
 
     private static void closeCurrentSessionInternal(boolean clearStatus) {
         LocalSession previous;
+        long epoch;
         synchronized (LOCK) {
             previous = currentSession;
-            currentSession = null;
-        }
-        if (previous != null) {
-            autoSaveSession(previous);
-            if (previous.serverSessionStarted) {
-                ClientServerBridge.sendSessionAction("end", "");
+            if (previous != null) {
+                closeSessionLocked(previous);
             }
+            currentSession = null;
+            epoch = connectionEpoch;
+        }
+        if (previous != null && previous.serverSessionStarted) {
+            ClientServerBridge.sendSessionAction("end", "");
         }
         postToClient(() -> {
-            clearLocalSessionView();
-            if (clearStatus) {
-                ClientSessionState.setStatus("");
+            synchronized (LOCK) {
+                if (currentSession == null && epoch == connectionEpoch) {
+                    clearLocalSessionView();
+                    if (clearStatus) {
+                        ClientSessionState.setStatus("");
+                    }
+                }
             }
         });
     }
@@ -1730,25 +1800,82 @@ public final class ClientAgentManager {
         LocalSession session = new LocalSession();
         String existingSessionId = ClientSessionState.isActive() ? ClientSessionState.getSessionId() : "";
         session.id = existingSessionId == null || existingSessionId.isBlank() ? UUID.randomUUID().toString() : existingSessionId;
-        session.history = new ArrayList<>();
-        session.inFlight = false;
+        session.runs = new AgentRunGuard(session.id, connectionEpoch);
+        session.agent = createAgent(session, List.of());
         session.createdAt = System.currentTimeMillis();
         session.projectId = projectId;
         session.selectedWorkspacePath = ClientSessionState.getSelectedWorkspacePath();
 
-        JsonObject system = new JsonObject();
-        system.addProperty("role", "system");
-        system.addProperty("content", P2SClientConfig.getSystemPrompt() + "\n\n" + CLIENT_TOOL_CONTRACT);
-        session.history.add(system);
-
         currentSession = session;
+        refreshSessionViewLocked(session);
         String payload = buildStartPayload(session);
         session.serverSessionStarted = ClientServerBridge.sendSessionAction("start", payload);
         if (!session.serverSessionStarted) {
+            session.runs.close();
             currentSession = null;
             return null;
         }
         return session;
+    }
+
+    // ---------------------------------------------------------------- run fencing and threads
+
+    private static boolean isCurrentRunLocked(LocalSession session, RunIdentity run) {
+        return session == currentSession && session.runs.isOpen(connectionEpoch) && session.runs.isCurrent(run);
+    }
+
+    private static boolean isCurrentRun(LocalSession session, RunIdentity run) {
+        synchronized (LOCK) {
+            return isCurrentRunLocked(session, run)
+                    && session.projectId.equals(ClientSessionState.getProjectId());
+        }
+    }
+
+    private static void postToClient(LocalSession session, RunIdentity run, Runnable action) {
+        postToClient(session, run, action, true);
+    }
+
+    private static void postToClient(LocalSession session, RunIdentity run, Runnable action, boolean captureView) {
+        postToClient(() -> {
+            synchronized (LOCK) {
+                if (isCurrentRun(session, run)) {
+                    session.runs.runIfCurrent(run, action);
+                    if (captureView) {
+                        refreshSessionViewLocked(session);
+                    }
+                }
+            }
+        });
+    }
+
+    private static void postToClient(LocalSession session, Runnable action) {
+        postToClient(() -> {
+            synchronized (LOCK) {
+                if (session == currentSession && session.runs.isOpen(connectionEpoch)) {
+                    action.run();
+                    refreshSessionViewLocked(session);
+                }
+            }
+        });
+    }
+
+    private static <T> T callOnClient(LocalSession session, RunIdentity run, Supplier<T> action) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        postToClient(() -> {
+            synchronized (LOCK) {
+                try {
+                    if (!isCurrentRun(session, run)) {
+                        throw new CancellationException("Agent run is no longer active");
+                    }
+                    T value = action.get();
+                    refreshSessionViewLocked(session);
+                    result.complete(value);
+                } catch (Exception ex) {
+                    result.completeExceptionally(ex);
+                }
+            }
+        });
+        return result.join();
     }
 
     private static void postToClient(Runnable action) {
@@ -1759,12 +1886,28 @@ public final class ClientAgentManager {
         mc.execute(action);
     }
 
+    private record PendingApproval(String path, String revision) {
+        PendingApproval {
+            path = path == null ? "" : path;
+            revision = revision == null ? "" : revision;
+        }
+    }
+
     private static final class LocalSession {
         String id;
-        boolean inFlight;
+        AgentRunGuard runs;
+        Agent agent;
+        /** Fences harness work outside the agent loop (compaction, approval receipts). */
+        AbortSignal runSignal;
+        RunIdentity activeRun;
+        PendingApproval pendingApproval;
+        /** Player decisions on staged files, reported to the model once none are left pending. */
+        final List<String> reviewDecisions = new ArrayList<>();
+        /** Values scripts keep across calls (store/load); saved with the session. */
+        final Map<String, JsonElement> scriptStore = new ConcurrentHashMap<>();
+        ClientSessionState.SessionViewSnapshot lastView;
         boolean serverSessionStarted;
         long createdAt;
-        List<JsonObject> history;
         String projectId = "";
         String selectedWorkspacePath = "";
     }

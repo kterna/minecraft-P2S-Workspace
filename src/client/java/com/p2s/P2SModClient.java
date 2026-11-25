@@ -8,6 +8,7 @@ public class P2SModClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         P2SClientConfig.reload();
+        com.p2s.agent.tool.ToolExtensions.load();
         P2SNetworkPayloads.register();
         ClientNetworkHandler.register();
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> client.execute(() -> {

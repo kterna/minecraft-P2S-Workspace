@@ -62,6 +62,12 @@ sourceSets {
 			new File(project.projectDir, 'src/client/resources')
 		]
 	}
+	test {
+		java.srcDirs = [new File(sharedSrcRoot, 'test/java')]
+		resources.srcDirs = [new File(sharedSrcRoot, 'test/resources')]
+		compileClasspath += sourceSets.client.output + sourceSets.client.compileClasspath
+		runtimeClasspath += sourceSets.client.output + sourceSets.client.runtimeClasspath
+	}
 }
 
 dependencies {
@@ -73,6 +79,16 @@ dependencies {
 	modImplementation include("com.squareup.okhttp3:okhttp:4.12.0")
 	modImplementation include("com.google.code.gson:gson:2.11.0")
 	modImplementation include("com.squareup.okio:okio:3.9.1")
+	// JavaScript engine for the v2 `script` tool (sandboxed, interpreted mode, no Java access).
+	modImplementation include("org.mozilla:rhino:1.9.2")
+
+	testImplementation platform('org.junit:junit-bom:5.11.4')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 processResources {

@@ -84,6 +84,11 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             sendToolBridgeResponse(player, rid, false, null, "Missing tool name");
             return;
         }
+        if (BridgeUploads.CHUNK_TOOL.equals(normalizedTool)) {
+            // Chunks are fire-and-forget; the request that references the upload gets the response.
+            BridgeUploads.accept(player.getUUID(), argumentsJson);
+            return;
+        }
 
         JsonElement arguments = null;
         if (argumentsJson != null && !argumentsJson.isBlank()) {
@@ -91,6 +96,20 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                 arguments = JsonParser.parseString(argumentsJson);
             } catch (Exception e) {
                 sendToolBridgeResponse(player, rid, false, null, "Invalid arguments JSON: " + e.getMessage());
+                return;
+            }
+        }
+        String uploadId = BridgeUploads.reference(arguments);
+        if (uploadId != null) {
+            String assembled = BridgeUploads.take(player.getUUID(), uploadId);
+            if (assembled == null) {
+                sendToolBridgeResponse(player, rid, false, null, "Upload incomplete or expired; retry the call");
+                return;
+            }
+            try {
+                arguments = JsonParser.parseString(assembled);
+            } catch (Exception e) {
+                sendToolBridgeResponse(player, rid, false, null, "Invalid uploaded arguments: " + e.getMessage());
                 return;
             }
         }
@@ -109,13 +128,29 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                 case "delete_workspace_file" -> handleDeleteWorkspaceFileTool(player, arguments);
                 case "propose_patch" -> handleProposePatchTool(player, arguments);
                 case "search_block_ids" -> handleSearchBlockIds(arguments);
+                // Approval receipts for the client harness; not advertised to the model.
+                case "session_apply_patch" -> {
+                    JsonObject args = normalizeArgsObject(arguments);
+                    yield applyPendingPatchWithReceipt(player,
+                            ProjectPersistence.normalizeWorkspacePath(getString(args, "path")),
+                            getString(args, "expected_revision"));
+                }
+                case "session_discard_patch" -> discardPendingPatchWithReceipt(player,
+                        normalizeArgsObject(arguments).toString());
+                // v2 tools: full workspace text, staging of whole-file edits, world inspection.
+                case "workspace_text" -> handleWorkspaceText(player, normalizeArgsObject(arguments));
+                case "stage_workspace_file" -> handleStageWorkspaceFile(player, normalizeArgsObject(arguments));
+                case "inspect_world" -> WorldInspector.inspect(player, currentProject(player, sessions.get(player.getUUID())),
+                        normalizeArgsObject(arguments));
                 default -> buildToolErrorKey(normalizedTool, "message.p2s.tool.unknown_tool");
             };
-            sendSessionSync(player, sessions.get(player.getUUID()));
-            ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
-            Session session = sessions.get(player.getUUID());
-            ProjectPersistence.WorkspaceFileRecord selected = selectedWorkspace(project, session);
-            sendPatchPreview(player, selected != null && selected.pendingPatch != null ? selected.pendingPatch.preview : null);
+            if (!"workspace_text".equals(normalizedTool) && !"inspect_world".equals(normalizedTool)) {
+                sendSessionSync(player, sessions.get(player.getUUID()));
+                ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
+                Session session = sessions.get(player.getUUID());
+                ProjectPersistence.WorkspaceFileRecord selected = selectedWorkspace(project, session);
+                sendPatchPreview(player, selected != null && selected.pendingPatch != null ? selected.pendingPatch.preview : null);
+            }
             sendToolBridgeResponse(player, rid, true, payload, null);
         } catch (Exception e) {
             P2SMod.LOGGER.error("Tool bridge failed -> player={}, tool={}", player.getGameProfile().getName(), normalizedTool, e);
@@ -604,6 +639,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
 
         JsonObject payload = buildToolSuccess("propose_patch");
         payload.addProperty("path", path);
+        payload.addProperty("pending_revision", pending.revisionAfter);
         payload.addProperty("preview", pending.preview.summary);
         payload.addProperty("changed", pending.preview.changedBlocks);
         payload.addProperty("risk", pending.preview.riskLevel);
@@ -617,6 +653,160 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             payload.addProperty("warning_count", validation.warnings.size());
         }
         return payload;
+    }
+
+    /** Full TOML of a workspace file (staged unless committed=true), plus both revisions. */
+    private static JsonObject handleWorkspaceText(ServerPlayer player, JsonObject args) {
+        ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
+        if (project == null) {
+            return buildToolErrorKey("workspace_text", "message.p2s.project.no_current_project");
+        }
+        String path = ProjectPersistence.normalizeWorkspacePath(getString(args, "path"));
+        ProjectPersistence.WorkspaceFileRecord workspace = findWorkspace(project, path);
+        if (workspace == null) {
+            JsonObject missing = buildToolErrorKey("workspace_text", "message.p2s.workspace.unknown_path", path);
+            missing.addProperty("error_code", "not_found");
+            return missing;
+        }
+        boolean committed = args.has("committed") && args.get("committed").isJsonPrimitive() && args.get("committed").getAsBoolean();
+        StructureBuilder.VbsScriptV2 effective = committed || workspace.pendingPatch == null || workspace.pendingPatch.nextScript == null
+                ? workspace.current : workspace.pendingPatch.nextScript;
+        JsonObject payload = buildToolSuccess("workspace_text");
+        payload.addProperty("path", workspace.path);
+        payload.addProperty("workspace_toml", WorkspaceTomlCodec.write(WorkspaceTomlCodec.fromWorkspace(workspace, effective)));
+        payload.addProperty("committed_revision", workspace.revision == null ? "" : workspace.revision);
+        payload.addProperty("staged_revision", stagedRevision(workspace));
+        payload.addProperty("has_pending", workspace.pendingPatch != null);
+        return payload;
+    }
+
+    private static String stagedRevision(ProjectPersistence.WorkspaceFileRecord workspace) {
+        if (workspace.pendingPatch != null && workspace.pendingPatch.revisionAfter != null
+                && !workspace.pendingPatch.revisionAfter.isBlank()) {
+            return workspace.pendingPatch.revisionAfter;
+        }
+        return workspace.revision == null ? "" : workspace.revision;
+    }
+
+    /**
+     * Stages a whole workspace file: the TOML becomes the pending version, with a patch
+     * synthesized against the committed version so validation, preview and history are the
+     * same as for propose_patch. {@code base_revision} must be the current staged revision.
+     */
+    private static JsonObject handleStageWorkspaceFile(ServerPlayer player, JsonObject args) {
+        Session session = sessions.get(player.getUUID());
+        ProjectPersistence.ProjectRecord project = currentProject(player, session);
+        if (project == null || session == null) {
+            return buildToolErrorKey("stage_workspace_file", "message.p2s.session.no_active_project");
+        }
+        String path = ProjectPersistence.normalizeWorkspacePath(getString(args, "path"));
+        ProjectPersistence.WorkspaceFileRecord workspace = findWorkspace(project, path);
+        if (workspace == null) {
+            JsonObject missing = buildToolErrorKey("stage_workspace_file", "message.p2s.workspace.unknown_path", path);
+            missing.addProperty("error_code", "not_found");
+            return missing;
+        }
+        String base = getString(args, "base_revision");
+        String current = stagedRevision(workspace);
+        if (!base.isBlank() && !base.equals(current)) {
+            JsonObject stale = buildToolError("stage_workspace_file",
+                    "The file changed since it was read (now " + current + "); read it again and redo the edit");
+            stale.addProperty("error_code", "stale_revision");
+            stale.addProperty("staged_revision", current);
+            return stale;
+        }
+        WorkspaceTomlCodec.WorkspaceTomlDocument document;
+        try {
+            document = WorkspaceTomlCodec.parse(getString(args, "workspace_toml"));
+        } catch (Exception e) {
+            JsonObject invalid = buildToolErrorKey("stage_workspace_file", "message.p2s.workspace.invalid_workspace_toml", e.getMessage());
+            invalid.addProperty("error_code", "invalid_toml");
+            return invalid;
+        }
+        List<String> warnings = new ArrayList<>();
+        if (document.workspace != null) {
+            WorkspaceTomlCodec.WorkspaceTomlDocument stored = WorkspaceTomlCodec.fromWorkspace(workspace, workspace.current);
+            if (!java.util.Objects.equals(stored.workspace.origin, document.workspace.origin)
+                    || !java.util.Objects.equals(stored.workspace.size, document.workspace.size)
+                    || !java.util.Objects.equals(stored.workspace.type, document.workspace.type)) {
+                warnings.add("[workspace] origin/size/type changes are not staged; change them in the game UI");
+            }
+        }
+        StructureBuilder.VbsScriptV2 committedBase = copyScript(workspace.current);
+        StructureBuilder.VbsScriptV2 next = WorkspaceTomlCodec.toScript(document);
+        String committedRevision = workspace.revision == null ? "" : workspace.revision;
+        PatchSynthesizer.Synthesis synthesis = PatchSynthesizer.synthesize(committedBase, next, committedRevision,
+                getString(args, "intent"));
+        warnings.addAll(synthesis.warnings());
+        if (!synthesis.changed()) {
+            boolean hadPending = workspace.pendingPatch != null;
+            workspace.pendingPatch = null;
+            if (hadPending) {
+                session.runtimeState = RuntimeState.IDLE;
+                saveProject(project);
+            }
+            JsonObject unchanged = buildToolSuccess("stage_workspace_file");
+            unchanged.addProperty("path", workspace.path);
+            unchanged.addProperty("staged", false);
+            unchanged.addProperty("message", "Identical to the committed version; nothing is pending for this file");
+            unchanged.addProperty("staged_revision", committedRevision);
+            addWarnings(unchanged, warnings);
+            return unchanged;
+        }
+        StructurePatchEngine.DiffResult diff = StructurePatchEngine.diff(committedBase, next);
+        PatchRuntimeSettings settings = runtimeSettings(args);
+        PatchModels.ValidationResult validation;
+        if (synthesis.patch().operations.isEmpty()) {
+            // Only empty parts or ordering changed: nothing for the validator to check.
+            validation = new PatchModels.ValidationResult();
+            validation.estimatedChangedBlocks = diff.changedBlocks;
+        } else {
+            validation = PatchValidator.validate(synthesis.patch(), committedRevision, workspaceSize(project, workspace),
+                    next, diff, settings.maxPatchOps(), settings.maxBlocksPerCommit());
+        }
+        if (!validation.ok) {
+            JsonObject payload = buildToolError("stage_workspace_file", String.join("; ", validation.errors));
+            JsonArray errors = new JsonArray();
+            validation.errors.forEach(errors::add);
+            payload.add("errors", errors);
+            payload.addProperty("error_code", "validation_failed");
+            payload.addProperty("changed", validation.estimatedChangedBlocks);
+            return payload;
+        }
+        warnings.addAll(validation.warnings);
+        ProjectPersistence.PendingPatchRecord pending = new ProjectPersistence.PendingPatchRecord();
+        pending.patch = synthesis.patch();
+        pending.baseScript = committedBase;
+        pending.nextScript = next;
+        pending.preview = buildPatchPreview(synthesis.patch(), validation, diff, committedRevision);
+        pending.revisionBefore = committedRevision;
+        pending.revisionAfter = nextRevision();
+        workspace.pendingPatch = pending;
+        session.runtimeState = RuntimeState.AWAITING_CONFIRM;
+        // Like propose_patch: select the staged file so its preview is shown.
+        session.selectedWorkspacePath = workspace.path;
+        saveProject(project);
+
+        JsonObject payload = buildToolSuccess("stage_workspace_file");
+        payload.addProperty("path", workspace.path);
+        payload.addProperty("staged", true);
+        payload.addProperty("staged_revision", pending.revisionAfter);
+        payload.addProperty("committed_revision", committedRevision);
+        payload.addProperty("changed_blocks", pending.preview.changedBlocks);
+        payload.addProperty("risk", pending.preview.riskLevel);
+        payload.addProperty("summary", pending.preview.summary);
+        payload.addProperty("requires_confirm", requiresConfirm(pending.preview.changedBlocks, settings));
+        addWarnings(payload, warnings);
+        return payload;
+    }
+
+    private static void addWarnings(JsonObject payload, List<String> warnings) {
+        if (warnings.isEmpty()) {
+            return;
+        }
+        JsonArray array = new JsonArray();
+        warnings.forEach(array::add);
+        payload.add("warnings", array);
     }
 
     private static JsonObject handleSearchBlockIds(JsonElement argsElem) {
@@ -784,16 +974,32 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
     }
 
     private static void applyPendingPatch(ServerPlayer player, String path) {
+        applyPendingPatchWithReceipt(player, path, "");
+    }
+
+    /**
+     * Commits the pending patch and returns a receipt. {@code expectedRevision}, when given,
+     * must match the pending patch's target revision so a stale approval cannot commit a
+     * patch that was re-proposed in the meantime.
+     */
+    private static JsonObject applyPendingPatchWithReceipt(ServerPlayer player, String path, String expectedRevision) {
         Session session = sessions.get(player.getUUID());
         ProjectPersistence.ProjectRecord project = currentProject(player, session);
         if (session == null || project == null) {
             displayMessage(player, "message.p2s.session.no_active_project");
-            return;
+            return buildToolErrorKey("session_apply_patch", "message.p2s.session.no_active_project");
         }
         ProjectPersistence.WorkspaceFileRecord workspace = resolveWorkspace(project, session, path);
         if (workspace == null || workspace.pendingPatch == null) {
             displayMessage(player, "message.p2s.patch.no_pending_patch");
-            return;
+            return buildToolErrorKey("session_apply_patch", "message.p2s.patch.no_pending_patch");
+        }
+        String pendingRevision = workspace.pendingPatch.revisionAfter == null ? "" : workspace.pendingPatch.revisionAfter;
+        if (expectedRevision != null && !expectedRevision.isBlank() && !expectedRevision.equals(pendingRevision)) {
+            JsonObject stale = buildToolError("session_apply_patch", "Pending patch changed since it was reviewed");
+            stale.addProperty("error_code", "stale_approval");
+            stale.addProperty("pending_revision", pendingRevision);
+            return stale;
         }
 
         StructureBuilder.VbsScriptV2 before = copyScript(workspace.current);
@@ -819,14 +1025,26 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         sendChatResponseLocalized(player, "message.p2s.patch.applied", true, "committed", commit.summary);
         sendPatchPreview(player, null);
         sendSessionSync(player, session);
+        JsonObject receipt = buildToolSuccess("session_apply_patch");
+        receipt.addProperty("applied", true);
+        receipt.addProperty("path", workspace.path == null ? "" : workspace.path);
+        receipt.addProperty("summary", commit.summary == null ? "" : commit.summary);
+        receipt.addProperty("revision_before", commit.revisionBefore == null ? "" : commit.revisionBefore);
+        receipt.addProperty("revision", workspace.revision == null ? "" : workspace.revision);
+        receipt.addProperty("block_ops", diff.forwardOps == null ? 0 : diff.forwardOps.size());
+        return receipt;
     }
 
     private static void discardPendingPatch(ServerPlayer player, String payload) {
+        discardPendingPatchWithReceipt(player, payload);
+    }
+
+    private static JsonObject discardPendingPatchWithReceipt(ServerPlayer player, String payload) {
         Session session = sessions.get(player.getUUID());
         ProjectPersistence.ProjectRecord project = currentProject(player, session);
         if (session == null || project == null) {
             displayMessage(player, "message.p2s.session.no_active_project");
-            return;
+            return buildToolErrorKey("session_discard_patch", "message.p2s.session.no_active_project");
         }
         JsonObject args = parsePayloadObject(payload);
         String path = ProjectPersistence.normalizeWorkspacePath(getString(args, "path"));
@@ -837,8 +1055,9 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         ProjectPersistence.WorkspaceFileRecord workspace = resolveWorkspace(project, session, path);
         if (workspace == null || workspace.pendingPatch == null) {
             displayMessage(player, "message.p2s.patch.no_pending_patch");
-            return;
+            return buildToolErrorKey("session_discard_patch", "message.p2s.patch.no_pending_patch");
         }
+        String discardedSummary = workspace.pendingPatch.preview == null ? "" : workspace.pendingPatch.preview.summary;
         workspace.pendingPatch = null;
         session.runtimeState = RuntimeState.IDLE;
         saveProject(project);
@@ -849,6 +1068,12 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         } else {
             sendChatResponseLocalized(player, "message.p2s.patch.discarded_with_reason", false, "cancelled", reason);
         }
+        JsonObject receipt = buildToolSuccess("session_discard_patch");
+        receipt.addProperty("discarded", true);
+        receipt.addProperty("path", workspace.path == null ? "" : workspace.path);
+        receipt.addProperty("summary", discardedSummary == null ? "" : discardedSummary);
+        receipt.addProperty("revision", workspace.revision == null ? "" : workspace.revision);
+        return receipt;
     }
 
     private static void undo(ServerPlayer player, String path) {
@@ -1877,11 +2102,19 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
 
     private static void sendToolBridgeResponse(ServerPlayer player, String requestId, boolean ok, JsonObject payload, String error) {
         JsonObject safePayload = payload == null ? new JsonObject() : payload;
+        String json = GSON.toJson(safePayload);
+        if (json.length() > S2CToolBridgePayload.MAX_RESPONSE_CHARS) {
+            // Encoding would throw; report it instead of dropping the response.
+            ok = false;
+            error = "Tool response too large (" + json.length() + " characters); request less data";
+            json = "{}";
+        }
+        String safeError = error == null ? "" : (error.length() > 4000 ? error.substring(0, 4000) : error);
         ServerNetworkHandler.sendToClient(player, new S2CToolBridgePayload(
                 requestId == null ? "" : requestId,
                 ok,
-                GSON.toJson(safePayload),
-                error == null ? "" : error
+                json,
+                safeError
         ));
     }
 

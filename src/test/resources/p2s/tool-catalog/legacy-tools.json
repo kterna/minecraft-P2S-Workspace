@@ -1,0 +1,502 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "list_skills",
+      "description": "List available player skills with short metadata only.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_skill",
+      "description": "Read one skill document by id. If id omitted, the active skill may be used.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Skill id from list_skills."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_subdoc",
+      "description": "Read one markdown sub-document inside a skill directory by relative path.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Optional skill id from list_skills. Defaults to active skill."
+          },
+          "path": {
+            "type": "string",
+            "description": "Relative markdown path, for example subdocs/roof-gable.md."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_skill",
+      "description": "Search text snippets in a skill by query.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Optional skill id. Defaults to active skill."
+          },
+          "query": {
+            "type": "string",
+            "description": "Keyword to search."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max snippets to return (1-50)."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "update_plan",
+      "description": "Updates the task plan. Provide an optional explanation and a list of plan items, each with a step and status. At most one step can be in_progress at a time.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "explanation": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "array",
+            "description": "The list of steps.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "step": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed"
+                  ],
+                  "description": "One of: pending, in_progress, completed."
+                }
+              },
+              "required": [
+                "step",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "request_user_choice",
+      "description": "Request explicit user approval/selection from 2-3 options, then wait for user choice.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Question shown to user."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Optional stable choice request id."
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Option id."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Short label shown on button."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Optional option detail."
+                }
+              },
+              "required": [
+                "label"
+              ]
+            }
+          }
+        },
+        "required": [
+          "prompt",
+          "options"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "clear_user_choice",
+      "description": "Clear pending user choice request.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_project_state",
+      "description": "Get the current project overview, workspace file list, pending paths, and summary.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "read_workspace_file",
+      "description": "Read a workspace file state including size, origin, revision, and TOML content. Returns workspace_toml, and may set truncated\u003dtrue when the text is shortened.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Workspace file path to read."
+          },
+          "committed": {
+            "type": "boolean",
+            "description": "Defaults to true (committed script). Set false only when staged script is needed for UI diff."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_workspace_file",
+      "description": "Create a new workspace file in the current project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name for the workspace file."
+          },
+          "path": {
+            "type": "string",
+            "description": "Logical project path, such as workspace/floors/f1.toml."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "layout",
+              "floor",
+              "facade",
+              "component",
+              "semantic",
+              "generated",
+              "manual",
+              "shared"
+            ],
+            "description": "Workspace file type."
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "rename_workspace_file",
+      "description": "Rename a workspace file and optionally update its logical path.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Current workspace file path."
+          },
+          "new_path": {
+            "type": "string",
+            "description": "New workspace file path."
+          }
+        },
+        "required": [
+          "path",
+          "new_path"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_workspace_file",
+      "description": "Delete a workspace file if it has no pending patch and it is not the last remaining file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Workspace file path."
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "search_block_ids",
+      "description": "Search valid block IDs by keyword or partial id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Keyword or partial block id to search."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results (1-50)."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "propose_patch",
+      "description": "Propose an editable structure patch using TOML text in patch_toml. The TOML body supports base_revision, intent, message_to_user, repeated [[operation]] tables, nested [[operation.actions_add]] / [[operation.old_actions]] / [[operation.new_actions]] tables, and [[operation.entry]] for palette updates.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Workspace file path this patch applies to."
+          },
+          "patch_toml": {
+            "type": "string",
+            "description": "Patch body in TOML. Top-level keys: base_revision, intent, message_to_user. Use [[operation]] with op\u003dinsert_part|delete_part|replace_part|insert_actions|delete_actions|replace_actions|move_actions|update_palette. Use insert_part for a brand-new part, and reserve insert_actions for appending to an existing part. For actions, use nested [[operation.actions_add]], [[operation.old_actions]], [[operation.new_actions]]. For palette updates, use [[operation.entry]] where omitting old_value means add-new and omitting new_value means delete."
+          }
+        },
+        "required": [
+          "path",
+          "patch_toml"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_subagents",
+      "description": "List all subagents created in this session.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "include_deleted": {
+            "type": "boolean",
+            "description": "Whether deleted subagents should be included."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_subagent",
+      "description": "Create and run an asynchronous subagent task using a profile.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Task description passed to the subagent."
+          },
+          "profile_id": {
+            "type": "string",
+            "description": "Optional profile id. Defaults to general-planner."
+          },
+          "skill_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional scoped skill ids."
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional metadata forwarded to subagent context."
+          }
+        },
+        "required": [
+          "task"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "continue_subagent",
+      "description": "Continue a failed/completed/cancelled subagent with optional new instruction.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Subagent id to continue."
+          },
+          "instruction": {
+            "type": "string",
+            "description": "Optional follow-up instruction for the continued run."
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_subagent",
+      "description": "Get full status and result of a subagent by id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Subagent id returned by create_subagent."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_subagent",
+      "description": "Delete a subagent by id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Subagent id returned by create_subagent."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_profiles",
+      "description": "List available subagent profiles.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_profile",
+      "description": "Read one subagent profile by id.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Subagent profile id."
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    }
+  }
+]
