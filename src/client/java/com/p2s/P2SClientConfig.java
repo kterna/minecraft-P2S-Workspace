@@ -32,14 +32,13 @@ public final class P2SClientConfig {
     private static final boolean DEFAULT_USE_STREAMING = true;
     private static final boolean DEFAULT_AUTO_APPLY_PATCH = false;
     private static final boolean DEFAULT_AUTO_COMPACT_ENABLED = true;
-    private static final int DEFAULT_AUTO_COMPACT_TOKEN_LIMIT = 24_000;
-    private static final int DEFAULT_COMPACT_RETAIN_USER_TOKEN_BUDGET = 20_000;
+    private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000;
+    private static final int DEFAULT_COMPACT_KEEP_RECENT_TOKENS = 20_000;
     private static final int DEFAULT_SESSION_JOB_TIMEOUT_SECONDS = P2SDefaults.DEFAULT_SESSION_JOB_TIMEOUT_SECONDS;
     private static final int DEFAULT_MAX_PATCH_OPS = P2SDefaults.DEFAULT_MAX_PATCH_OPS;
     private static final int DEFAULT_MAX_BLOCKS_PER_COMMIT = P2SDefaults.DEFAULT_MAX_BLOCKS_PER_COMMIT;
     private static final boolean DEFAULT_CONFIRM_REQUIRED = P2SDefaults.DEFAULT_CONFIRM_REQUIRED;
     private static final int DEFAULT_RISK_AUTO_APPLY_THRESHOLD = P2SDefaults.DEFAULT_RISK_AUTO_APPLY_THRESHOLD;
-    private static final String DEFAULT_SYSTEM_PROMPT = P2SDefaults.DEFAULT_SYSTEM_PROMPT;
     private static final String DEFAULT_COMPACT_PROMPT = """
             You are performing a CONTEXT CHECKPOINT COMPACTION for a Prompt2Structure client session.
             Create a concise handoff summary for another model that will continue the same task.
@@ -64,10 +63,10 @@ public final class P2SClientConfig {
     private static boolean autoApplyPatch = DEFAULT_AUTO_APPLY_PATCH;
     /** "v2" (default) or "legacy": which agent tool set the client uses. */
     private static String toolset = "v2";
-    private static String systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    private static String extraInstructions = "";
     private static boolean autoCompactEnabled = DEFAULT_AUTO_COMPACT_ENABLED;
-    private static int autoCompactTokenLimit = DEFAULT_AUTO_COMPACT_TOKEN_LIMIT;
-    private static int compactRetainUserTokenBudget = DEFAULT_COMPACT_RETAIN_USER_TOKEN_BUDGET;
+    private static int contextWindowTokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
+    private static int compactKeepRecentTokens = DEFAULT_COMPACT_KEEP_RECENT_TOKENS;
     private static String compactPrompt = DEFAULT_COMPACT_PROMPT;
     private static int sessionJobTimeoutSeconds = DEFAULT_SESSION_JOB_TIMEOUT_SECONDS;
     private static int maxPatchOps = DEFAULT_MAX_PATCH_OPS;
@@ -124,7 +123,11 @@ public final class P2SClientConfig {
     }
 
     public static synchronized String getSystemPrompt() {
-        return systemPrompt;
+        return AgentPrompt.compose(isToolsetV2(), extraInstructions);
+    }
+
+    public static synchronized String getExtraInstructions() {
+        return extraInstructions;
     }
 
     public static synchronized boolean getUseStreaming() {
@@ -147,12 +150,12 @@ public final class P2SClientConfig {
         return autoCompactEnabled;
     }
 
-    public static synchronized int getAutoCompactTokenLimit() {
-        return autoCompactTokenLimit;
+    public static synchronized int getContextWindowTokens() {
+        return contextWindowTokens;
     }
 
-    public static synchronized int getCompactRetainUserTokenBudget() {
-        return compactRetainUserTokenBudget;
+    public static synchronized int getCompactKeepRecentTokens() {
+        return compactKeepRecentTokens;
     }
 
     public static synchronized String getCompactPrompt() {
@@ -276,8 +279,8 @@ public final class P2SClientConfig {
             Integer rawMaxBlocksPerCommit,
             Boolean rawConfirmRequired,
             Integer rawRiskAutoApplyThreshold,
-            Integer rawAutoCompactTokenLimit,
-            Integer rawCompactRetainUserTokenBudget,
+            Integer rawContextWindowTokens,
+            Integer rawCompactKeepRecentTokens,
             String rawSystemPrompt,
             boolean persist
     ) {
@@ -291,9 +294,9 @@ public final class P2SClientConfig {
         Integer nextMaxBlocksPerCommit = normalizePositiveInt(rawMaxBlocksPerCommit);
         Boolean nextConfirmRequired = rawConfirmRequired;
         Integer nextRiskAutoApplyThreshold = normalizeThreshold(rawRiskAutoApplyThreshold);
-        Integer nextAutoCompactTokenLimit = normalizePositiveInt(rawAutoCompactTokenLimit);
-        Integer nextCompactRetainUserTokenBudget = normalizePositiveInt(rawCompactRetainUserTokenBudget);
-        String nextSystemPrompt = rawSystemPrompt == null ? null : rawSystemPrompt.trim();
+        Integer nextContextWindowTokens = normalizePositiveInt(rawContextWindowTokens);
+        Integer nextCompactKeepRecentTokens = normalizePositiveInt(rawCompactKeepRecentTokens);
+        String nextSystemPrompt = rawSystemPrompt == null ? "" : rawSystemPrompt.trim();
 
         if (nextApiUrl == null
                 || nextApiKey == null
@@ -305,12 +308,9 @@ public final class P2SClientConfig {
                 || nextMaxBlocksPerCommit == null
                 || nextConfirmRequired == null
                 || nextRiskAutoApplyThreshold == null
-                || nextAutoCompactTokenLimit == null
-                || nextCompactRetainUserTokenBudget == null) {
+                || nextContextWindowTokens == null
+                || nextCompactKeepRecentTokens == null) {
             return false;
-        }
-        if (nextSystemPrompt == null || nextSystemPrompt.isBlank()) {
-            nextSystemPrompt = DEFAULT_SYSTEM_PROMPT;
         }
 
         apiUrl = nextApiUrl;
@@ -323,9 +323,9 @@ public final class P2SClientConfig {
         maxBlocksPerCommit = nextMaxBlocksPerCommit;
         confirmRequired = nextConfirmRequired;
         riskAutoApplyThreshold = nextRiskAutoApplyThreshold;
-        autoCompactTokenLimit = nextAutoCompactTokenLimit;
-        compactRetainUserTokenBudget = nextCompactRetainUserTokenBudget;
-        systemPrompt = nextSystemPrompt;
+        contextWindowTokens = nextContextWindowTokens;
+        compactKeepRecentTokens = nextCompactKeepRecentTokens;
+        extraInstructions = nextSystemPrompt;
         if (persist) {
             save();
         }
@@ -340,10 +340,10 @@ public final class P2SClientConfig {
         useToolCall = DEFAULT_USE_TOOL_CALL;
         useStreaming = DEFAULT_USE_STREAMING;
         autoApplyPatch = DEFAULT_AUTO_APPLY_PATCH;
-        systemPrompt = DEFAULT_SYSTEM_PROMPT;
+        extraInstructions = "";
         autoCompactEnabled = DEFAULT_AUTO_COMPACT_ENABLED;
-        autoCompactTokenLimit = DEFAULT_AUTO_COMPACT_TOKEN_LIMIT;
-        compactRetainUserTokenBudget = DEFAULT_COMPACT_RETAIN_USER_TOKEN_BUDGET;
+        contextWindowTokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
+        compactKeepRecentTokens = DEFAULT_COMPACT_KEEP_RECENT_TOKENS;
         compactPrompt = DEFAULT_COMPACT_PROMPT;
         sessionJobTimeoutSeconds = DEFAULT_SESSION_JOB_TIMEOUT_SECONDS;
         maxPatchOps = DEFAULT_MAX_PATCH_OPS;
@@ -394,14 +394,15 @@ public final class P2SClientConfig {
         Boolean loadedAutoApplyPatch = null;
         String loadedToolset = null;
         Boolean loadedAutoCompactEnabled = null;
-        Integer loadedAutoCompactTokenLimit = null;
-        Integer loadedCompactRetainUserTokenBudget = null;
+        Integer loadedContextWindowTokens = null;
+        Integer loadedCompactKeepRecentTokens = null;
         Integer loadedSessionJobTimeoutSeconds = null;
         Integer loadedMaxPatchOps = null;
         Integer loadedMaxBlocksPerCommit = null;
         Boolean loadedConfirmRequired = null;
         Integer loadedRiskAutoApplyThreshold = null;
         String loadedSystemPrompt = null;
+        boolean hasExtraInstructions = false;
         String loadedCompactPrompt = null;
         Map<String, List<String>> loadedFolders = new LinkedHashMap<>();
         try {
@@ -416,10 +417,20 @@ public final class P2SClientConfig {
                 loadedUseStreaming = root.has("useStreaming") ? root.get("useStreaming").getAsBoolean() : null;
                 loadedAutoApplyPatch = root.has("autoApplyPatch") ? root.get("autoApplyPatch").getAsBoolean() : null;
                 loadedToolset = root.has("toolset") ? root.get("toolset").getAsString() : null;
-                loadedSystemPrompt = root.has("systemPrompt") ? root.get("systemPrompt").getAsString() : null;
+                hasExtraInstructions = root.has("extraInstructions");
+                loadedSystemPrompt = hasExtraInstructions ? root.get("extraInstructions").getAsString()
+                        : root.has("systemPrompt") ? root.get("systemPrompt").getAsString() : null;
                 loadedAutoCompactEnabled = root.has("autoCompactEnabled") ? root.get("autoCompactEnabled").getAsBoolean() : null;
-                loadedAutoCompactTokenLimit = root.has("autoCompactTokenLimit") ? root.get("autoCompactTokenLimit").getAsInt() : null;
-                loadedCompactRetainUserTokenBudget = root.has("compactRetainUserTokenBudget") ? root.get("compactRetainUserTokenBudget").getAsInt() : null;
+                if (root.has("contextWindowTokens")) {
+                    loadedContextWindowTokens = root.get("contextWindowTokens").getAsInt();
+                } else if (root.has("autoCompactTokenLimit")) {
+                    int old = root.get("autoCompactTokenLimit").getAsInt();
+                    if (old > 0 && old != 24_000) {
+                        loadedContextWindowTokens = (int) Math.min(Integer.MAX_VALUE, old + Math.min(16_384L, old / 3L));
+                    }
+                }
+                loadedCompactKeepRecentTokens = root.has("compactKeepRecentTokens") ? root.get("compactKeepRecentTokens").getAsInt()
+                        : root.has("compactRetainUserTokenBudget") ? root.get("compactRetainUserTokenBudget").getAsInt() : null;
                 loadedSessionJobTimeoutSeconds = root.has("sessionJobTimeoutSeconds") ? root.get("sessionJobTimeoutSeconds").getAsInt() : null;
                 loadedMaxPatchOps = root.has("maxPatchOps") ? root.get("maxPatchOps").getAsInt() : null;
                 loadedMaxBlocksPerCommit = root.has("maxBlocksPerCommit") ? root.get("maxBlocksPerCommit").getAsInt() : null;
@@ -478,12 +489,16 @@ public final class P2SClientConfig {
         autoApplyPatch = loadedAutoApplyPatch == null ? DEFAULT_AUTO_APPLY_PATCH : loadedAutoApplyPatch;
         toolset = "legacy".equalsIgnoreCase(loadedToolset == null ? "" : loadedToolset.trim()) ? "legacy" : "v2";
         String prompt = loadedSystemPrompt == null ? "" : loadedSystemPrompt.trim();
-        systemPrompt = prompt.isBlank() ? DEFAULT_SYSTEM_PROMPT : prompt;
+        extraInstructions = hasExtraInstructions ? prompt : AgentPrompt.migrate(prompt);
+        if (!hasExtraInstructions && !prompt.isBlank()) {
+            P2SMod.LOGGER.info("Migrated legacy system prompt: {}", extraInstructions.isBlank()
+                    ? "using the current built-in tool instructions" : "preserved player instructions");
+        }
         autoCompactEnabled = loadedAutoCompactEnabled == null ? DEFAULT_AUTO_COMPACT_ENABLED : loadedAutoCompactEnabled;
-        Integer compactLimit = normalizePositiveInt(loadedAutoCompactTokenLimit);
-        autoCompactTokenLimit = compactLimit == null ? DEFAULT_AUTO_COMPACT_TOKEN_LIMIT : compactLimit;
-        Integer retainBudget = normalizePositiveInt(loadedCompactRetainUserTokenBudget);
-        compactRetainUserTokenBudget = retainBudget == null ? DEFAULT_COMPACT_RETAIN_USER_TOKEN_BUDGET : retainBudget;
+        Integer compactLimit = normalizePositiveInt(loadedContextWindowTokens);
+        contextWindowTokens = compactLimit == null ? DEFAULT_CONTEXT_WINDOW_TOKENS : compactLimit;
+        Integer retainBudget = normalizePositiveInt(loadedCompactKeepRecentTokens);
+        compactKeepRecentTokens = retainBudget == null ? DEFAULT_COMPACT_KEEP_RECENT_TOKENS : retainBudget;
         Integer sessionTimeout = normalizePositiveInt(loadedSessionJobTimeoutSeconds);
         sessionJobTimeoutSeconds = sessionTimeout == null ? DEFAULT_SESSION_JOB_TIMEOUT_SECONDS : sessionTimeout;
         Integer patchOps = normalizePositiveInt(loadedMaxPatchOps);
@@ -516,10 +531,10 @@ public final class P2SClientConfig {
             root.addProperty("useStreaming", useStreaming);
             root.addProperty("autoApplyPatch", autoApplyPatch);
             root.addProperty("toolset", toolset);
-            root.addProperty("systemPrompt", systemPrompt);
+            root.addProperty("extraInstructions", extraInstructions);
             root.addProperty("autoCompactEnabled", autoCompactEnabled);
-            root.addProperty("autoCompactTokenLimit", autoCompactTokenLimit);
-            root.addProperty("compactRetainUserTokenBudget", compactRetainUserTokenBudget);
+            root.addProperty("contextWindowTokens", contextWindowTokens);
+            root.addProperty("compactKeepRecentTokens", compactKeepRecentTokens);
             root.addProperty("compactPrompt", compactPrompt);
             root.addProperty("sessionJobTimeoutSeconds", sessionJobTimeoutSeconds);
             root.addProperty("maxPatchOps", maxPatchOps);

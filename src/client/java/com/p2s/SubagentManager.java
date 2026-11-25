@@ -5,7 +5,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.p2s.agent.context.ContextBuilder;
 import com.p2s.agent.core.AbortSignal;
 import com.p2s.agent.core.Agent;
 import com.p2s.agent.core.AgentEvent;
@@ -65,7 +64,6 @@ public final class SubagentManager {
 
     private static final ConcurrentHashMap<String, SubagentTask> TASKS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, CopyOnWriteArrayList<String>> SESSION_INDEX = new ConcurrentHashMap<>();
-    private static final int MAX_CONTEXT_MESSAGES = 60;
 
     private SubagentManager() {
     }
@@ -564,11 +562,13 @@ public final class SubagentManager {
         OpenAiMessageCodec.Decoded decoded = OpenAiMessageCodec.fromWire(history);
 
         // Same core loop as the main agent, restricted by the profile's tools, turns and timeout.
-        AgentLoopConfig config = AgentLoopConfig.builder(new OpenAiChatCompletions(() -> {
+        ClientContextWindow window = ClientContextWindow.forClient(new OpenAiChatCompletions(() -> {
                     LlmRequestConfig base = P2SClientConfig.llmRequestConfig();
                     return base.withTimeoutSeconds(timeoutSeconds).withStreaming(false);
-                }))
-                .transformContext(messages -> ContextBuilder.build(messages, MAX_CONTEXT_MESSAGES, null))
+                }), (trigger, summary) -> P2SMod.LOGGER.info("Compacted subagent {} context", task.id),
+                error -> P2SMod.LOGGER.warn("Subagent {} compaction failed: {}", task.id, error));
+        window.restore(task.checkpoint.firstKept(), task.checkpoint.summary(), decoded.messages());
+        AgentLoopConfig config = AgentLoopConfig.builder(window)
                 .shouldStopAfterTurn(turn -> turn.turnIndex() + 1 >= maxLoops)
                 .toolExecutor(ToolExecutors.shared())
                 .build();
@@ -604,8 +604,8 @@ public final class SubagentManager {
         }
         synchronized (task) {
             task.agent = null;
-            task.history = new ArrayList<>(OpenAiMessageCodec.toWire(decoded.systemPrompt(),
-                    ContextBuilder.repair(agent.messages())));
+            task.history = new ArrayList<>(OpenAiMessageCodec.toWire(decoded.systemPrompt(), agent.messages()));
+            task.checkpoint = window.checkpoint();
         }
         if (shouldStop(task)) {
             return;
@@ -1337,6 +1337,7 @@ public final class SubagentManager {
         JsonObject metadata;
         List<String> toolTrace = new ArrayList<>();
         List<JsonObject> history = new ArrayList<>();
+        ClientHistoryCompactor.Checkpoint checkpoint = ClientHistoryCompactor.Checkpoint.EMPTY;
         int attempt = 1;
         int attemptCount = 1;
         List<AttemptRecord> attempts = new ArrayList<>();

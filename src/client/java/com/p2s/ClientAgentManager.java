@@ -5,23 +5,23 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.p2s.agent.context.ContextBuilder;
 import com.p2s.agent.core.AbortSignal;
 import com.p2s.agent.core.Agent;
 import com.p2s.agent.core.AgentEvent;
 import com.p2s.agent.core.AgentLoop;
 import com.p2s.agent.core.AgentLoopConfig;
+import com.p2s.agent.core.StreamFunction;
 import com.p2s.agent.core.AgentMessage;
 import com.p2s.agent.core.AgentToolResult;
 import com.p2s.agent.core.AssistantMessageEvent;
 import com.p2s.agent.llm.OpenAiChatCompletions;
-import com.p2s.agent.llm.OpenAiMessageCodec;
 import com.p2s.agent.runtime.AgentRunGuard;
 import com.p2s.agent.runtime.AgentRunGuard.RunIdentity;
 import com.p2s.agent.tool.RegistryTools;
 import com.p2s.agent.tool.ToolExecutors;
 import com.p2s.agent.tool.ToolRegistry;
 import com.p2s.store.SessionPersistence;
+import com.p2s.store.SessionTranscript;
 import com.p2s.store.SkillStore;
 import net.minecraft.client.Minecraft;
 
@@ -57,10 +57,6 @@ public final class ClientAgentManager {
         t.setDaemon(true);
         return t;
     });
-    /** Messages sent to the model per request (the stored transcript may be longer). */
-    private static final int MAX_CONTEXT_MESSAGES = 40;
-    /** Upper bound of the stored transcript between compactions. */
-    private static final int MAX_TRANSCRIPT_MESSAGES = 400;
     private static final int SAFETY_TURN_LIMIT = 50;
     private static final int MAX_PLAN_ITEMS = 40;
     private static final int MAX_CHOICE_OPTIONS = 3;
@@ -169,7 +165,7 @@ public final class ClientAgentManager {
                 postToClient(() -> ClientSessionState.setStatus("busy"));
                 return;
             }
-            if (!ClientHistoryCompactor.hasCompactableHistory(wireHistory(currentSession))) {
+            if (currentSession.agent.messages().size() < 2) {
                 postToClient(() -> {
                     ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.nothing_to_compact").getString());
                     ClientSessionState.setStatus("done");
@@ -181,9 +177,12 @@ public final class ClientAgentManager {
         }
         postToClient(session, run, () -> ClientSessionState.setStatus("compacting"));
         startRun(session, run, () -> {
-            boolean compacted = performCompaction(session, run, ClientHistoryCompactor.CompactTrigger.MANUAL, false);
+            boolean compacted = session.contextWindow.manual(modelContext(session, session.agent.messages()), session.runSignal);
             if (!compacted) {
-                postToClient(session, run, () -> ClientSessionState.setStatus("done"));
+                postToClient(session, run, () -> {
+                    ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.nothing_to_compact").getString());
+                    ClientSessionState.setStatus("done");
+                });
             }
             return AgentEvent.EndReason.COMPLETED;
         });
@@ -244,7 +243,6 @@ public final class ClientAgentManager {
             ClientSessionState.setStatus("planning");
         });
         startRun(session, run, () -> {
-            maybeRunAutomaticCompaction(session, run, ClientHistoryCompactor.CompactTrigger.AUTO_PRE_TURN);
             if (!isCurrentRun(session, run) || isRunAborted(session)) {
                 return AgentEvent.EndReason.ABORTED;
             }
@@ -631,7 +629,6 @@ public final class ClientAgentManager {
                                 P2SI18n.tr("message.p2s.agent.safety_limit", SAFETY_TURN_LIMIT).getString());
                     }
                 }
-                capTranscriptLocked(session);
                 saveSessionLocked(session);
                 if (!sameProject) {
                     return;
@@ -667,98 +664,26 @@ public final class ClientAgentManager {
         };
     }
 
-    // ---------------------------------------------------------------- compaction
-
-    private static boolean maybeRunAutomaticCompaction(LocalSession session, RunIdentity run,
-                                                       ClientHistoryCompactor.CompactTrigger trigger) {
-        if (!P2SClientConfig.isAutoCompactEnabled()) {
-            return false;
-        }
-        List<JsonObject> wire = wireHistory(session);
-        if (!ClientHistoryCompactor.hasCompactableHistory(wire)
-                || !ClientHistoryCompactor.hasNonSummaryNonSystemMessages(wire)
-                || ClientHistoryCompactor.estimateHistoryTokens(wire) < P2SClientConfig.getAutoCompactTokenLimit()) {
-            return false;
-        }
-        return performCompaction(session, run, trigger, true);
+    private static StreamFunction.Context modelContext(LocalSession session, List<AgentMessage> messages) {
+        return new StreamFunction.Context(session.agent.systemPrompt(), messages, session.agent.tools());
     }
-
-    /** Mid-run compaction hook (pi prepareNextTurn); returns the replacement transcript or null. */
-    private static List<AgentMessage> compactBetweenTurns(LocalSession session, List<AgentMessage> messages) {
-        RunIdentity run;
-        synchronized (LOCK) {
-            run = session.activeRun;
-        }
-        if (run == null || !P2SClientConfig.isAutoCompactEnabled()) {
-            return null;
-        }
-        List<JsonObject> wire = OpenAiMessageCodec.toWire(systemPrompt(), ContextBuilder.repair(messages));
-        if (!ClientHistoryCompactor.hasNonSummaryNonSystemMessages(wire)
-                || ClientHistoryCompactor.estimateHistoryTokens(wire) < P2SClientConfig.getAutoCompactTokenLimit()) {
-            return null;
-        }
-        CompactionOutcome outcome = compact(session, run, wire, ClientHistoryCompactor.CompactTrigger.AUTO_MID_TURN, true);
-        return outcome == null ? null : outcome.messages();
-    }
-
-    /** Compaction while the agent is idle (manual or before a turn). */
-    private static boolean performCompaction(LocalSession session, RunIdentity run,
-                                             ClientHistoryCompactor.CompactTrigger trigger, boolean requireReduction) {
-        CompactionOutcome outcome = compact(session, run, wireHistory(session), trigger, requireReduction);
-        if (outcome == null) {
-            return false;
-        }
-        session.agent.replaceMessages(outcome.messages());
-        return true;
-    }
-
-    private static CompactionOutcome compact(LocalSession session, RunIdentity run, List<JsonObject> wire,
-                                             ClientHistoryCompactor.CompactTrigger trigger, boolean requireReduction) {
-        if (!isCurrentRun(session, run)) {
-            return null;
-        }
-        AbortSignal signal;
-        synchronized (LOCK) {
-            signal = session.runSignal == null ? AbortSignal.none() : session.runSignal;
-        }
-        postToClient(session, run, () -> ClientSessionState.setStatus("compacting"));
-        try {
-            ClientHistoryCompactor.CompactionResult result = ClientHistoryCompactor.compactHistory(
-                    wire, trigger, P2SClientConfig.llmRequestConfig(), signal);
-            if (requireReduction && result.estimatedTokensAfter() >= result.estimatedTokensBefore()) {
-                return null;
-            }
-            if (!isCurrentRun(session, run)) {
-                return null;
-            }
-            List<AgentMessage> replacement = OpenAiMessageCodec.fromWire(result.replacementHistory()).messages();
-            postToClient(session, run, () -> {
-                ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.done").getString() + "\n" + result.summaryBody());
-                if (trigger == ClientHistoryCompactor.CompactTrigger.MANUAL) {
-                    ClientSessionState.setStatus("done");
-                }
-            });
-            return new CompactionOutcome(replacement);
-        } catch (Exception ex) {
-            String error = formatAgentError(ex);
-            P2SMod.LOGGER.warn("History compaction failed ({}): {}", trigger, error);
-            postToClient(session, run, () -> ClientSessionState.addSystemMessage(
-                    P2SI18n.tr("message.p2s.compact.failed_fallback").getString() + " " + error
-            ));
-            return null;
-        }
-    }
-
-    private record CompactionOutcome(List<AgentMessage> messages) {
-    }
-
-    // ---------------------------------------------------------------- agent wiring
 
     private static Agent createAgent(LocalSession session, List<AgentMessage> transcript) {
-        AgentLoopConfig config = AgentLoopConfig.builder(new OpenAiChatCompletions(P2SClientConfig::llmRequestConfig))
-                .transformContext(messages -> ContextBuilder.build(messages, MAX_CONTEXT_MESSAGES,
-                        ClientAgentManager::isPinnedMessage))
-                .prepareNextTurn(turn -> compactBetweenTurns(session, turn.messages()))
+        session.contextWindow = ClientContextWindow.forClient(new OpenAiChatCompletions(P2SClientConfig::llmRequestConfig),
+                (trigger, summary) -> postToClient(session, session.activeRun, () -> {
+                    ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.done").getString() + "\n" + summary);
+                    if (trigger == ClientHistoryCompactor.Trigger.MANUAL) {
+                        ClientSessionState.setStatus("done");
+                    }
+                }), error -> postToClient(session, session.activeRun, () -> ClientSessionState.addSystemMessage(
+                        P2SI18n.tr("message.p2s.compact.failed_fallback").getString() + " " + error)));
+        AgentLoopConfig config = AgentLoopConfig.builder(session.contextWindow)
+                .prepareNextTurn(turn -> {
+                    if (!turn.toolResults().isEmpty()) {
+                        session.contextWindow.betweenTurns(modelContext(session, turn.messages()), session.runSignal);
+                    }
+                    return null; // The agent always retains the complete transcript.
+                })
                 .shouldStopAfterTurn(turn -> turn.turnIndex() + 1 >= SAFETY_TURN_LIMIT)
                 .toolExecutor(ToolExecutors.shared())
                 .build();
@@ -803,25 +728,6 @@ public final class ClientAgentManager {
                 return false;
             }
         };
-    }
-
-    private static boolean isPinnedMessage(AgentMessage message) {
-        return message instanceof AgentMessage.User user && ClientHistoryCompactor.isSummaryContent(user.content());
-    }
-
-    private static List<JsonObject> wireHistory(LocalSession session) {
-        return OpenAiMessageCodec.toWire(systemPrompt(), ContextBuilder.repair(session.agent.messages()));
-    }
-
-    private static void capTranscriptLocked(LocalSession session) {
-        if (session.agent.isRunning()) {
-            return;
-        }
-        List<AgentMessage> messages = session.agent.messages();
-        if (messages.size() > MAX_TRANSCRIPT_MESSAGES) {
-            session.agent.replaceMessages(ContextBuilder.limit(ContextBuilder.repair(messages),
-                    MAX_TRANSCRIPT_MESSAGES, ClientAgentManager::isPinnedMessage));
-        }
     }
 
     private static ToolRegistry createToolRegistry(LocalSession session, RunIdentity run) {
@@ -1440,12 +1346,13 @@ public final class ClientAgentManager {
         }
         session.selectedWorkspacePath = view.selectedWorkspacePath();
         // The persisted history keeps the previous wire format: system message first.
-        List<JsonObject> history = OpenAiMessageCodec.toWire(systemPrompt(),
-                ContextBuilder.repair(session.agent.messages()));
+        var checkpoint = session.contextWindow.checkpoint();
+        List<JsonObject> history = SessionTranscript.encode(systemPrompt(), session.agent.messages());
         return new SessionPersistence.SavedSession(
                 session.id, session.projectId, title, session.createdAt, System.currentTimeMillis(),
                 chatLog.size(), history, List.copyOf(chatLog), List.copyOf(plan),
-                view.planExplanation(), session.selectedWorkspacePath, choice, scriptStoreJson(session));
+                view.planExplanation(), session.selectedWorkspacePath, choice, scriptStoreJson(session),
+                checkpoint.firstKept(), checkpoint.summary());
     }
 
     private static void saveSessionLocked(LocalSession session) {
@@ -1631,8 +1538,9 @@ public final class ClientAgentManager {
         session.id = saved.id();
         session.runs = new AgentRunGuard(session.id, connectionEpoch);
         // The saved system message is replaced by the current prompt and contract.
-        List<AgentMessage> transcript = OpenAiMessageCodec.fromWire(saved.llmHistory()).messages();
+        List<AgentMessage> transcript = SessionTranscript.decode(saved.llmHistory());
         session.agent = createAgent(session, transcript);
+        session.contextWindow.restore(saved.firstKept(), saved.contextSummary(), transcript);
         saved.scriptStore().entrySet().forEach(entry -> session.scriptStore.put(entry.getKey(), entry.getValue().deepCopy()));
         session.createdAt = saved.createdAt();
         session.serverSessionStarted = false;
@@ -1916,6 +1824,7 @@ public final class ClientAgentManager {
         String id;
         AgentRunGuard runs;
         Agent agent;
+        ClientContextWindow contextWindow;
         /** Fences harness work outside the agent loop (compaction, approval receipts). */
         AbortSignal runSignal;
         RunIdentity activeRun;

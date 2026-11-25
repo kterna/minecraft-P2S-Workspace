@@ -37,8 +37,8 @@ public class P2SConfigScreen extends Screen {
     private EditBox maxPatchOpsInput;
     private EditBox maxBlocksPerCommitInput;
     private EditBox riskAutoApplyThresholdInput;
-    private EditBox autoCompactTokenLimitInput;
-    private EditBox compactRetainUserTokenBudgetInput;
+    private EditBox contextWindowTokensInput;
+    private EditBox compactKeepRecentTokensInput;
     private P2SMultiLineTextEditor systemPromptEditor;
     private Button toolCallButton;
     private Button streamingButton;
@@ -238,22 +238,22 @@ public class P2SConfigScreen extends Screen {
         riskAutoApplyThresholdInput.setValue(Integer.toString(P2SClientConfig.getRiskAutoApplyThreshold()));
         addRenderableWidget(riskAutoApplyThresholdInput);
 
-        autoCompactTokenLimitInput = new EditBox(this.font, left + 200, y + 14, 170, 20, P2SI18n.tr("screen.p2s.config.llm.auto_compact_token_limit"));
-        autoCompactTokenLimitInput.setMaxLength(8);
-        autoCompactTokenLimitInput.setValue(Integer.toString(P2SClientConfig.getAutoCompactTokenLimit()));
-        addRenderableWidget(autoCompactTokenLimitInput);
+        contextWindowTokensInput = new EditBox(this.font, left + 200, y + 14, 170, 20, P2SI18n.tr("screen.p2s.config.llm.auto_compact_token_limit"));
+        contextWindowTokensInput.setMaxLength(8);
+        contextWindowTokensInput.setValue(Integer.toString(P2SClientConfig.getContextWindowTokens()));
+        addRenderableWidget(contextWindowTokensInput);
 
-        compactRetainUserTokenBudgetInput = new EditBox(this.font, left + 390, y + 14, 220, 20, P2SI18n.tr("screen.p2s.config.llm.compact_retain_user_tokens"));
-        compactRetainUserTokenBudgetInput.setMaxLength(8);
-        compactRetainUserTokenBudgetInput.setValue(Integer.toString(P2SClientConfig.getCompactRetainUserTokenBudget()));
-        addRenderableWidget(compactRetainUserTokenBudgetInput);
+        compactKeepRecentTokensInput = new EditBox(this.font, left + 390, y + 14, 220, 20, P2SI18n.tr("screen.p2s.config.llm.compact_retain_user_tokens"));
+        compactKeepRecentTokensInput.setMaxLength(8);
+        compactKeepRecentTokensInput.setValue(Integer.toString(P2SClientConfig.getCompactKeepRecentTokens()));
+        addRenderableWidget(compactKeepRecentTokensInput);
         y += 50 + compactHintHeight(panelWidth);
 
         int promptY = y + 14;
         systemPromptEditor = new P2SMultiLineTextEditor(this.font);
         systemPromptEditor.setMaxLength(2048);
         systemPromptEditor.setBounds(left + 10, promptY, inputWidth, llmPromptHeight(promptY));
-        systemPromptEditor.setText(P2SClientConfig.getSystemPrompt());
+        systemPromptEditor.setText(P2SClientConfig.getExtraInstructions());
         y = promptY + llmPromptHeight(promptY) + 10;
 
         addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.save"), btn -> saveLlmConfig())
@@ -302,8 +302,8 @@ public class P2SConfigScreen extends Screen {
         Integer maxPatchOps = parsePositiveInt(maxPatchOpsInput == null ? "" : maxPatchOpsInput.getValue());
         Integer maxBlocksPerCommit = parsePositiveInt(maxBlocksPerCommitInput == null ? "" : maxBlocksPerCommitInput.getValue());
         Integer riskAutoApplyThreshold = parseInteger(riskAutoApplyThresholdInput == null ? "" : riskAutoApplyThresholdInput.getValue());
-        Integer autoCompactTokenLimit = parsePositiveInt(autoCompactTokenLimitInput == null ? "" : autoCompactTokenLimitInput.getValue());
-        Integer compactRetainUserTokenBudget = parsePositiveInt(compactRetainUserTokenBudgetInput == null ? "" : compactRetainUserTokenBudgetInput.getValue());
+        Integer contextWindowTokens = parsePositiveInt(contextWindowTokensInput == null ? "" : contextWindowTokensInput.getValue());
+        Integer compactKeepRecentTokens = parsePositiveInt(compactKeepRecentTokensInput == null ? "" : compactKeepRecentTokensInput.getValue());
         boolean ok = P2SClientConfig.setLlmConfig(
                 apiUrlInput == null ? "" : apiUrlInput.getValue(),
                 apiKeyInput == null ? "" : apiKeyInput.getValue(),
@@ -315,8 +315,8 @@ public class P2SConfigScreen extends Screen {
                 maxBlocksPerCommit,
                 confirmRequired,
                 riskAutoApplyThreshold,
-                autoCompactTokenLimit,
-                compactRetainUserTokenBudget,
+                contextWindowTokens,
+                compactKeepRecentTokens,
                 systemPromptEditor == null ? "" : systemPromptEditor.getText(),
                 false
         );
@@ -341,9 +341,9 @@ public class P2SConfigScreen extends Screen {
         if (maxPatchOpsInput != null) maxPatchOpsInput.setValue(Integer.toString(P2SClientConfig.getMaxPatchOps()));
         if (maxBlocksPerCommitInput != null) maxBlocksPerCommitInput.setValue(Integer.toString(P2SClientConfig.getMaxBlocksPerCommit()));
         if (riskAutoApplyThresholdInput != null) riskAutoApplyThresholdInput.setValue(Integer.toString(P2SClientConfig.getRiskAutoApplyThreshold()));
-        if (autoCompactTokenLimitInput != null) autoCompactTokenLimitInput.setValue(Integer.toString(P2SClientConfig.getAutoCompactTokenLimit()));
-        if (compactRetainUserTokenBudgetInput != null) compactRetainUserTokenBudgetInput.setValue(Integer.toString(P2SClientConfig.getCompactRetainUserTokenBudget()));
-        if (systemPromptEditor != null) systemPromptEditor.setText(P2SClientConfig.getSystemPrompt());
+        if (contextWindowTokensInput != null) contextWindowTokensInput.setValue(Integer.toString(P2SClientConfig.getContextWindowTokens()));
+        if (compactKeepRecentTokensInput != null) compactKeepRecentTokensInput.setValue(Integer.toString(P2SClientConfig.getCompactKeepRecentTokens()));
+        if (systemPromptEditor != null) systemPromptEditor.setText(P2SClientConfig.getExtraInstructions());
         useToolCall = P2SClientConfig.isUseToolCall();
         if (toolCallButton != null) toolCallButton.setMessage(toolCallLabel());
         useStreaming = P2SClientConfig.getUseStreaming();
@@ -595,8 +595,8 @@ public class P2SConfigScreen extends Screen {
             if (maxPatchOpsInput != null) maxPatchOpsInput.setFocused(false);
             if (maxBlocksPerCommitInput != null) maxBlocksPerCommitInput.setFocused(false);
             if (riskAutoApplyThresholdInput != null) riskAutoApplyThresholdInput.setFocused(false);
-            if (autoCompactTokenLimitInput != null) autoCompactTokenLimitInput.setFocused(false);
-            if (compactRetainUserTokenBudgetInput != null) compactRetainUserTokenBudgetInput.setFocused(false);
+            if (contextWindowTokensInput != null) contextWindowTokensInput.setFocused(false);
+            if (compactKeepRecentTokensInput != null) compactKeepRecentTokensInput.setFocused(false);
             return true;
         }
         if (button == 0 && systemPromptEditor != null) {
@@ -632,7 +632,7 @@ public class P2SConfigScreen extends Screen {
     private List<EditBox> collectEditBoxes() {
         return switch (currentTab) {
             case GENERAL -> selectionItemInput == null ? List.of() : List.of(selectionItemInput);
-            case LLM -> List.of(apiUrlInput, apiKeyInput, modelInput, timeoutInput, sessionTimeoutInput, maxPatchOpsInput, maxBlocksPerCommitInput, riskAutoApplyThresholdInput, autoCompactTokenLimitInput, compactRetainUserTokenBudgetInput);
+            case LLM -> List.of(apiUrlInput, apiKeyInput, modelInput, timeoutInput, sessionTimeoutInput, maxPatchOpsInput, maxBlocksPerCommitInput, riskAutoApplyThresholdInput, contextWindowTokensInput, compactKeepRecentTokensInput);
             case SKILLS -> List.of();
         };
     }

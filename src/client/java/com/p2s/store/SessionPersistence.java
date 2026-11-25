@@ -43,7 +43,9 @@ public final class SessionPersistence {
             String planExplanation,
             String selectedWorkspacePath,
             ChoiceRequestEntry pendingChoice,
-            JsonObject scriptStore
+            JsonObject scriptStore,
+            int firstKept,
+            String contextSummary
     ) {
         public SavedSession {
             scriptStore = scriptStore == null ? new JsonObject() : scriptStore.deepCopy();
@@ -87,6 +89,10 @@ public final class SessionPersistence {
                 }
             }
             sessionJson.add("llmHistory", historyArray);
+            if (session.firstKept() > 0) {
+                sessionJson.addProperty("firstKept", session.firstKept());
+                sessionJson.addProperty("contextSummary", session.contextSummary());
+            }
 
             JsonArray chatArray = new JsonArray();
             if (session.chatLog() != null) {
@@ -283,7 +289,8 @@ public final class SessionPersistence {
                     getStr(root, "selectedWorkspacePath"),
                     pendingChoice,
                     root.has("scriptStore") && root.get("scriptStore").isJsonObject()
-                            ? root.getAsJsonObject("scriptStore") : new JsonObject()
+                            ? root.getAsJsonObject("scriptStore") : new JsonObject(),
+                    getInt(root, "firstKept"), getStr(root, "contextSummary")
             );
         } catch (Exception e) {
             P2SMod.LOGGER.warn("Failed loading session {}: {}", id, e.getMessage());
