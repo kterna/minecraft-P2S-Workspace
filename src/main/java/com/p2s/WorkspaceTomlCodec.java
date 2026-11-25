@@ -219,6 +219,31 @@ public final class WorkspaceTomlCodec {
         workspace.size = toVec3Data(header.size);
     }
 
+    /** Validate the effective box using the same project fallbacks as workspaceOrigin/workspaceSize. */
+    static void validateNewFileBounds(ProjectPersistence.WorkspaceFileRecord workspace,
+                                      ProjectPersistence.ProjectRecord project) {
+        var origin = workspace.origin;
+        var size = workspace.size;
+        if (origin == null && size == null) {
+            return;
+        }
+        var min = project.boundsOrigin;
+        var extent = project.boundsSize;
+        if (origin == null) origin = min;
+        if (size == null) size = extent;
+        if (min == null || extent == null
+                || !withinExtent(origin.x, size.x, min.x, extent.x)
+                || !withinExtent(origin.y, size.y, min.y, extent.y)
+                || !withinExtent(origin.z, size.z, min.z, extent.z)) {
+            throw new IllegalArgumentException("workspace.size must be positive and the workspace box must fit inside the project");
+        }
+    }
+
+    private static boolean withinExtent(int origin, int size, int projectOrigin, int projectSize) {
+        return size > 0 && origin >= projectOrigin
+                && (long) origin + size <= (long) projectOrigin + projectSize;
+    }
+
     public static String emptyWorkspaceToml(String workspacePath, String type, ProjectPersistence.Vec3Data origin, ProjectPersistence.Vec3Data size) {
         ProjectPersistence.WorkspaceFileRecord workspace = new ProjectPersistence.WorkspaceFileRecord();
         workspace.path = ProjectPersistence.normalizeWorkspacePath(workspacePath);

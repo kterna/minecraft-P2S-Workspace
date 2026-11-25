@@ -28,6 +28,20 @@ public final class SubagentProfileStore {
             "block-id-searcher.json",
             "patch-planner.json"
     );
+    // SHA-256 of previously shipped, unmodified templates (normalized line endings).
+    // Load the current template in memory for these only; never overwrite player-edited files.
+    private static final java.util.Map<String, Set<String>> OLD_TEMPLATES = java.util.Map.of(
+            "general-planner.json", Set.of(
+                    "15bd6efae967f3541f028407facd0a7636fa7b5263b7d6630db9bf32f7a49dc3",
+                    "88511741d3082715d88a6c58312196a4c55468dca41028fb45c92c7ea66fd42d",
+                    "bb72d3a9a51157274b16b7e740beb1ad822225f6ec01b07f1b0f7d130249cf2c"),
+            "patch-planner.json", Set.of(
+                    "6cb2c1ac83e77bf55842ee806afe2ead8216c52ff98b4e6082ff1fd609c66908",
+                    "2eaaa32ee152ea74ad3b4b7fff1f8894ef04cea6b2cbe8bb10abd8a736ab57cc",
+                    "cbccef6885b28c080eb801101c39a4f22d790a61f91c022af4ffafd1c24d2aa4",
+                    "21032e9f25e447ccbe9f14919f3c3ceddbb196c0d20823c2c1d5cfd894199cfc",
+                    "b2cea22da11ce174181e0ee00affc890df0fb393450d28ac3b3f337ef3d273f2")
+    );
     private static final int DEFAULT_MAX_LOOPS = 30;
     private static final int DEFAULT_TIMEOUT_SECONDS = 45;
     private static final Set<String> SUPPORTED_TOOLS = Set.of(
@@ -126,6 +140,13 @@ public final class SubagentProfileStore {
     private static SubagentProfile parseProfile(Path file) {
         try {
             String text = Files.readString(file);
+            String fileName = file.getFileName().toString();
+            Set<String> oldHashes = OLD_TEMPLATES.get(fileName);
+            if (oldHashes != null) {
+                byte[] bytes = text.replace("\r\n", "\n").strip().getBytes(StandardCharsets.UTF_8);
+                String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+                if (oldHashes.contains(hash)) text = loadDefaultProfileTemplate(fileName);
+            }
             JsonObject root = JsonParser.parseString(text).getAsJsonObject();
             String fromFileName = stripJsonExt(file.getFileName().toString());
             String id = normalizeId(getString(root, "id", fromFileName));

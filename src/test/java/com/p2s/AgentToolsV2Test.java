@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Wiring of the v2 tools against a fake server bridge (no game needed). */
 class AgentToolsV2Test {
     /** Fake bridge: one workspace file whose staged text and revision change on stage_workspace_file. */
-    private static final class FakeHost implements AgentToolsV2.Host {
+    private static final class FakeHost extends AgentToolsV2.Host {
         final List<String> calls = new ArrayList<>();
         final List<JsonObject> staged = new ArrayList<>();
         final Map<String, JsonElement> store = new HashMap<>();
@@ -151,6 +151,47 @@ class AgentToolsV2Test {
         JsonObject shell = call(tools.get("sh"), "{\"command\":\"grep -c ring workspace/house.toml\"}");
         assertTrue(shell.get("ok").getAsBoolean(), shell.toString());
         assertEquals("1\n", shell.get("stdout").getAsString());
+    }
+
+    @Test
+    void wholeFileWritesUseTheRevisionReadByThisRun() throws Exception {
+        FakeHost host = new FakeHost(false);
+        var tools = tools(host);
+        JsonObject args = new JsonObject();
+        args.addProperty("path", "workspace/house.toml");
+        args.addProperty("content", host.toml);
+        String readPath = "{\"path\":\"workspace/house.toml\"}";
+        assertTrue(AgentToolResult.isErrorPayload(call(tools.get("write"), args.toString())));
+        call(tools.get("read"), "{\"path\":\"workspace/house.toml\",\"committed\":true}");
+        assertTrue(AgentToolResult.isErrorPayload(call(tools.get("write"), args.toString())));
+        call(tools.get("grep"), "{\"path\":\"workspace/house.toml\",\"pattern\":\"house\"}");
+        assertTrue(AgentToolResult.isErrorPayload(call(tools.get("write"), args.toString())));
+        assertTrue(host.staged.isEmpty());
+
+        assertEquals("rev-1", call(tools.get("read"), readPath).get("staged_revision").getAsString());
+        host.revision = "another-agent";
+        assertTrue(AgentToolResult.isErrorPayload(call(tools.get("write"), args.toString())));
+        assertEquals("rev-1", host.staged.getFirst().get("base_revision").getAsString());
+        call(tools.get("read"), readPath);
+        assertFalse(AgentToolResult.isErrorPayload(call(tools.get("write"), args.toString())));
+        assertEquals("another-agent", host.staged.getLast().get("base_revision").getAsString());
+
+        FakeHost fresh = new FakeHost(false);
+        args.addProperty("base_revision", fresh.revision);
+        assertFalse(AgentToolResult.isErrorPayload(call(tools(fresh).get("write"), args.toString())));
+    }
+
+    @Test
+    void newWorkspaceCreationIsOneServerOperationWithTheOriginalHeader() throws Exception {
+        FakeHost host = new FakeHost(false);
+        JsonObject args = new JsonObject();
+        args.addProperty("path", "workspace/new.toml");
+        args.addProperty("content", host.toml);
+        assertFalse(AgentToolResult.isErrorPayload(call(tools(host).get("write"), args.toString())));
+        assertTrue(host.staged.getFirst().get("create").getAsBoolean());
+        assertEquals(args.get("content"), host.staged.getFirst().get("workspace_toml"));
+        assertFalse(host.staged.getFirst().has("base_revision"));
+        assertFalse(host.calls.contains("create_workspace_file"));
     }
 
     @Test

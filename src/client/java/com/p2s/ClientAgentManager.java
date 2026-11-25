@@ -98,13 +98,13 @@ public final class ClientAgentManager {
             - Change workspace files with edit (exact text replacement), write (whole file), set_part (one part's actions), sh (bash-like text commands) or script (JavaScript: loops, geometry via geo.*, many tool calls in one go).
             - Every change is staged, not built. When your turn ends the player reviews all staged files and applies or discards them; you then receive one message with their decisions. Do not ask the player to apply in the middle of your work; finish, then summarize what you staged.
             - read returns the staged version, so later edits build on earlier ones. If a write fails because the file changed, read it again and redo the edit.
-            - Workspace TOML: a [workspace] header (do not change origin, size or type), [palette], and [[part]] tables with name and priority, each holding [[part.action]] entries: type box|plane|line|points, block, from/to (box, plane, line) or at (points: list of [x,y,z]), mode (box: solid|shell|walls; plane: solid|outline), axis (plane: x|y|z with from[axis] == to[axis]), facing. Coordinates are relative to the workspace origin.
+            - Workspace TOML: a [workspace] header (new files may set world origin + size together and type; existing headers are fixed), [palette], and [[part]] tables with name and priority, each holding [[part.action]] entries: type box|plane|line|points, block, from/to (box, plane, line) or at (points: list of [x,y,z]), mode (box: solid|shell|walls; plane: solid|outline), axis (plane: x|y|z with from[axis] == to[axis]), facing. Coordinates are relative to the workspace origin.
             - Change only the parts the task needs; keep unrelated parts untouched and give new parts clear names.
             - For curved or repetitive shapes use script with geo.* instead of writing hundreds of points by hand. When you would otherwise make many small tool calls, use script with batch(...) or sh.
             - Skills may mention propose_patch, patch_toml, read_skill or read_workspace_file; those tools are not available. Read skills as files under skills/ and apply their building rules with the tools above.
             - Use inspect_world to see what is actually built before modifying an existing structure.
             - Use update_plan for user-visible progress. Use ask_user before choosing between real alternatives; your turn pauses until the player answers.
-            - Use task to delegate work to a subagent; you are notified automatically when it finishes. Use task_status for its full result.
+            - Check agents/<profile>.json for effective tools. Delegate writes with task.owned_paths and leave those files to their subagent. Use task_status with id and wait=true to receive the result before building on it.
             - The user may send new instructions while you work; they appear as user messages between your turns. Follow the latest instruction.
             """;
 
@@ -336,7 +336,14 @@ public final class ClientAgentManager {
                         ? "APPLIED " + shown + " (committed as revision " + asString(receipt, "revision") + ")"
                         : "DISCARDED " + shown + (safeReason.isEmpty() ? "" : " - reason: " + safeReason);
                 synchronized (LOCK) {
-                    session.reviewDecisions.add(decision + (summary.isBlank() ? "" : ": " + summary));
+                    StringBuilder reviewed = new StringBuilder(decision);
+                    if (!summary.isBlank()) reviewed.append(": ").append(summary);
+                    if (receipt.has("warnings") && receipt.get("warnings").isJsonArray()) {
+                        for (JsonElement warning : receipt.getAsJsonArray("warnings")) {
+                            reviewed.append("\n  Warning: ").append(warning.getAsString());
+                        }
+                    }
+                    session.reviewDecisions.add(reviewed.toString());
                     if (approval != null && approval.path().equals(path)) {
                         session.pendingApproval = null;
                     }
@@ -1104,7 +1111,7 @@ public final class ClientAgentManager {
      */
     private static JsonObject callServerTool(LocalSession session, RunIdentity run, String toolName, JsonObject args) {
         BooleanSupplier active = () -> isCurrentRun(session, run) && !isRunAborted(session);
-        CompletableFuture<JsonObject> future = ClientToolBridge.call(toolName, args, active);
+        CompletableFuture<JsonObject> future = ClientToolBridge.callForAgent(toolName, args, active, "");
         try {
             while (true) {
                 try {

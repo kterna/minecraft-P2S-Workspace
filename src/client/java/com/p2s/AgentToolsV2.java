@@ -46,23 +46,26 @@ final class AgentToolsV2 {
     }
 
     /** What the tools need from the agent that uses them. */
-    interface Host {
+    abstract static class Host {
+        // One host per agent run; separate file tool calls share observations within that run.
+        final Map<String, String> readRevisions = new java.util.concurrent.ConcurrentHashMap<>();
+
         /** Server bridge call fenced by the current run; failures come back as ok=false payloads. */
-        JsonObject server(String tool, JsonObject args);
+        abstract JsonObject server(String tool, JsonObject args);
 
         /** Runs UI-state work on the client thread and waits for it. */
-        JsonObject onClient(Supplier<JsonObject> action);
+        abstract JsonObject onClient(Supplier<JsonObject> action);
 
-        String sessionId();
+        abstract String sessionId();
 
         /** Skills visible to this agent; empty means all. */
-        Set<String> skillScope();
+        abstract Set<String> skillScope();
 
         /** Values kept by scripts across calls in this session. */
-        Map<String, JsonElement> scriptStore();
+        abstract Map<String, JsonElement> scriptStore();
 
         /** Subagents cannot create subagents or ask the player. */
-        boolean isSubagent();
+        abstract boolean isSubagent();
     }
 
     /** Registry plus the late-bound tool list that scripts call into. */
@@ -93,7 +96,7 @@ final class AgentToolsV2 {
                 .register("inspect_world", call -> host.server("inspect_world", args(call)))
                 .register("search_block_ids", call -> host.server("search_block_ids", args(call)))
                 .register("update_plan", call -> host.onClient(() -> ClientAgentManager.updatePlanPayload(args(call))))
-                .register("task_status", call -> taskStatus(host, args(call)))
+                .register("task_status", call -> taskStatus(host, args(call), call.signal()))
                 .register("script", call -> script(host, tools, args(call), call.signal()))
                 .register("sh", call -> shell(host, args(call), call.signal()));
         if (!host.isSubagent()) {
@@ -110,7 +113,7 @@ final class AgentToolsV2 {
     // ------------------------------------------------------------------ files
 
     private static ClientVirtualFs fs(Host host) {
-        return new ClientVirtualFs(host::server, host.skillScope());
+        return new ClientVirtualFs(host::server, host.skillScope(), host.readRevisions);
     }
 
     private static JsonObject ls(Host host, JsonObject args) throws VfsException {
@@ -156,6 +159,9 @@ final class AgentToolsV2 {
             payload.addProperty("truncated", true);
             payload.addProperty("next_offset", last + 1);
         }
+        if (!committed && fs.readRevision(path) != null) {
+            payload.addProperty("staged_revision", fs.readRevision(path));
+        }
         if (committed) {
             payload.addProperty("version", "committed");
         }
@@ -183,7 +189,7 @@ final class AgentToolsV2 {
         boolean truncated = false;
         outer:
         for (String file : files) {
-            String text = fs.read(file);
+            String text = fs.readForSearch(file);
             String[] lines = TextEdits.normalizeNewlines(text).split("\n", -1);
             for (int i = 0; i < lines.length; i++) {
                 Matcher matcher = pattern.matcher(lines[i]);
@@ -252,7 +258,7 @@ final class AgentToolsV2 {
     private static JsonObject write(Host host, JsonObject args) throws VfsException {
         ClientVirtualFs fs = fs(host);
         String path = VfsPaths.normalize(str(args, "path"), false);
-        fs.write(path, str(args, "content"));
+        fs.write(path, str(args, "content"), str(args, "base_revision"));
         return staged("write", fs, path);
     }
 
@@ -344,8 +350,12 @@ final class AgentToolsV2 {
         return SubagentManager.createSubagent(host.sessionId(), args);
     }
 
-    private static JsonObject taskStatus(Host host, JsonObject args) {
+    private static JsonObject taskStatus(Host host, JsonObject args, AbortSignal signal) {
         String id = str(args, "id");
+        if (bool(args, "wait")) {
+            if (id.isBlank() || host.isSubagent()) return error("task_status", "Waiting requires a task id and the parent agent");
+            return SubagentManager.waitForSubagent(host.sessionId(), id, integer(args, "timeout_ms", 15_000), signal);
+        }
         return id.isBlank()
                 ? SubagentManager.listSubagents(host.sessionId(), bool(args, "include_deleted"))
                 : SubagentManager.getSubagent(host.sessionId(), id);

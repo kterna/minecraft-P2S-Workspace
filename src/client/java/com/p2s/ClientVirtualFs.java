@@ -30,6 +30,7 @@ final class ClientVirtualFs implements VirtualFs {
     private final BiFunction<String, JsonObject, JsonObject> server;
     private final Set<String> skillScope;
     private Map<String, String> workspaceFiles;
+    private final Map<String, String> runRevisions;
     private final Map<String, String> stagedRevisions = new LinkedHashMap<>();
     private final List<JsonObject> stageResults = new ArrayList<>();
 
@@ -37,8 +38,9 @@ final class ClientVirtualFs implements VirtualFs {
      * @param server     calls a server bridge tool and returns its payload (errors as ok=false)
      * @param skillScope skills visible to a scoped subagent; empty means all
      */
-    ClientVirtualFs(BiFunction<String, JsonObject, JsonObject> server, Set<String> skillScope) {
+    ClientVirtualFs(BiFunction<String, JsonObject, JsonObject> server, Set<String> skillScope, Map<String, String> runRevisions) {
         this.server = server;
+        this.runRevisions = runRevisions;
         this.skillScope = skillScope == null ? Set.of() : skillScope;
     }
 
@@ -177,15 +179,23 @@ final class ClientVirtualFs implements VirtualFs {
 
     @Override
     public String read(String path) throws VfsException {
-        return read(path, false);
+        return read(path, false, true);
     }
 
     @Override
     public String readCommitted(String path) throws VfsException {
-        return read(path, true);
+        return read(path, true, false);
     }
 
-    private String read(String path, boolean committed) throws VfsException {
+    String readForSearch(String path) throws VfsException {
+        return read(path, false, false);
+    }
+
+    String readRevision(String normalized) {
+        return stagedRevisions.get(normalized);
+    }
+
+    private String read(String path, boolean committed, boolean remember) throws VfsException {
         String normalized = VfsPaths.normalize(path, false);
         switch (VfsPaths.root(normalized)) {
             case VfsPaths.WORKSPACE -> {
@@ -197,8 +207,10 @@ final class ClientVirtualFs implements VirtualFs {
                 args.addProperty("path", toServer(normalized));
                 args.addProperty("committed", committed);
                 JsonObject text = call("workspace_text", args);
-                if (!committed && text.has("staged_revision")) {
-                    stagedRevisions.put(normalized, text.get("staged_revision").getAsString());
+                if (remember && text.has("staged_revision")) {
+                    String revision = text.get("staged_revision").getAsString();
+                    stagedRevisions.put(normalized, revision);
+                    runRevisions.put(normalized, revision);
                 }
                 return text.has("workspace_toml") ? text.get("workspace_toml").getAsString() : "";
             }
@@ -253,31 +265,32 @@ final class ClientVirtualFs implements VirtualFs {
 
     @Override
     public void write(String path, String content) throws VfsException {
+        write(path, content, "");
+    }
+
+    void write(String path, String content, String explicitBase) throws VfsException {
         String normalized = requireWorkspace(path);
         String toml = content == null ? "" : content;
-        JsonObject document = WorkspaceDocs.parse(toml);
-        if (!workspace().containsKey(normalized)) {
-            JsonObject create = new JsonObject();
-            String leaf = normalized.substring(normalized.lastIndexOf('/') + 1);
-            create.addProperty("path", normalized);
-            create.addProperty("name", leaf);
-            String type = document.has("workspace") && document.getAsJsonObject("workspace").has("type")
-                    ? document.getAsJsonObject("workspace").get("type").getAsString() : "manual";
-            create.addProperty("type", type.isBlank() ? "manual" : type);
-            call("create_workspace_file", create);
-            workspace().put(normalized, normalized);
-            stagedRevisions.remove(normalized);
-        }
+        WorkspaceDocs.validate(toml);
         JsonObject args = new JsonObject();
         args.addProperty("path", toServer(normalized));
         args.addProperty("workspace_toml", toml);
-        String base = stagedRevisions.get(normalized);
-        if (base != null) {
+        String base = explicitBase == null || explicitBase.isBlank()
+                ? stagedRevisions.getOrDefault(normalized, runRevisions.get(normalized)) : explicitBase;
+        if (base != null && !base.isBlank()) {
             args.addProperty("base_revision", base);
+        } else if (workspace().containsKey(normalized)) {
+            throw new VfsException("Read the staged version of " + normalized
+                    + " before replacing it, or pass its current base_revision to write.");
+        } else {
+            args.addProperty("create", true);
         }
         JsonObject result = call("stage_workspace_file", args);
+        workspace().putIfAbsent(normalized, normalized);
         if (result.has("staged_revision")) {
-            stagedRevisions.put(normalized, result.get("staged_revision").getAsString());
+            String revision = result.get("staged_revision").getAsString();
+            stagedRevisions.put(normalized, revision);
+            runRevisions.put(normalized, revision);
         }
         result.addProperty("path", normalized);
         stageResults.add(result);
@@ -294,6 +307,7 @@ final class ClientVirtualFs implements VirtualFs {
         call("delete_workspace_file", args);
         workspace().remove(normalized);
         stagedRevisions.remove(normalized);
+        runRevisions.remove(normalized);
     }
 
     @Override
@@ -312,7 +326,14 @@ final class ClientVirtualFs implements VirtualFs {
         call("rename_workspace_file", args);
         workspace().remove(source);
         workspace().put(target, target);
+        String base = stagedRevisions.getOrDefault(source, runRevisions.get(source));
         stagedRevisions.remove(source);
+        runRevisions.remove(source);
+        runRevisions.remove(target);
+        if (base != null) {
+            stagedRevisions.put(target, base);
+            runRevisions.put(target, base);
+        }
     }
 
     private static String requireWorkspace(String path) throws VfsException {

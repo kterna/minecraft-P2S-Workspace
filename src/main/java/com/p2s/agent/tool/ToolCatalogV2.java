@@ -113,11 +113,12 @@ public final class ToolCatalogV2 {
                  "required":["path","edits"],"additionalProperties":false}""");
         add(tools, "write", true, Set.of(Effect.PROJECT_STATE),
                 "Create a workspace file, or replace its whole content, with workspace TOML ([workspace], [palette], "
-                        + "[[part]] and [[part.action]] tables). Staged for the player's approval.",
+                        + "[[part]] and [[part.action]] tables). Types: layout, floor, facade, component, semantic, generated, manual, shared. New files can set world origin and positive size together inside the project. Existing files require a staged read in this run or the current base_revision. Staged for the player's approval.",
                 """
                 {"type":"object","properties":{
                   "path":{"type":"string","description":"Workspace file, e.g. workspace/tower.toml."},
-                  "content":{"type":"string","description":"Complete workspace TOML."}},
+                  "content":{"type":"string","description":"Complete workspace TOML."},
+                  "base_revision":{"type":"string","description":"Current staged revision; optional after reading this file."}},
                  "required":["path","content"],"additionalProperties":false}""");
         add(tools, "set_part", true, Set.of(Effect.PROJECT_STATE),
                 "Replace or append the actions of one part of a workspace file, creating the part if missing. Actions use the "
@@ -168,20 +169,22 @@ public final class ToolCatalogV2 {
         tools.put("update_plan", ToolCatalog.find("update_plan"));
         add(tools, "task", true, Set.of(Effect.SUBAGENT_STATE),
                 "Start a subagent on a delegated task, or continue a finished one by giving id and instruction. You are "
-                        + "notified automatically when it finishes; use task_status for the full result instead of polling.",
+                        + "notified when it finishes. Assign files with owned_paths, then wait for the result instead of duplicating its work. Read profiles for effective tools.",
                 """
                 {"type":"object","properties":{
                   "task":{"type":"string","description":"What the new subagent should do."},
                   "profile_id":{"type":"string","description":"Profile from agents/. Default general-planner."},
                   "skill_ids":{"type":"array","items":{"type":"string"}},
+                  "owned_paths":{"type":"array","items":{"type":"string"},"description":"Exclusive workspace/ files for this task, including new files. Retained on continue."},
                   "metadata":{"type":"object"},
                   "id":{"type":"string","description":"Existing subagent to continue."},
                   "instruction":{"type":"string","description":"Instruction when continuing."}},
                  "additionalProperties":false}""");
         add(tools, "task_status", true, Set.of(),
-                "Get one subagent's status and full response by id, or list all subagents of this session.",
+                "Get a task result by id or list this session's tasks. The parent can wait up to 30s with wait=true; timed_out means still active.",
                 """
-                {"type":"object","properties":{"id":{"type":"string"},"include_deleted":{"type":"boolean"}},
+                {"type":"object","properties":{"id":{"type":"string"},"include_deleted":{"type":"boolean"},
+                  "wait":{"type":"boolean"},"timeout_ms":{"type":"integer","minimum":1,"maximum":30000}},
                  "additionalProperties":false}""");
         add(tools, "task_cancel", true, Set.of(Effect.SUBAGENT_STATE),
                 "Stop and remove a subagent.",

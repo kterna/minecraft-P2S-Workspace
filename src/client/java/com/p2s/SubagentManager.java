@@ -6,17 +6,21 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.p2s.agent.context.ContextBuilder;
+import com.p2s.agent.core.AbortSignal;
 import com.p2s.agent.core.Agent;
 import com.p2s.agent.core.AgentEvent;
 import com.p2s.agent.core.AgentLoop;
 import com.p2s.agent.core.AgentLoopConfig;
 import com.p2s.agent.core.AgentMessage;
+import com.p2s.agent.core.AgentTool;
 import com.p2s.agent.llm.LlmRequestConfig;
 import com.p2s.agent.llm.OpenAiChatCompletions;
 import com.p2s.agent.llm.OpenAiMessageCodec;
 import com.p2s.agent.tool.RegistryTools;
+import com.p2s.agent.tool.ToolDefinition;
 import com.p2s.agent.tool.ToolExecutors;
 import com.p2s.agent.tool.ToolRegistry;
+import com.p2s.agent.vfs.VfsException;
 import com.p2s.store.SkillStore;
 import com.p2s.store.SubagentProfileStore;
 
@@ -35,6 +39,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 public final class SubagentManager {
+    static final WorkspaceClaims CLAIMS = new WorkspaceClaims();
     private static final Gson GSON = new Gson();
     private static final AtomicLong NEXT_ID = new AtomicLong();
     private static final int MAX_ACTIVE_SUBAGENTS = 2;
@@ -113,6 +118,13 @@ public final class SubagentManager {
         subagent.summary = "Queued";
         subagent.attempt = 1;
         subagent.attemptCount = 1;
+        subagent.projectId = ClientSessionState.getProjectId();
+        try {
+            subagent.ownedPaths = WorkspaceClaims.parse(args.get("owned_paths"));
+            prepareAttempt(subagent, profile);
+        } catch (VfsException e) {
+            return error("create_subagent", e.getMessage());
+        }
         initializeTaskHistory(subagent, profile);
 
         TASKS.put(id, subagent);
@@ -127,6 +139,7 @@ public final class SubagentManager {
 
         JsonObject payload = ok("create_subagent");
         payload.addProperty("subagent_id", id);
+        addCapabilities(payload, subagent);
         payload.addProperty("status", statusName(subagent.status));
         payload.addProperty("profile_id", profile.id());
         payload.addProperty("created_at", now);
@@ -179,6 +192,11 @@ public final class SubagentManager {
             if (!canContinue(task.status)) {
                 return error("continue_subagent", "Subagent cannot continue from status: " + statusName(task.status));
             }
+            try {
+                prepareAttempt(task, profile);
+            } catch (VfsException e) {
+                return error("continue_subagent", e.getMessage());
+            }
             if (task.history == null || task.history.isEmpty()) {
                 initializeTaskHistory(task, profile);
             }
@@ -205,6 +223,7 @@ public final class SubagentManager {
         JsonObject payload = ok("continue_subagent");
         payload.addProperty("id", subagentId);
         payload.addProperty("status", statusName(snap.status));
+        addCapabilities(payload, task);
         payload.addProperty("continued", true);
         payload.addProperty("queued", snap.status == SubagentStatus.QUEUED);
         payload.addProperty("attempt", attempt);
@@ -219,6 +238,7 @@ public final class SubagentManager {
                 if (sid.equals(task.sessionId)
                         && (task.status == SubagentStatus.RUNNING || task.status == SubagentStatus.QUEUED)) {
                     task.cancelRequested = true;
+                    CLAIMS.release(task.projectId, task.id, task.ownedPaths);
                     if (task.agent != null) {
                         task.agent.abort("Parent session cancelled");
                     }
@@ -263,6 +283,7 @@ public final class SubagentManager {
             if (!snapshot.error.isBlank()) {
                 item.addProperty("error", snapshot.error);
             }
+            addCapabilities(item, task);
             items.add(item);
         }
         JsonObject payload = ok("list_subagents");
@@ -283,6 +304,7 @@ public final class SubagentManager {
         payload.addProperty("profile_id", snapshot.profileId);
         payload.addProperty("profile_name", snapshot.profileName);
         payload.addProperty("task", snapshot.task);
+        addCapabilities(payload, task);
         payload.add("skill_ids", toJsonArray(snapshot.skillIds));
         payload.addProperty("created_at", snapshot.createdAt);
         payload.addProperty("started_at", snapshot.startedAt);
@@ -317,6 +339,80 @@ public final class SubagentManager {
         return payload;
     }
 
+    static JsonObject waitForSubagent(String sessionId, String id, int timeoutMs, AbortSignal signal) {
+        SubagentTask task = getBySession(sessionId, id);
+        if (task == null) return error("task_status", "Subagent not found");
+        try {
+            synchronized (task) {
+                boolean finished = awaitCompletion(task,
+                        () -> task.status == SubagentStatus.QUEUED || task.status == SubagentStatus.RUNNING,
+                        timeoutMs, signal);
+                JsonObject result = getSubagent(sessionId, id);
+                result.addProperty("timed_out", !finished);
+                return result;
+            }
+        } catch (AbortSignal.AbortedException ex) {
+            return error("task_status", "Stopped waiting");
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return error("task_status", "Interrupted while waiting");
+        }
+    }
+
+    static boolean awaitCompletion(Object monitor, java.util.function.BooleanSupplier active, int timeoutMs,
+                                   AbortSignal signal) throws InterruptedException, AbortSignal.AbortedException {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(clamp(timeoutMs, 1, 30_000));
+        try (var registration = signal.onAbort(() -> {
+            synchronized (monitor) {
+                monitor.notifyAll();
+            }
+        })) {
+            synchronized (monitor) {
+                while (active.getAsBoolean()) {
+                    signal.throwIfAborted();
+                    long remaining = deadline - System.nanoTime();
+                    if (remaining <= 0) return false;
+                    TimeUnit.NANOSECONDS.timedWait(monitor, remaining);
+                }
+                signal.throwIfAborted();
+                return true;
+            }
+        }
+    }
+
+    private static void addCapabilities(JsonObject result, SubagentTask task) {
+        synchronized (task) {
+            result.add("effective_tools", toJsonArray(task.effectiveTools));
+            result.add("owned_paths", toJsonArray(task.ownedPaths));
+        }
+    }
+
+    private static void prepareAttempt(SubagentTask task, SubagentProfileStore.SubagentProfile profile) throws VfsException {
+        if (!task.projectId.equals(ClientSessionState.getProjectId())) throw new VfsException("Task belongs to another project");
+        task.v2 = P2SClientConfig.isToolsetV2();
+        Set<String> allowed = new LinkedHashSet<>(profile.allowedTools());
+        var bundle = task.v2 ? AgentToolsV2.create(v2Host(task), v2AllowedTools(allowed)) : null;
+        ToolRegistry registry = bundle == null ? createToolRegistry(task, allowed) : bundle.registry();
+        List<AgentTool> tools = bundle == null ? RegistryTools.from(registry, () -> isTaskActive(task), null)
+                : bundle.agentTools(() -> isTaskActive(task), null);
+        if (tools.isEmpty()) throw new VfsException("Profile has no available tools in this toolset");
+        if (!task.ownedPaths.isEmpty() && tools.stream().noneMatch(tool ->
+                registry.definition(tool.name()).effects().contains(ToolDefinition.Effect.PROJECT_STATE))) {
+            throw new VfsException("Profile " + profile.id() + " is read-only; choose a writable profile for owned_paths");
+        }
+        CLAIMS.reserve(task.projectId, task.id, task.ownedPaths);
+        task.tools = tools;
+        task.effectiveTools = tools.stream().map(AgentTool::name).toList();
+    }
+
+    /** Caller holds task's monitor. Reservations end before a terminal state can be observed. */
+    private static void finishStatus(SubagentTask task, SubagentStatus status) {
+        task.status = status;
+        task.tools = List.of();
+        CLAIMS.release(task.projectId, task.id, task.ownedPaths);
+        task.notifyAll();
+    }
+
     public static JsonObject deleteSubagent(String sessionId, String subagentId) {
         SubagentTask task = getBySession(sessionId, subagentId);
         if (task == null) {
@@ -331,7 +427,7 @@ public final class SubagentManager {
                 if (task.agent != null) {
                     task.agent.abort("Deleted by parent agent");
                 }
-                task.status = SubagentStatus.DELETED;
+                finishStatus(task, SubagentStatus.DELETED);
                 task.summary = "Deleted";
                 if (task.error == null || task.error.isBlank()) {
                     task.error = "Deleted by parent agent";
@@ -380,6 +476,7 @@ public final class SubagentManager {
         payload.addProperty("description", profile.description());
         payload.addProperty("system_prompt", profile.systemPrompt());
         payload.add("allowed_tools", toJsonArray(profile.allowedTools()));
+        payload.add("effective_tools", toJsonArray(List.copyOf(v2AllowedTools(new LinkedHashSet<>(profile.allowedTools())))));
         payload.addProperty("max_loops", profile.maxLoops());
         payload.addProperty("timeout_seconds", profile.timeoutSeconds());
         payload.addProperty("enabled", profile.enabled());
@@ -391,11 +488,18 @@ public final class SubagentManager {
             return;
         }
         try {
-            EXECUTOR.execute(() -> runSubagent(task, profile));
+            EXECUTOR.execute(() -> {
+                try {
+                    runSubagent(task, profile);
+                } catch (RuntimeException e) {
+                    fail(task, formatError(e));
+                    notifyParent(task);
+                }
+            });
         } catch (RejectedExecutionException e) {
             long now = System.currentTimeMillis();
             synchronized (task) {
-                task.status = SubagentStatus.FAILED;
+                finishStatus(task, SubagentStatus.FAILED);
                 task.error = "Subagent queue is full";
                 task.summary = "Queue full";
                 task.response = "";
@@ -438,7 +542,7 @@ public final class SubagentManager {
         List<JsonObject> history;
         synchronized (task) {
             if (task.cancelRequested || task.status == SubagentStatus.DELETED) {
-                task.status = SubagentStatus.DELETED;
+                finishStatus(task, SubagentStatus.DELETED);
                 if (task.endedAt <= 0) {
                     task.endedAt = System.currentTimeMillis();
                 }
@@ -457,7 +561,6 @@ public final class SubagentManager {
 
         int maxLoops = clamp(profile.maxLoops(), 1, MAX_TOOL_LOOPS);
         int timeoutSeconds = clamp(profile.timeoutSeconds(), 5, 300);
-        Set<String> allowedTools = new LinkedHashSet<>(profile.allowedTools());
         OpenAiMessageCodec.Decoded decoded = OpenAiMessageCodec.fromWire(history);
 
         // Same core loop as the main agent, restricted by the profile's tools, turns and timeout.
@@ -469,10 +572,7 @@ public final class SubagentManager {
                 .shouldStopAfterTurn(turn -> turn.turnIndex() + 1 >= maxLoops)
                 .toolExecutor(ToolExecutors.shared())
                 .build();
-        List<com.p2s.agent.core.AgentTool> tools = P2SClientConfig.isToolsetV2()
-                ? AgentToolsV2.create(v2Host(task), v2AllowedTools(allowedTools)).agentTools(() -> isTaskActive(task), null)
-                : RegistryTools.from(createToolRegistry(task, allowedTools), () -> isTaskActive(task), null);
-        Agent agent = new Agent(config, decoded.systemPrompt(), tools, decoded.messages());
+        Agent agent = new Agent(config, decoded.systemPrompt(), task.tools, decoded.messages());
         agent.subscribe(event -> {
             if (event instanceof AgentEvent.ToolExecutionEnd end) {
                 appendTrace(task, end.toolCall().name(), end.result().content());
@@ -536,6 +636,7 @@ public final class SubagentManager {
             tools.addAll(com.p2s.agent.tool.ToolCatalogV2.fromLegacy(name));
         }
         tools.removeAll(Set.of("ask_user", "task", "task_cancel"));
+        tools.removeIf(name -> com.p2s.agent.tool.ToolCatalogV2.find(name) == null);
         return tools;
     }
 
@@ -599,7 +700,7 @@ public final class SubagentManager {
                 + statusName(snapshot.status) + ". Summary: " + truncateText(
                 snapshot.status == SubagentStatus.FAILED && !snapshot.error.isBlank() ? snapshot.error : snapshot.summary,
                 MAX_SUMMARY_CHARS)
-                + " Call get_subagent with id \"" + snapshot.id + "\" for the full response.";
+                + " Call " + (task.v2 ? "task_status" : "get_subagent") + " with id \"" + snapshot.id + "\" for the full response.";
         ClientAgentManager.onSubagentFinished(sessionId, snapshot.id, notice);
     }
 
@@ -803,7 +904,7 @@ public final class SubagentManager {
 
     private static JsonObject callServerTool(SubagentTask task, String toolName, JsonObject args) {
         try {
-            JsonObject payload = ClientToolBridge.call(toolName, args, () -> isTaskActive(task)).join();
+            JsonObject payload = ClientToolBridge.callForAgent(toolName, args, () -> isTaskActive(task) && task.projectId.equals(ClientSessionState.getProjectId()), task.id).join();
             if (payload == null) {
                 return toolError(toolName, "Empty server response");
             }
@@ -822,12 +923,15 @@ public final class SubagentManager {
         sb.append("- Do not ask to create, list, or delete subagents.").append('\n');
         sb.append("- Use only available tools and prefer minimal tool calls.").append('\n');
         sb.append("- If insufficient context exists, explain precisely what is missing.").append('\n');
-        if (P2SClientConfig.isToolsetV2()) {
+        if (task.v2) {
             sb.append("- Files: workspace/ (project files, edits are staged for the player's review), skills/ and agents/")
                     .append(" (read only). Use ls/read/grep/find to look, edit/write/set_part/sh/script to change.").append('\n');
             sb.append("- Skills may mention propose_patch or read_skill; use the file tools instead.").append('\n');
         }
         sb.append('\n');
+        if (!task.ownedPaths.isEmpty()) {
+            sb.append("Assigned workspace files: ").append(String.join(", ", task.ownedPaths)).append('\n');
+        }
         sb.append("Profile: ").append(profile.id()).append(" / ").append(profile.name()).append('\n');
         if (profile.systemPrompt() != null && !profile.systemPrompt().isBlank()) {
             sb.append(profile.systemPrompt().trim()).append('\n');
@@ -914,7 +1018,7 @@ public final class SubagentManager {
         synchronized (task) {
             if (task.status == SubagentStatus.DELETED || task.cancelRequested) {
                 if (task.status != SubagentStatus.DELETED) {
-                    task.status = SubagentStatus.CANCELLED;
+                    finishStatus(task, SubagentStatus.CANCELLED);
                 }
                 if (task.endedAt <= 0) {
                     task.endedAt = System.currentTimeMillis();
@@ -933,14 +1037,14 @@ public final class SubagentManager {
         synchronized (task) {
             if (task.status == SubagentStatus.DELETED || task.cancelRequested) {
                 if (task.status != SubagentStatus.DELETED) {
-                    task.status = SubagentStatus.CANCELLED;
+                    finishStatus(task, SubagentStatus.CANCELLED);
                 }
                 if (task.endedAt <= 0) {
                     task.endedAt = System.currentTimeMillis();
                 }
                 return;
             }
-            task.status = SubagentStatus.COMPLETED;
+            finishStatus(task, SubagentStatus.COMPLETED);
             task.response = truncateText(response, MAX_RESPONSE_CHARS);
             task.summary = summarize(task.response);
             task.endedAt = System.currentTimeMillis();
@@ -954,10 +1058,10 @@ public final class SubagentManager {
                 return;
             }
             if (task.cancelRequested) {
-                task.status = SubagentStatus.CANCELLED;
+                finishStatus(task, SubagentStatus.CANCELLED);
                 task.summary = "Cancelled";
             } else {
-                task.status = SubagentStatus.FAILED;
+                finishStatus(task, SubagentStatus.FAILED);
                 task.summary = "Failed";
                 task.error = truncateText(message, MAX_RESPONSE_CHARS);
             }
@@ -1219,6 +1323,11 @@ public final class SubagentManager {
         String sessionId;
         String profileId;
         String profileName;
+        String projectId = "";
+        boolean v2;
+        List<AgentTool> tools = List.of();
+        List<String> effectiveTools = List.of();
+        List<String> ownedPaths = List.of();
         String task;
         SubagentStatus status = SubagentStatus.QUEUED;
         String summary = "";

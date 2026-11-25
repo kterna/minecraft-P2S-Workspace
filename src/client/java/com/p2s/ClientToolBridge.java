@@ -30,6 +30,11 @@ public final class ClientToolBridge {
     }
 
     public static CompletableFuture<JsonObject> call(String toolName, JsonObject args, BooleanSupplier isActive) {
+        return callForAgent(toolName, args, isActive, null);
+    }
+
+    // A null actor denotes the player's own UI. An empty actor denotes the main agent.
+    static CompletableFuture<JsonObject> callForAgent(String toolName, JsonObject args, BooleanSupplier isActive, String actor) {
         String requestId = Long.toString(NEXT_ID.incrementAndGet(), 36);
         long epoch = CONNECTION_EPOCH.get();
         CompletableFuture<JsonObject> future = new CompletableFuture<>();
@@ -83,6 +88,10 @@ public final class ClientToolBridge {
                 }
                 if (!ClientServerBridge.canUseToolBridge()) {
                     throw ClientServerBridge.missingServerException();
+                }
+                if (actor != null) {
+                    SubagentManager.CLAIMS.checkMutation(ClientSessionState.getProjectId(), actor, toolName,
+                            payload, ClientSessionState.getSelectedWorkspacePath());
                 }
                 // Packets on one connection arrive in order, so chunks precede the call.
                 for (String chunk : chunks) {

@@ -716,30 +716,46 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         }
         String path = ProjectPersistence.normalizeWorkspacePath(getString(args, "path"));
         ProjectPersistence.WorkspaceFileRecord workspace = findWorkspace(project, path);
-        if (workspace == null) {
-            JsonObject missing = buildToolErrorKey("stage_workspace_file", "message.p2s.workspace.unknown_path", path);
-            missing.addProperty("error_code", "not_found");
-            return missing;
-        }
-        String base = getString(args, "base_revision");
-        String current = stagedRevision(workspace);
-        if (!base.isBlank() && !base.equals(current)) {
-            JsonObject stale = buildToolError("stage_workspace_file",
-                    "The file changed since it was read (now " + current + "); read it again and redo the edit");
-            stale.addProperty("error_code", "stale_revision");
-            stale.addProperty("staged_revision", current);
-            return stale;
+        boolean creating = Boolean.TRUE.equals(getBoolean(args, "create"));
+        if (creating) {
+            if (path.isBlank() || project.workspaceFiles.size() >= MAX_WORKSPACE_FILES) {
+                return buildToolError("stage_workspace_file", "Missing workspace path or project file limit reached");
+            }
+            if (workspace != null) {
+                return buildToolError("stage_workspace_file", "File already exists; read the staged version before replacing it");
+            }
+            workspace = new ProjectPersistence.WorkspaceFileRecord();
+            workspace.path = path;
+            workspace.current = new StructureBuilder.VbsScriptV2();
+            workspace.revision = nextRevision();
+        } else {
+            if (workspace == null) {
+                JsonObject missing = buildToolErrorKey("stage_workspace_file", "message.p2s.workspace.unknown_path", path);
+                missing.addProperty("error_code", "not_found");
+                return missing;
+            }
+            String base = getString(args, "base_revision");
+            if (base.isBlank() || !base.equals(stagedRevision(workspace))) {
+                JsonObject stale = buildToolError("stage_workspace_file",
+                        "Missing or stale base_revision; read the staged version and redo the edit");
+                stale.addProperty("error_code", "stale_revision");
+                return stale;
+            }
         }
         WorkspaceTomlCodec.WorkspaceTomlDocument document;
         try {
             document = WorkspaceTomlCodec.parse(getString(args, "workspace_toml"));
+            if (creating) {
+                WorkspaceTomlCodec.applyToWorkspace(document, workspace);
+                WorkspaceTomlCodec.validateNewFileBounds(workspace, project);
+            }
         } catch (Exception e) {
             JsonObject invalid = buildToolErrorKey("stage_workspace_file", "message.p2s.workspace.invalid_workspace_toml", e.getMessage());
             invalid.addProperty("error_code", "invalid_toml");
             return invalid;
         }
         List<String> warnings = new ArrayList<>();
-        if (document.workspace != null) {
+        if (!creating && document.workspace != null) {
             WorkspaceTomlCodec.WorkspaceTomlDocument stored = WorkspaceTomlCodec.fromWorkspace(workspace, workspace.current);
             if (!java.util.Objects.equals(stored.workspace.origin, document.workspace.origin)
                     || !java.util.Objects.equals(stored.workspace.size, document.workspace.size)
@@ -756,7 +772,10 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         if (!synthesis.changed()) {
             boolean hadPending = workspace.pendingPatch != null;
             workspace.pendingPatch = null;
-            if (hadPending) {
+            if (creating) {
+                project.workspaceFiles.put(path, workspace);
+                saveProject(project);
+            } else if (hadPending) {
                 session.runtimeState = RuntimeState.IDLE;
                 saveProject(project);
             }
@@ -794,6 +813,11 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         pending.baseScript = committedBase;
         pending.nextScript = next;
         pending.preview = buildPatchPreview(synthesis.patch(), validation, diff, committedRevision);
+        pending.preview.warnings.clear();
+        pending.preview.warnings.addAll(warnings);
+        if (creating) {
+            project.workspaceFiles.put(path, workspace);
+        }
         pending.revisionBefore = committedRevision;
         pending.revisionAfter = nextRevision();
         workspace.pendingPatch = pending;
@@ -816,7 +840,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
     }
 
     private static void addWarnings(JsonObject payload, List<String> warnings) {
-        if (warnings.isEmpty()) {
+        if (warnings == null || warnings.isEmpty()) {
             return;
         }
         JsonArray array = new JsonArray();
@@ -1027,6 +1051,10 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         commit.revisionAfter = workspace.pendingPatch.revisionAfter;
         commit.beforeScript = before;
         commit.afterScript = after;
+        JsonObject receipt = buildToolSuccess("session_apply_patch");
+        if (workspace.pendingPatch.preview != null) {
+            addWarnings(receipt, workspace.pendingPatch.preview.warnings);
+        }
         commit.summary = workspace.pendingPatch.preview == null ? "patch" : workspace.pendingPatch.preview.summary;
         commit.patch = workspace.pendingPatch.patch;
         pushCommit(workspace.undoStack, commit);
@@ -1040,7 +1068,6 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         sendChatResponseLocalized(player, "message.p2s.patch.applied", true, "committed", commit.summary);
         sendPatchPreview(player, null);
         sendSessionSync(player, session);
-        JsonObject receipt = buildToolSuccess("session_apply_patch");
         receipt.addProperty("applied", true);
         receipt.addProperty("path", workspace.path == null ? "" : workspace.path);
         receipt.addProperty("summary", commit.summary == null ? "" : commit.summary);
@@ -1072,6 +1099,10 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             displayMessage(player, "message.p2s.patch.no_pending_patch");
             return buildToolErrorKey("session_discard_patch", "message.p2s.patch.no_pending_patch");
         }
+        JsonObject receipt = buildToolSuccess("session_discard_patch");
+        if (workspace.pendingPatch.preview != null) {
+            addWarnings(receipt, workspace.pendingPatch.preview.warnings);
+        }
         String discardedSummary = workspace.pendingPatch.preview == null ? "" : workspace.pendingPatch.preview.summary;
         workspace.pendingPatch = null;
         session.runtimeState = RuntimeState.IDLE;
@@ -1083,7 +1114,6 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         } else {
             sendChatResponseLocalized(player, "message.p2s.patch.discarded_with_reason", false, "cancelled", reason);
         }
-        JsonObject receipt = buildToolSuccess("session_discard_patch");
         receipt.addProperty("discarded", true);
         receipt.addProperty("path", workspace.path == null ? "" : workspace.path);
         receipt.addProperty("summary", discardedSummary == null ? "" : discardedSummary);
