@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-11-25 LLM 请求参数
+- 不再在每个请求里写死 `temperature: 0.4`。开了思考的 Claude（例如经 New API 网关）因此不再返回 400。需要固定温度时，在 `config/p2s_client.json` 写顶层 `"temperature"`。
+- 可选顶层 `"maxTokens"`：OpenAI 官方地址发 `max_completion_tokens`，其他兼容服务发 `max_tokens`；不写就不发。
+- 模型返回的思考文本（`reasoning_content`）随会话一起保存；DeepSeek 地址下会按其要求在每条助手消息里回传。
+
 ## 2026-11-25 工具 v2 与脚本
 - Agent 默认改用 v2 工具集：统一的虚拟文件系统（`workspace/`、`skills/`、`agents/`）加 `ls` `read` `grep` `find` `edit` `write` `set_part` `move` `delete` `project_info` `inspect_world` `ask_user` `task` 等工具；`config/p2s_client.json` 中 `"toolset": "legacy"` 可切回原 21 个工具。
 - 新增 `script`：在沙箱中运行 JavaScript，可批量调用工具、只返回结果，也可用 `ws` / `geo` 程序化编辑工作区（穹顶、球体、拱、螺旋等）；脚本失败不留下任何改动。

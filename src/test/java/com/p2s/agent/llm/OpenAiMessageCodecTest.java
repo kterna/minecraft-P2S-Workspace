@@ -59,4 +59,13 @@ class OpenAiMessageCodecTest {
         var result = (AgentMessage.ToolResult) decoded.messages().get(2);
         assertEquals("plain text result", result.content().get("text").getAsString());
     }
+
+    @Test
+    void storedThinkingRoundTrips() {
+        var assistant = new AgentMessage.Assistant("answer", "because", List.of(), AgentMessage.StopReason.STOP, "", 0L);
+        List<JsonObject> wire = OpenAiMessageCodec.toWire("sys", List.of(AgentMessage.User.of("q"), assistant));
+        var decoded = OpenAiMessageCodec.fromWire(wire);
+        assertEquals("because", ((AgentMessage.Assistant) decoded.messages().get(1)).thinking());
+        assertEquals(wire, OpenAiMessageCodec.toWire(decoded.systemPrompt(), decoded.messages()));
+    }
 }

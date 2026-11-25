@@ -24,8 +24,25 @@ public final class OpenAiMessageCodec {
     private OpenAiMessageCodec() {
     }
 
-    /** Wire messages with an optional leading system message. */
+    /**
+     * Persisted history: wire messages with an optional leading system message. Assistant
+     * thinking is kept as {@code reasoning_content}, which older versions already read.
+     */
     public static List<JsonObject> toWire(String systemPrompt, List<AgentMessage> messages) {
+        return encodeAll(systemPrompt, messages, true, false);
+    }
+
+    /**
+     * Request messages for a Chat Completions call. Thinking is only echoed when the provider
+     * requires it; then an assistant turn without thinking carries an empty string.
+     */
+    public static List<JsonObject> toRequest(String systemPrompt, List<AgentMessage> messages,
+                                             boolean requiresReasoningContent) {
+        return encodeAll(systemPrompt, messages, requiresReasoningContent, requiresReasoningContent);
+    }
+
+    private static List<JsonObject> encodeAll(String systemPrompt, List<AgentMessage> messages,
+                                              boolean writeThinking, boolean alwaysWriteThinking) {
         List<JsonObject> wire = new ArrayList<>();
         if (systemPrompt != null && !systemPrompt.isBlank()) {
             JsonObject system = new JsonObject();
@@ -35,9 +52,14 @@ public final class OpenAiMessageCodec {
         }
         for (AgentMessage message : messages) {
             JsonObject encoded = encode(message);
-            if (encoded != null) {
-                wire.add(encoded);
+            if (encoded == null) {
+                continue;
             }
+            if (message instanceof AgentMessage.Assistant assistant && writeThinking
+                    && (alwaysWriteThinking || !assistant.thinking().isEmpty())) {
+                encoded.addProperty("reasoning_content", assistant.thinking());
+            }
+            wire.add(encoded);
         }
         return wire;
     }

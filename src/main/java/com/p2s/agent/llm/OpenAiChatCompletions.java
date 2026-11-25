@@ -41,7 +41,6 @@ import java.util.function.Supplier;
 public final class OpenAiChatCompletions implements StreamFunction {
     private static final Gson GSON = new Gson();
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final double TEMPERATURE = 0.4;
     private static final Map<Integer, OkHttpClient> CLIENTS = new ConcurrentHashMap<>();
 
     private final Supplier<LlmRequestConfig> config;
@@ -58,7 +57,7 @@ public final class OpenAiChatCompletions implements StreamFunction {
         } catch (RuntimeException ex) {
             return AgentMessage.Assistant.failure(StopReason.ERROR, "Invalid model configuration: " + ex.getMessage());
         }
-        JsonObject body = buildRequestBody(context, cfg.model(), cfg.useToolCall(), cfg.streaming());
+        JsonObject body = buildRequestBody(context, cfg);
         P2SMod.LOGGER.info("LLM request -> url={}, model={}, timeout={}s, stream={}, messages={}, tools={}",
                 cfg.apiUrl(), cfg.model(), cfg.timeoutSeconds(), cfg.streaming(),
                 body.getAsJsonArray("messages").size(), body.has("tools") ? body.getAsJsonArray("tools").size() : 0);
@@ -127,18 +126,27 @@ public final class OpenAiChatCompletions implements StreamFunction {
 
     /** Request body for the given context; tools are advertised in context order. */
     public static JsonObject buildRequestBody(Context context, String model, boolean useToolCall, boolean stream) {
+        return buildRequestBody(context, new LlmRequestConfig("", "", model, 0, useToolCall, stream));
+    }
+
+    /**
+     * Request body for the given context. Optional sampling fields are only written when the
+     * configuration sets them: several providers reject parameters they do not support.
+     */
+    public static JsonObject buildRequestBody(Context context, LlmRequestConfig cfg) {
         JsonObject body = new JsonObject();
-        body.addProperty("model", model == null ? "" : model);
+        body.addProperty("model", cfg.model());
         JsonArray messages = new JsonArray();
-        for (JsonObject message : OpenAiMessageCodec.toWire(context.systemPrompt(), context.messages())) {
+        for (JsonObject message : OpenAiMessageCodec.toRequest(context.systemPrompt(), context.messages(),
+                cfg.requiresReasoningContent())) {
             messages.add(message);
         }
         body.add("messages", messages);
-        body.addProperty("temperature", TEMPERATURE);
-        if (stream) {
+        applyOptionalParameters(body, cfg);
+        if (cfg.streaming()) {
             body.addProperty("stream", true);
         }
-        if (useToolCall && !context.tools().isEmpty()) {
+        if (cfg.useToolCall() && !context.tools().isEmpty()) {
             JsonArray tools = new JsonArray();
             for (AgentTool tool : context.tools()) {
                 tools.add(tool.declaration());
@@ -147,6 +155,15 @@ public final class OpenAiChatCompletions implements StreamFunction {
             body.addProperty("tool_choice", "auto");
         }
         return body;
+    }
+
+    private static void applyOptionalParameters(JsonObject body, LlmRequestConfig cfg) {
+        if (cfg.temperature() != null) {
+            body.addProperty("temperature", cfg.temperature());
+        }
+        if (cfg.maxTokens() != null) {
+            body.addProperty(cfg.maxTokensField(), cfg.maxTokens());
+        }
     }
 
     /** Parse an SSE response. Package-visible for protocol tests without a network. */
@@ -256,12 +273,7 @@ public final class OpenAiChatCompletions implements StreamFunction {
      */
     public static String completeText(List<JsonObject> wireMessages, LlmRequestConfig cfg, AbortSignal signal)
             throws IOException {
-        JsonObject body = new JsonObject();
-        body.addProperty("model", cfg.model());
-        JsonArray messages = new JsonArray();
-        wireMessages.forEach(messages::add);
-        body.add("messages", messages);
-        body.addProperty("temperature", TEMPERATURE);
+        JsonObject body = buildCompletionBody(wireMessages, cfg);
         Request request = new Request.Builder()
                 .url(cfg.apiUrl())
                 .post(RequestBody.create(GSON.toJson(body), JSON))
@@ -284,6 +296,19 @@ public final class OpenAiChatCompletions implements StreamFunction {
                 return parsed.text();
             }
         }
+    }
+
+    /** Non-streamed plain-text request over persisted history (compaction). */
+    static JsonObject buildCompletionBody(List<JsonObject> wireMessages, LlmRequestConfig cfg) {
+        OpenAiMessageCodec.Decoded decoded = OpenAiMessageCodec.fromWire(wireMessages);
+        JsonObject body = new JsonObject();
+        body.addProperty("model", cfg.model());
+        JsonArray messages = new JsonArray();
+        OpenAiMessageCodec.toRequest(decoded.systemPrompt(), decoded.messages(), cfg.requiresReasoningContent())
+                .forEach(messages::add);
+        body.add("messages", messages);
+        applyOptionalParameters(body, cfg);
+        return body;
     }
 
     /** For tests: parse an SSE body held in memory. */

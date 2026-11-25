@@ -61,6 +61,9 @@ public final class P2SClientConfig {
     private static int httpTimeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
     private static boolean useToolCall = DEFAULT_USE_TOOL_CALL;
     private static boolean useStreaming = DEFAULT_USE_STREAMING;
+    /** Optional sampling settings; null means the field is not sent to the provider. */
+    private static Double temperature;
+    private static Integer maxTokens;
     private static boolean autoApplyPatch = DEFAULT_AUTO_APPLY_PATCH;
     /** "v2" (default) or "legacy": which agent tool set the client uses. */
     private static String toolset = "v2";
@@ -363,7 +366,9 @@ public final class P2SClientConfig {
                 model == null || model.isBlank() ? P2SDefaults.DEFAULT_MODEL : model,
                 httpTimeoutSeconds <= 0 ? P2SDefaults.DEFAULT_TIMEOUT_SECONDS : httpTimeoutSeconds,
                 useToolCall,
-                useStreaming
+                useStreaming,
+                temperature,
+                maxTokens
         );
     }
 
@@ -391,6 +396,8 @@ public final class P2SClientConfig {
         Integer loadedTimeout = null;
         Boolean loadedUseToolCall = null;
         Boolean loadedUseStreaming = null;
+        Double loadedTemperature = null;
+        Integer loadedMaxTokens = null;
         Boolean loadedAutoApplyPatch = null;
         String loadedToolset = null;
         Boolean loadedAutoCompactEnabled = null;
@@ -414,6 +421,8 @@ public final class P2SClientConfig {
                 loadedTimeout = root.has("httpTimeoutSeconds") ? root.get("httpTimeoutSeconds").getAsInt() : null;
                 loadedUseToolCall = root.has("useToolCall") ? root.get("useToolCall").getAsBoolean() : null;
                 loadedUseStreaming = root.has("useStreaming") ? root.get("useStreaming").getAsBoolean() : null;
+                loadedTemperature = optionalDouble(root, "temperature");
+                loadedMaxTokens = optionalInt(root, "maxTokens");
                 loadedAutoApplyPatch = root.has("autoApplyPatch") ? root.get("autoApplyPatch").getAsBoolean() : null;
                 loadedToolset = root.has("toolset") ? root.get("toolset").getAsString() : null;
                 loadedSystemPrompt = root.has("systemPrompt") ? root.get("systemPrompt").getAsString() : null;
@@ -475,6 +484,8 @@ public final class P2SClientConfig {
         httpTimeoutSeconds = timeout == null ? DEFAULT_TIMEOUT_SECONDS : timeout;
         useToolCall = loadedUseToolCall == null ? DEFAULT_USE_TOOL_CALL : loadedUseToolCall;
         useStreaming = loadedUseStreaming == null ? DEFAULT_USE_STREAMING : loadedUseStreaming;
+        temperature = loadedTemperature;
+        maxTokens = normalizePositiveInt(loadedMaxTokens);
         autoApplyPatch = loadedAutoApplyPatch == null ? DEFAULT_AUTO_APPLY_PATCH : loadedAutoApplyPatch;
         toolset = "legacy".equalsIgnoreCase(loadedToolset == null ? "" : loadedToolset.trim()) ? "legacy" : "v2";
         String prompt = loadedSystemPrompt == null ? "" : loadedSystemPrompt.trim();
@@ -514,6 +525,12 @@ public final class P2SClientConfig {
             root.addProperty("httpTimeoutSeconds", httpTimeoutSeconds);
             root.addProperty("useToolCall", useToolCall);
             root.addProperty("useStreaming", useStreaming);
+            if (temperature != null) {
+                root.addProperty("temperature", temperature);
+            }
+            if (maxTokens != null) {
+                root.addProperty("maxTokens", maxTokens);
+            }
             root.addProperty("autoApplyPatch", autoApplyPatch);
             root.addProperty("toolset", toolset);
             root.addProperty("systemPrompt", systemPrompt);
@@ -565,6 +582,22 @@ public final class P2SClientConfig {
             return null;
         }
         return id.toString();
+    }
+
+    private static Double optionalDouble(JsonObject root, String key) {
+        try {
+            return root.has(key) && !root.get(key).isJsonNull() ? root.get(key).getAsDouble() : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static Integer optionalInt(JsonObject root, String key) {
+        try {
+            return root.has(key) && !root.get(key).isJsonNull() ? root.get(key).getAsInt() : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private static String normalizeNonBlank(String value) {
