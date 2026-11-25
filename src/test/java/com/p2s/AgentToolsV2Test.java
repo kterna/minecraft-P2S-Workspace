@@ -3,6 +3,7 @@ package com.p2s;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.p2s.agent.core.AbortSignal;
 import com.p2s.agent.core.AgentTool;
 import com.p2s.agent.core.AgentToolResult;
@@ -11,7 +12,10 @@ import com.p2s.agent.tool.ToolDefinition;
 import com.p2s.agent.vfs.MemoryFs;
 import org.junit.jupiter.api.Test;
 
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +106,26 @@ class AgentToolsV2Test {
     private static Map<String, AgentTool> tools(FakeHost host) {
         return AgentToolsV2.create(host, null).agentTools(() -> true, null).stream()
                 .collect(Collectors.toMap(AgentTool::name, tool -> tool));
+    }
+
+    @Test
+    void defaultProfilesAdvertiseImplementedV2ToolsAfterMapping() throws Exception {
+        for (String profile : List.of("general-planner", "block-id-searcher", "patch-planner")) {
+            try (var stream = getClass().getResourceAsStream("/p2s_default_profiles/" + profile + ".json")) {
+                assertNotNull(stream, profile);
+                JsonObject definition = JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).getAsJsonObject();
+                Set<String> configured = new LinkedHashSet<>();
+                definition.getAsJsonArray("allowed_tools").forEach(entry -> configured.add(entry.getAsString()));
+                Set<String> expected = configured.stream().flatMap(name -> ToolCatalogV2.fromLegacy(name).stream())
+                        .collect(Collectors.toSet());
+                var bundle = AgentToolsV2.create(new FakeHost(true), SubagentManager.v2AllowedTools(configured));
+                Set<String> advertised = bundle.agentTools(() -> true, null).stream()
+                        .map(AgentTool::name).collect(Collectors.toSet());
+                assertEquals(expected, advertised, profile);
+                assertEquals(profile.endsWith("-planner"), advertised.contains("inspect_world"), profile);
+                assertEquals(profile.equals("patch-planner"), advertised.contains("write"), profile);
+            }
+        }
     }
 
     private static JsonObject call(AgentTool tool, String argsJson) throws Exception {

@@ -82,7 +82,7 @@ class ToolWiringTest {
     }
 
     @Test
-    void defaultSubagentProfilesOnlyAdvertiseImplementedCatalogTools() throws Exception {
+    void defaultProfilesOnlyAdvertiseRegisteredLegacyToolsInLegacyMode() throws Exception {
         var method = SubagentManager.class.getDeclaredMethod("createToolRegistry",
                 Class.forName("com.p2s.SubagentManager$SubagentTask"), Set.class);
         method.setAccessible(true);
@@ -93,8 +93,12 @@ class ToolWiringTest {
                 JsonObject definition = JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
                 for (var tool : definition.getAsJsonArray("allowed_tools")) {
                     String name = tool.getAsString();
-                    assertNotNull(ToolCatalog.find(name), profile + " advertises unknown tool " + name);
-                    assertTrue(registry.toolNames().contains(name), profile + " advertises unimplemented tool " + name);
+                    if (ToolCatalog.find(name) != null) {
+                        assertTrue(registry.toolNames().contains(name), profile + " advertises unimplemented legacy tool " + name);
+                    } else {
+                        assertNotNull(ToolCatalogV2.find(name), profile + " advertises unknown tool " + name);
+                        assertFalse(registry.toolNames().contains(name), "v2-only tool exposed by legacy registry: " + name);
+                    }
                 }
             }
         }
