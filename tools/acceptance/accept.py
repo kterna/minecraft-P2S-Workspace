@@ -13,6 +13,7 @@ import threading
 import time
 from types import SimpleNamespace
 
+from advanced_suite import AdvancedAcceptance
 from artifact_runtime import verify_origin
 from extended_suite import ExtendedAcceptance
 from fixture_provider import prepare_fixture
@@ -86,7 +87,11 @@ def main():
     parser.add_argument('--gui-scale',type=int,default=2)
     parser.add_argument('--lang',choices=['en_us','zh_cn'],default='en_us')
     parser.add_argument('--stream',action='store_true')
-    parser.add_argument('--basic-only',action='store_true',help='Run only the building, review, export and choice scenario')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--basic-only',dest='suite',action='store_const',const='core',help='Run the core scenario only')
+    group.add_argument('--suite', choices=['all','core','advanced','extended'],default='all',
+                       help='Select a scenario or run all applicable scenarios')
+    parser.set_defaults(suite='all')
     parser.add_argument('--startup-timeout',type=float,default=300)
     args=parser.parse_args()
     os.umask(0o077)
@@ -146,12 +151,28 @@ def main():
         state=game.wait('physical O opens the P2S panel',lambda s:s['screen'].endswith('P2SChatScreen'))
         ui(run,'screenshot',run/'panel.png')
         (run/'panel-layout.json').write_text(json.dumps(inspect(state),ensure_ascii=False,indent=2)+'\n')
-        classes=[('core',Acceptance)] if args.basic_only else [('core',Acceptance),('extended',ExtendedAcceptance)]
-        for name,scenario in classes:
+        suites = {'core': Acceptance, 'advanced': AdvancedAcceptance, 'extended': ExtendedAcceptance}
+        selected = suites if args.suite == 'all' else {args.suite: suites[args.suite]}
+        outcomes = {}
+        meta['suites'] = outcomes
+        for name, scenario in selected.items():
+            if outcomes.get('core', {}).get('status') == 'failed':
+                outcomes[name] = {'status':'skipped','reason':'core scenario failed; see core/report.json'}
+                continue
+            advanced_state = game.state()
+            if advanced_state.get('busy') or advanced_state.get('pendingPaths') or advanced_state.get('choice'):
+                outcomes[name] = {'status':'skipped','reason':'previous operation or approval still pending'}
+                continue
             meta['status']='running '+name
             save()
-            scenario(SimpleNamespace(game_dir=run/'game',run_dir=run,output=run/name,capture_script=HERE/'ui.py')).finish()
-        meta['status']='passed'
+            try:
+                scenario(SimpleNamespace(game_dir=run/'game',run_dir=run,output=run/name,capture_script=HERE/'ui.py')).finish()
+                outcomes[name] = {'status':'passed'}
+            except Exception as exc:
+                outcomes[name] = {'status':'failed','error':str(exc)}
+                print(f'{name}: {exc}',file=sys.stderr)
+            save()
+        meta['status']='passed' if all(s['status']=='passed' for s in outcomes.values()) else 'failed'
     except Exception as err:
         meta.update(status='failed',error=str(err))
         print(str(err),file=sys.stderr)

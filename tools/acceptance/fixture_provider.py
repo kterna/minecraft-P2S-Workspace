@@ -35,6 +35,11 @@ mode = "solid"
 
 def reply(body):
     messages = body['messages']
+    if any(m.get('role')=='user' and 'P2S-ADV-' in str(m.get('content','')) for m in messages):
+        from advanced_fixture import advanced_reply
+        advanced = advanced_reply(body)
+        if advanced is not None:
+            return advanced
     case, tag, start = 'PING', 'sample', 0
     for i, item in enumerate(messages):
         if item.get('role') == 'user':

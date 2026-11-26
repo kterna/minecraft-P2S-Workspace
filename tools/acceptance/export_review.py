@@ -32,8 +32,11 @@ def export(run, output):
     if copy('panel-layout.json'):
         geo=json.loads((output/'panel-layout.json').read_text())
         lines+=['',f"面板逻辑尺寸 {geo['guiWidth']} × {geo['guiHeight']}，越界控件 {len(geo['clippedWidgets'])} 个，待查看的重叠 {len(geo['overlapCandidates'])} 处。"]
-    for suite in ('core','extended'):
+    for suite in ('core','advanced','extended'):
         if not copy(suite+'/report.json'):
+            skipped=meta.get('suites',{}).get(suite,{})
+            if skipped.get('status') == 'skipped':
+                lines += ['', '## '+suite, '', '跳过 · '+skipped['reason']]
             continue
         result=json.loads((output/suite/'report.json').read_text())
         lines += ['', '## '+suite, '']
