@@ -146,6 +146,8 @@ def main():
             raise RuntimeError(f'Unexpected runtime identity: {meta["runtime"]}')
         if args.mod_jar:
             meta['verifiedOrigin']=verify_origin(run)
+        else:
+            meta['compiledIdentity']=json.loads((run/'classpath.json').read_text())['identity']
         save()
         ui(run,'key','o')
         state=game.wait('physical O opens the P2S panel',lambda s:s['screen'].endswith('P2SChatScreen'))

@@ -83,9 +83,43 @@ def assets(gradle_home, version, cache, mode, online):
     return base, index_id
 
 
+def hash_files(files):
+    digest = hashlib.sha256()
+    for name, path in sorted(files):
+        digest.update(os.fsencode(name) + b'\0')
+        if path.is_file():
+            with path.open('rb') as stream:
+                digest.update(hashlib.file_digest(stream, 'sha256').digest())
+        else:
+            digest.update(b'missing')
+    return digest.hexdigest()
+
+
+def build_identity(project, outputs):
+    tracked = subprocess.check_output([
+        'git','-C',str(project),'ls-files','--cached','--others','--exclude-standard','-z','--',
+        'src','versions','settings.json','settings.gradle','build.gradle','common.gradle','gradle.properties','gradle','gradlew'])
+    sources = [(os.fsdecode(n), project / os.fsdecode(n)) for n in tracked.split(b'\0') if n]
+    compiled = []
+    for root_name in outputs:
+        root = Path(root_name)
+        for path in root.rglob('*'):
+            if path.is_file():
+                compiled.append((str(path.relative_to(project)), path))
+    if not compiled:
+        raise ValueError('The requested checkout has no compiled P2S classes or resources.')
+    return {'commit':subprocess.check_output(['git','-C',str(project),'rev-parse','HEAD'],text=True).strip(),
+            'inputsSha256':hash_files(sources), 'outputsSha256':hash_files(compiled)}
+
+
 def gradle_manifest(args, java_home, run, gradle_home):
     if args.classpath_manifest:
-        return json.loads(args.classpath_manifest.read_text())
+        manifest = json.loads(args.classpath_manifest.read_text())
+        if manifest['version'] != args.version or Path(manifest['project']).resolve() != args.project:
+            raise ValueError('Classpath manifest belongs to a different checkout or Minecraft version.')
+        if manifest.get('identity') != build_identity(args.project, manifest['projectOutputs']):
+            raise ValueError('Checkout or compiled outputs have changed (or manifest predates fingerprinting). Omit --classpath-manifest to rebuild.')
+        return manifest
     output = run / "classpath.json"
     cmd = [str(args.project / "gradlew"), "--no-daemon", "--max-workers=2", "--console=plain",
            "-I", str(HERE / "classpath.gradle"), "-Dp2s.test.version=" + args.version,
@@ -94,7 +128,10 @@ def gradle_manifest(args, java_home, run, gradle_home):
         cmd.append("--offline")
     env = dict(os.environ, JAVA_HOME=str(java_home), GRADLE_USER_HOME=str(gradle_home))
     subprocess.run(cmd, cwd=args.project, env=env, check=True)
-    return json.loads(output.read_text())
+    manifest = json.loads(output.read_text())
+    manifest['identity'] = build_identity(args.project, manifest['projectOutputs'])
+    output.write_text(json.dumps(manifest, indent=2)+'\n')
+    return manifest
 
 
 def development_args(manifest, args):
@@ -204,6 +241,7 @@ def prepare(args):
     gh = args.gradle_home.resolve()
     if not args.mod_jar:
         manifest = gradle_manifest(args, java, run, gh)
+        (run / "classpath.json").write_text(json.dumps(manifest, indent=2)+"\n")
         runtime = development_args(manifest, args)
     else:
         from artifact_runtime import production_jvm_args

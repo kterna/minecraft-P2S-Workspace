@@ -17,7 +17,7 @@ python3 tools/acceptance/accept.py \
 ```
 
 - 提交制品时保留 `--mod-jar`。启动器对候选 JAR 计算 SHA-256，原样复制到该轮的 `game/mods/subject.jar`，用正式 Fabric Loader 的 intermediary 环境启动。验收同时核对 FabricLoader 报告的来源和 JVM 入口类的加载路径。候选 JAR 不做重映射或补库。
-- 提交源码时省略 `--mod-jar`。启动器用目标工作树的 Gradle/Loom 导出该版本的 named 开发类路径。若已编译，可以用 `--classpath-manifest` 指定同一工作树和版本的清单；修改源码后重新生成。
+- 提交源码时省略 `--mod-jar`。启动器用目标工作树的 Gradle/Loom 导出该版本的 named 开发类路径。若已编译，可以用 `--classpath-manifest` 指定同一工作树和版本的清单；清单校验 Git 提交、实际输入文件和编译输出的 SHA-256。修改源码或更换生成物后省略该参数重新构建。
 - 两个 MC 版本分别运行。换分辨率或语言可传 `--width 1920 --height 1080 --gui-scale 4 --lang zh_cn`，流式聊天用 `--stream`。基准和候选使用相同世界、语言、逻辑尺寸和用例。
 - 终端第一行打印证据目录。退出码 0 表示选中的场景全部通过；非零时看 `acceptance.json`、`core/report.json`、`extended/report.json`、`client.log`、`launcher.log`。运行结束会关闭该次游戏和假供应商。可传 `--run-dir` 指定一个尚不存在的新目录。
 
