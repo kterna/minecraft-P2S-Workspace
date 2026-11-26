@@ -5,6 +5,8 @@ import ctypes as c
 import ctypes.util
 import json
 import os
+import re
+import subprocess
 from pathlib import Path
 import struct
 import sys
@@ -41,18 +43,32 @@ class Window:
              c.POINTER(c.POINTER(ULong)), c.POINTER(UInt))(
                  self.display, self.root, c.byref(root), c.byref(parent), c.byref(children), c.byref(count))
         try:
-            for i in reversed(range(count.value)):
-                xid = children[i]
-                name = c.c_char_p()
-                if not bind(self.x, "XFetchName", Int, Ptr, ULong, c.POINTER(c.c_char_p))(self.display, xid, c.byref(name)):
+            candidates = []
+            for xid in reversed(children[:count.value]):
+                # WM_NAME may be absent when GLFW uses a multilingual UTF-8 window title.
+                props = subprocess.run(['xprop','-id',str(xid),'_NET_WM_PID','WM_CLASS','_NET_WM_NAME','WM_NAME'],
+                                       capture_output=True,text=True,errors='replace',timeout=3).stdout
+                pid = re.search(r'^_NET_WM_PID\(CARDINAL\) = (\d+)$', props, re.M)
+                known_pid = metadata.get('pid')
+                own = bool(pid and known_pid and int(pid[1]) == known_pid)
+                if pid and known_pid and not own:
                     continue
-                title = name.value.decode(errors="replace") if name.value else ""
-                self.free(name)
-                if "Minecraft" in title:
-                    self.window, self.title = xid, title
-                    break
-            else:
-                raise RuntimeError("The Minecraft window has not been mapped yet")
+                geom = subprocess.run(['xwininfo','-id',str(xid)],capture_output=True,text=True,
+                                      errors='replace',timeout=3,env=dict(os.environ,LC_ALL='C')).stdout
+                size = re.search(r'Width: (\d+).*?Height: (\d+)', geom, re.S)
+                if not size or min(map(int,size.groups())) < 100 or 'IsViewable' not in geom:
+                    continue
+                title = re.search(r'^_NET_WM_NAME\([^)]*\) = "(.*)"$',props,re.M)
+                title = title[1] if title else props.splitlines()[-1]
+                named = 'minecraft' in props.casefold()
+                candidates.append((2 if own else 1 if named else 0, xid, title))
+            if not candidates:
+                raise RuntimeError("No mapped game-sized window on the private display")
+            best = max(row[0] for row in candidates)
+            matches = [row for row in candidates if row[0] == best]
+            if len(matches) != 1:
+                raise RuntimeError("Ambiguous game window on the private display")
+            _, self.window, self.title = matches[0]
         finally:
             self.free(children)
         x, y, border, depth = Int(), Int(), UInt(), UInt()
