@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "p2s-acceptance-bridge",
+  "version": "1.0.0",
+  "name": "P2S isolated acceptance observer",
+  "environment": "client",
+  "entrypoints": { "client": ["com.p2s.AcceptanceBridge"] },
+  "depends": { "fabricloader": ">=0.15", "minecraft": ["1.21", "1.21.1"], "prompt2structure": "*", "fabric-api": "*" }
+}
