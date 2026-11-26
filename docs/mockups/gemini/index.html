@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2S 游戏内 Agent 界面 · B+C 结合方案目录 (Gemini)</title>
+<style>
+  :root {
+    --panel-bg: rgba(17, 23, 34, 0.88);
+    --panel-bg-elevated: rgba(24, 33, 48, 0.94);
+    --panel-bg-subtle: rgba(11, 16, 24, 0.84);
+    --panel-border: #314159;
+    --panel-border-strong: #5A749B;
+    --tab-bg-active: #253650;
+    --tab-border-active: #7EA6E0;
+    --text-primary: #EAF2FF;
+    --text-secondary: #B4C4DC;
+    --text-muted: #778AA8;
+    --btn-primary-bg: rgba(41, 78, 122, 0.92);
+    --btn-primary-border: #7BA8E0;
+    --badge-pending-bg: rgba(75, 53, 32, 0.94);
+    --badge-pending-border: #CF9A69;
+    --badge-pending-text: #FFE6C2;
+    --status-running: #6BC4FF;
+    --status-success: #66DD88;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0b0f17;
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 24px;
+  }
+  .container { max-width: 1120px; margin: 0 auto; }
+
+  .hero {
+    background: var(--panel-bg-elevated);
+    border: 1px solid var(--panel-border-strong);
+    padding: 20px 24px;
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .hero h1 { font-size: 20px; margin-bottom: 8px; }
+  .hero p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; max-width: 720px; }
+  .theme-bar { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn {
+    padding: 6px 10px;
+    background: #171f2e;
+    border: 1px solid var(--panel-border);
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn:hover { background: #222f45; }
+  .btn.active { background: var(--btn-primary-bg); border-color: var(--btn-primary-border); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    text-decoration: none;
+    color: inherit;
+  }
+  .card:hover { border-color: var(--tab-border-active); background: var(--panel-bg-elevated); }
+  .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .tag {
+    font-family: monospace;
+    font-size: 11px;
+    padding: 2px 6px;
+    background: var(--panel-bg-subtle);
+    border: 1px solid var(--panel-border);
+    color: var(--status-running);
+  }
+  .tag.pending { background: var(--badge-pending-bg); border-color: var(--badge-pending-border); color: var(--badge-pending-text); }
+  .card h2 { font-size: 15px; margin-top: 4px; }
+  .card p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .card-foot { font-size: 12px; color: var(--tab-border-active); }
+
+  .info-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .box {
+    background: var(--panel-bg-subtle);
+    border: 1px solid var(--panel-border);
+    padding: 16px;
+  }
+  .box h3 { font-size: 14px; margin-bottom: 8px; color: var(--text-primary); }
+  .box ul { padding-left: 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+  pre {
+    background: #080b11;
+    border: 1px solid #222e42;
+    padding: 10px;
+    font-size: 11px;
+    line-height: 1.45;
+    max-height: 240px;
+    overflow: auto;
+    color: #c9dcff;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <div>
+      <h1>P2S 游戏内 Agent 界面 · B+C 结合方案效果图目录</h1>
+      <p>
+        采用「左置 352px 一体化工作台 + 右侧 45% 实时世界预览」结构。默认以对话（B）为主，顶栏通过
+        <code>对话 / 审阅 / 文件</code> 三个标签（C）切换；所有面板均为 MC <code>GuiGraphics</code> 原生可画的直角纯色/半透明矩形 + 1px 边框 + Unifont 比例字体（640×360 逻辑像素，2× 放大至 1280×720）。
+      </p>
+    </div>
+    <div class="theme-bar">
+      <div style="font-size:12px; color:var(--text-muted);">全局主题预览（跨页面同步生效）</div>
+      <div class="btn-group">
+        <button class="btn active" data-theme-btn="slate-blueprint" onclick="setTheme('slate-blueprint')">深空蓝图</button>
+        <button class="btn" data-theme-btn="mc-stone" onclick="setTheme('mc-stone')">原版石砖</button>
+        <button class="btn" data-theme-btn="obsidian-amber" onclick="setTheme('obsidian-amber')">黑曜琥珀</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <a class="card" href="01-chat-running.html">
+      <div>
+        <div class="card-top">
+          <span class="tag">640×360 · 对话首页</span>
+          <span style="font-size:11px; color:var(--status-running);">运行态</span>
+        </div>
+        <h2>01 · 对话首页（Agent 运行中）</h2>
+        <p>展示 Plan 4 步进度条、可折叠工具调用卡片、子代理状态、已排队追加消息横幅，以及输入框有字时自动切为「+ 排队」与「■ 停止」。</p>
+      </div>
+      <div class="card-foot">打开效果图 →</div>
+    </a>
+
+    <a class="card" href="02-chat-pending-review.html">
+      <div>
+        <div class="card-top">
+          <span class="tag pending">640×360 · 3 文件待审</span>
+          <span style="font-size:11px; color:var(--badge-pending-text);">待确认</span>
+        </div>
+        <h2>02 · 对话里的待审卡片</h2>
+        <p>Agent 暂存 roof / walls / interior 3 个文件后，在对话底部展示汇总卡片（含方块增量、风险、单文件快捷应用、全部应用与「逐个审阅」入口）。</p>
+      </div>
+      <div class="card-foot">打开效果图 →</div>
+    </a>
+
+    <a class="card" href="03-review-diff.html">
+      <div>
+        <div class="card-top">
+          <span class="tag pending">640×360 · 审阅页</span>
+          <span style="font-size:11px; color:var(--status-success);">世界联动高亮</span>
+        </div>
+        <h2>03 · 审阅页（Diff + 队列）</h2>
+        <p>顶部 1/3 ~ 3/3 文件切换条、&lt;D/D&gt; Hunk 跳转、双行号 Diff、内联可选原因丢弃栏，以及点击切换时右侧世界同步高亮对应建筑部位。</p>
+      </div>
+      <div class="card-foot">打开效果图 →</div>
+    </a>
+
+    <a class="card" href="04-files-editor.html">
+      <div>
+        <div class="card-top">
+          <span class="tag">640×360 · 文件页</span>
+          <span style="font-size:11px; color:var(--text-muted);">低频手改入口</span>
+        </div>
+        <h2>04 · 文件页（列表与正文）</h2>
+        <p>左侧 112px 紧凑目录树（带待审标记与折叠开关）+ 右侧 TOML 正文编辑器 + 底部「选中行加入下条对话上下文」挂载条。</p>
+      </div>
+      <div class="card-foot">打开效果图 →</div>
+    </a>
+
+    <a class="card" href="05-narrow-480x270.html">
+      <div>
+        <div class="card-top">
+          <span class="tag">480×270 · 窄屏降级</span>
+          <span style="font-size:11px; color:var(--status-running);">可交互切换</span>
+        </div>
+        <h2>05 · 窄屏 480×270 自适应</h2>
+        <p>面板缩至 288px 仍留 40% 看世界；顶栏工具进「···」；审阅去双行号；文件页由分栏降级为「列表 ↔ 正文」单列钻取。</p>
+      </div>
+      <div class="card-foot">打开效果图 →</div>
+    </a>
+
+    <div class="card" style="cursor:default;">
+      <div>
+        <div class="card-top">
+          <span class="tag">设计说明文档</span>
+          <span style="font-size:11px; color:var(--text-muted);">Markdown</span>
+        </div>
+        <h2>配套布局方案文档</h2>
+        <p>完整的信息架构、任务走查、窄屏规则、Esc 分层键盘逻辑、JSON 主题映射与待拍板清单见：</p>
+        <p style="margin-top:6px; font-family:monospace; color:#9dc0f5;">docs/proposals/ui-layout-gemini.md</p>
+      </div>
+      <div class="card-foot" style="color:var(--text-muted);">与右侧 JSON 配置 1:1 同步</div>
+    </div>
+  </div>
+
+  <div class="info-panel">
+    <div class="box">
+      <h3>评审检查清单</h3>
+      <ul>
+        <li>每张主稿严格按 MC <strong>640×360</strong> 逻辑像素绘制，CSS <strong>2×</strong> 放大（1280×720）；窄屏为 <strong>480×270</strong>。</li>
+        <li>全部 UI 控件零圆角、零网页渐变，纯 <code>rgba</code> 矩形 + <code>1px</code> 边框，字体声明 <code>'Unifont', 'WenQuanYi Zen Hei Sharp', monospace</code>。</li>
+        <li>任一页面右上角均可随时切换 3 套主题，并可点击「主题 JSON」查看与 CSS 变量 1:1 对应的完整配置文件。</li>
+      </ul>
+    </div>
+    <div class="box">
+      <h3>当前激活主题 JSON（1:1 对应 CSS 变量）</h3>
+      <pre id="jsonCode"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+const THEMES = {
+  "slate-blueprint": {
+    meta: { id: "slate-blueprint", name: "深空蓝图 (Slate Blueprint)" },
+    tokens: {
+      "panel.bg": "rgba(17, 23, 34, 0.88)", "panel.bgElevated": "rgba(24, 33, 48, 0.94)", "panel.bgSubtle": "rgba(11, 16, 24, 0.84)",
+      "panel.border": "#314159", "panel.borderStrong": "#5A749B", "tab.bgActive": "#253650", "tab.borderActive": "#7EA6E0",
+      "text.primary": "#EAF2FF", "text.secondary": "#B4C4DC", "text.muted": "#778AA8",
+      "btn.primaryBg": "rgba(41, 78, 122, 0.92)", "btn.primaryBorder": "#7BA8E0",
+      "badge.pendingBg": "rgba(75, 53, 32, 0.94)", "badge.pendingBorder": "#CF9A69", "badge.pendingText": "#FFE6C2",
+      "status.running": "#6BC4FF", "status.success": "#66DD88"
+    }
+  },
+  "mc-stone": {
+    meta: { id: "mc-stone", name: "原版石砖 (Vanilla Stone)" },
+    tokens: {
+      "panel.bg": "rgba(32, 32, 36, 0.90)", "panel.bgElevated": "rgba(44, 44, 50, 0.95)", "panel.bgSubtle": "rgba(22, 22, 26, 0.88)",
+      "panel.border": "#5A5A63", "panel.borderStrong": "#8E8E99", "tab.bgActive": "#494952", "tab.borderActive": "#63D471",
+      "text.primary": "#F4F4F6", "text.secondary": "#C6C6D0", "text.muted": "#8C8C98",
+      "btn.primaryBg": "rgba(44, 102, 56, 0.94)", "btn.primaryBorder": "#74D986",
+      "badge.pendingBg": "rgba(86, 62, 24, 0.96)", "badge.pendingBorder": "#E5B454", "badge.pendingText": "#FFF0C8",
+      "status.running": "#55DDFF", "status.success": "#55FF55"
+    }
+  },
+  "obsidian-amber": {
+    meta: { id: "obsidian-amber", name: "黑曜琥珀 (Obsidian Amber)" },
+    tokens: {
+      "panel.bg": "rgba(21, 18, 25, 0.90)", "panel.bgElevated": "rgba(31, 26, 37, 0.95)", "panel.bgSubtle": "rgba(14, 12, 18, 0.88)",
+      "panel.border": "#483C57", "panel.borderStrong": "#7B6794", "tab.bgActive": "#3A2E46", "tab.borderActive": "#E6A24C",
+      "text.primary": "#F7EFE4", "text.secondary": "#CBBED8", "text.muted": "#8B7D9C",
+      "btn.primaryBg": "rgba(126, 78, 32, 0.92)", "btn.primaryBorder": "#E8A656",
+      "badge.pendingBg": "rgba(88, 56, 24, 0.95)", "badge.pendingBorder": "#E8A656", "badge.pendingText": "#FFE9C7",
+      "status.running": "#F5B85C", "status.success": "#7CE09B"
+    }
+  }
+};
+
+function toCssVar(k) { return "--" + k.replace(".", "-").replace(/([A-Z])/g, "-$1").toLowerCase(); }
+let currentThemeId = localStorage.getItem("p2s_gemini_theme") || "slate-blueprint";
+if (!THEMES[currentThemeId]) currentThemeId = "slate-blueprint";
+function setTheme(id) {
+  const theme = THEMES[id] || THEMES["slate-blueprint"];
+  currentThemeId = theme.meta.id;
+  localStorage.setItem("p2s_gemini_theme", currentThemeId);
+  for (const [k, v] of Object.entries(theme.tokens)) document.documentElement.style.setProperty(toCssVar(k), v);
+  document.querySelectorAll("[data-theme-btn]").forEach(b => b.classList.toggle("active", b.getAttribute("data-theme-btn") === currentThemeId));
+  document.getElementById("jsonCode").textContent = JSON.stringify(theme, null, 2);
+}
+setTheme(currentThemeId);
+</script>
+</body>
+</html>

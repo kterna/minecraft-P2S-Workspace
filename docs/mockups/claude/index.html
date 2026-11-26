@@ -1,0 +1,17 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>P2S 面板效果图 · Claude 方案</title>
+<style>
+html,body{margin:0;background:#161616;color:#d8d8d8;font:14px/1.5 system-ui,'Noto Sans CJK SC',sans-serif}
+.chrome{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 16px;border-bottom:1px solid #2a2a2a}
+.chrome b{color:#fff;font-weight:600}
+.chrome .grp{display:flex;gap:4px;align-items:center}
+.chrome a,.chrome button{font:inherit;font-size:13px;color:#cfcfcf;background:#232323;border:1px solid #3a3a3a;padding:2px 9px;text-decoration:none;cursor:pointer}
+.chrome a.on,.chrome button.on{background:#3b5f86;border-color:#6aa0d8;color:#fff}
+.chrome .lbl{color:#888;font-size:12px}
+.desc{padding:8px 16px 0;color:#aaa;font-size:13px;max-width:1280px}
+.wrap{padding:12px 16px 24px}
+pre.json{display:none;margin:0 16px 12px;padding:10px;background:#0f0f0f;border:1px solid #2a2a2a;color:#cfe3ff;font:12px/1.45 ui-monospace,monospace;max-height:340px;overflow:auto;max-width:1248px}
+pre.json.show{display:block}
+ ul{max-width:900px;line-height:1.7} li{margin-bottom:10px} a{color:#8cc4ff} .wrap p{max-width:900px;color:#aaa}</style></head>
+<body><div class="chrome"><b>P2S 面板 · Claude 方案 · 目录</b></div><div class="wrap">
+<p>所有页面都按 MC 的 GUI 逻辑像素绘制（主稿 640×360，窄屏 480×270），显示时放大 2 倍。中文用 Unifont（MC 显示中文用的就是它）。每页顶部可以切换三套主题：深夜、高对比、原版石板。“查看主题 JSON”显示的就是 <code>config/p2s_themes/&lt;id&gt;.json</code> 的原文，CSS 变量名和 JSON 字段名一一对应。布局说明见 <code>docs/proposals/ui-layout-claude.md</code>。</p>
+<ul><li><a href="01-chat-running.html">对话 · 运行中</a> — 对话首页，Agent 正在运行。工作卡逐行列出工具步骤：脚本那一步展开后能看到子调用汇总和失败原因；当前步骤高亮；子任务缩进显示；思考过程折叠成字数。运行中追加的消息显示为虚线框的“待送达”，可以撤回。运行条上固定放“停止”，发送键永远是发送。右侧世界里绿框是正在放的预览方块，白框是当前正在放的那一格。</li><li><a href="02-chat-review-card.html">对话 · 待审卡片</a> — Agent 跑完：工作卡收成一行，下面是总结和待审卡片（3 个文件：新增和移除的方块数、风险、一句话说明）。主按钮是“逐个审阅”，“全部应用”是次要按钮，“全部丢弃”用危险色。“审阅”标签亮起数字 3。世界里绿色是新增，棕色是新屋顶，红框是要拆掉的旧顶。</li><li><a href="03-review.html">审阅</a> — 审阅页：左边是待审列表，右边是差异，上方是 Agent 对这个文件的一句说明。底部按钮带快捷键（A 应用，D 丢弃，⇧A 全部应用）。输入框自动带上当前文件，可以直接说“箭孔再密一点”。世界里只高亮当前文件，其他文件的预览变暗。</li><li><a href="04-files.html">文件</a> — 文件页：用户很少手改，所以默认只读，“编辑”是唯一的主按钮。上方“状态”可以切换三种情况：只读、编辑中（未保存标记、保存/取消、格式校验）、有待审改动（提示先去审阅，编辑按钮隐藏）。文件树底部保留新建、改名、删除的基本入口。</li><li><a href="05-narrow.html">窄屏 480×270</a> — 窄屏（1080p、GUI 缩放 4，逻辑尺寸 480×270）：面板固定 300 宽；标题栏和标签栏合成一行；工作卡只显示“已完成 N 步”和当前步骤；输入框变成单行。右侧仍留 180 宽的世界用来看预览。</li><li><a href="06-hud.html">面板关闭 · HUD</a> — 面板关闭后 Agent 继续在后台运行，右上角显示一个小提示（用主题里的 hudBg、hudText）。上方“状态”可以切换运行中和已完成两种。底部的快捷栏和准星只是示意游戏画面。</li></ul></div></body></html>

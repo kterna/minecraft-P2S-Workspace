@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "default": "ember",
+  "themes": [
+    {
+      "id": "ember",
+      "name": "余烬",
+      "colors": {
+        "backdrop": "#181d1c",
+        "panel": "#202725",
+        "raised": "#29312e",
+        "inset": "#1b211f",
+        "line": "#404942",
+        "text": "#f0efdf",
+        "muted": "#b3b9aa",
+        "faint": "#98a398",
+        "accent": "#ffb767",
+        "on-accent": "#251e18",
+        "tint": "#3e372c",
+        "success": "#a7d7b1",
+        "danger": "#ffaaa0",
+        "overlay": "#1a221ee8",
+        "on-overlay": "#f1f1df"
+      }
+    },
+    {
+      "id": "glacier",
+      "name": "冰川",
+      "colors": {
+        "backdrop": "#b8c9ca",
+        "panel": "#e0e9e7",
+        "raised": "#f0f4eb",
+        "inset": "#d4e0de",
+        "line": "#9aafaf",
+        "text": "#1c343e",
+        "muted": "#38565d",
+        "faint": "#4b656a",
+        "accent": "#0b666a",
+        "on-accent": "#f1f6e9",
+        "tint": "#c1d9d4",
+        "success": "#286643",
+        "danger": "#9b4036",
+        "overlay": "#dce9e6ed",
+        "on-overlay": "#1b3e46"
+      }
+    }
+  ]
+}
