@@ -1,0 +1,17 @@
+// Loaded with Gradle -I. The manifest describes the selected checkout's compiled client and libraries.
+gradle.projectsEvaluated {
+    def game = gradle.rootProject.findProject(':' + System.getProperty('p2s.test.version'))
+    if (game == null) throw new GradleException('Unknown P2S Minecraft version')
+    game.tasks.register('p2sAcceptanceClasspath') {
+        dependsOn game.tasks.named('clientClasses')
+        doLast {
+            def src = game.extensions.getByType(org.gradle.api.tasks.SourceSetContainer)
+            def outputs = (src.main.output.files + src.client.output.files).findAll { it.exists() }
+            def runtime = src.client.runtimeClasspath.files.findAll { it.exists() }
+            def json = [version: game.name, project: game.rootProject.projectDir.canonicalPath,
+                        projectOutputs: outputs.collect { it.canonicalPath },
+                        runtimeClasspath: runtime.collect { it.canonicalPath }]
+            new File(System.getProperty('p2s.test.manifest')).text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(json))
+        }
+    }
+}
