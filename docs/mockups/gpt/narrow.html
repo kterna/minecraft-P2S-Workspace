@@ -2,232 +2,525 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>窄屏 · 松脊营地 · P2S</title>
 <style>* {box-sizing:border-box}
-html,body {margin:0;min-height:100%}
-body {font:16px/1.35 'Unifont','WenQuanYi Zen Hei Sharp','Microsoft YaHei',monospace;background:var(--backdrop);color:var(--text);padding:24px 0}
-button,a,input,textarea,select {font:inherit}
-button,a {cursor:pointer;color:inherit}
-button {border:0;border-radius:0;background:transparent;padding:0}
-button:hover:not(:disabled),a:hover {color:var(--accent)}
-:focus-visible {outline:1px solid var(--accent);outline-offset:-1px}
-button:disabled {cursor:default;color:var(--faint)}
-a {text-decoration:none}
 [hidden] {display:none!important}
+html,body {margin:0;min-height:100%}
+body {padding:16px 0;background:var(--backdrop);color:var(--text);font:14px/1.35 'WenQuanYi Zen Hei','Microsoft YaHei',sans-serif}
+button,a,input,textarea {font:inherit}
+button,a {color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button {border:0;background:transparent;padding:0}
+a {text-decoration:none}
+button:disabled {cursor:default}
+button,a,summary {position:relative}
+button:not(:disabled):after,a:after,summary:after {content:'';position:absolute;inset:0;pointer-events:none;transition:background-color 100ms linear}
+button:not(:disabled):hover:after,a:hover:after,summary:hover:after {background:var(--hover)}
+button:not(:disabled):active:after,a:active:after,summary:active:after {background:var(--pressed)}
+:focus-visible {outline:1px solid var(--focus);outline-offset:-1px}
+@media(prefers-reduced-motion:reduce){button:after,a:after,summary:after{transition:none!important}}
 .sheet {width:max-content;max-width:100%;margin:auto}
-.sheethead,.sheetfoot {display:flex;align-items:center;flex-wrap:wrap;gap:10px;color:var(--muted);margin:0 0 10px;font-size:14px}
-.sheethead strong {color:var(--text);font-weight:normal}.sheethead .dims {margin-left:auto}
-.sheetfoot {margin:12px 0 0;gap:8px 18px}
-.sheetfoot a.current {color:var(--accent);border-bottom:1px solid var(--accent)}
-.sheetfoot .import {margin-left:auto;text-decoration:underline;text-underline-offset:3px}
-#importMessage {font-size:14px;color:var(--muted)}
-#frame {position:relative;overflow:hidden;background:var(--backdrop)}
+.sheethead,.sheetnav,.sheetfoot,.themebar {display:flex;align-items:center;flex-wrap:wrap;color:var(--muted)}
+.sheethead {gap:10px;padding:0 2px 8px;border-bottom:1px solid var(--line)}
+.sheethead strong {font-size:16px;letter-spacing:.03em;color:var(--text)}
+.sheethead .dims {margin-left:auto;font:12px monospace;color:var(--faint)}
+.sheetnav {gap:3px;margin:5px 0}
+.sheetnav a,.sheetfoot button,.import {padding:4px 8px}
+.sheetnav a[aria-current] {color:var(--accent);background:var(--selected)}
+.themebar {gap:4px;padding:0 0 8px}
+.themebar .import {margin-left:auto;font-size:12px}
+.palettes,.menu-palettes {display:flex;flex-wrap:wrap;gap:2px}
+.palette {display:flex;align-items:center;gap:5px;padding:3px 6px;color:var(--muted);border-bottom:1px solid transparent;white-space:nowrap}
+.palette[aria-pressed=true] {color:var(--text);border-color:var(--accent);background:var(--selected)}
+.sample {width:15px;height:10px;display:inline-flex;background:var(--sw-panel);border:1px solid var(--sw-line);align-items:flex-end;justify-content:flex-end}
+.sample i {width:7px;height:5px;background:var(--sw-accent)}
+.sheetfoot {gap:8px;margin:5px 0 0;font-size:13px}
+.sheetfoot button:first-child {padding-left:0}
+#importMessage {color:var(--info)}
+#frame {position:relative;overflow:hidden;background:var(--panel)}
 .game {position:absolute;inset:0 auto auto 0;transform-origin:top left;width:640px;height:360px;font:10px/11px 'Unifont','WenQuanYi Zen Hei Sharp','Microsoft YaHei',monospace;background:var(--panel);color:var(--text);display:flex;flex-direction:column;overflow:hidden}
 .game.small {width:480px;height:270px}
-button,a,input,textarea { -webkit-tap-highlight-color:transparent }
 .icon {display:inline-block;width:9px;height:9px;flex:none;vertical-align:middle;shape-rendering:crispEdges}
-.row,.tag,.btn,.tab,.userhead,.agenthead,.worldhead,.caption,.keyhint,.logo {display:flex;align-items:center}
-.gap {gap:5px}.spread {justify-content:space-between}.grow {flex:1;min-width:0}.muted {color:var(--muted)}.accent {color:var(--accent)}.good {color:var(--success)}.bad {color:var(--danger)}
-.mono,.tiny,.clock,.filekey,kbd {font-family:'Unifont','WenQuanYi Zen Hei Sharp',monospace}
-.tiny,.clock {font-size:8px;line-height:9px}
-.tag {gap:4px;font-size:9px;line-height:10px}
-.topbar {flex:none;height:25px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--line);padding:0 9px;background:var(--inset)}
-.logo {gap:4px;color:var(--accent)}
-.logo b {font-family:'Unifont',monospace;font-size:16px;line-height:16px;letter-spacing:.4px}
-.logo svg {width:17px;height:17px}
-.slash {color:var(--faint);font-size:12px}.project {color:var(--text);font-size:10px}.minor {color:var(--muted);font-size:9px}.switch {margin-left:auto;gap:4px;display:flex;align-items:center;font-size:9px;color:var(--muted);height:19px;padding:0 3px}
-.swatches {display:inline-flex;align-items:center;width:11px;height:8px;border:1px solid var(--muted);padding:1px;background:var(--panel)}
-.swatches:before {content:'';height:4px;width:4px;background:var(--accent)}
-.work {display:grid;grid-template-columns:358px 1fr;flex:1;min-height:0}
-.dock {min-height:0;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--line)}
-.tabs,.worldhead {height:23px;flex:none;border-bottom:1px solid var(--line);background:var(--panel)}
-.tabs {display:flex;gap:4px;align-items:stretch;padding-left:7px}
-.tab {gap:4px;padding:0 7px;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--muted);font-size:10px}
-.tab[aria-current="page"] {color:var(--accent);border-color:var(--accent)}
-.count {background:var(--tint);color:var(--accent);font-size:8px;line-height:9px;min-width:10px;padding:0 2px;text-align:center}
-.view {flex:1;min-height:0;display:flex;flex-direction:column}
-.scroll {min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
-.chatlog {flex:1;padding:10px 12px 6px}
-.headline {display:flex;align-items:center;gap:6px;margin:0 0 7px;font-size:15px;line-height:16px;font-weight:600}
-.headline .clock {margin-left:auto;color:var(--faint);font-weight:400}
-.userbox {background:var(--raised);border-left:2px solid var(--muted);padding:5px 7px;margin-bottom:9px}
-.userhead {font-size:9px;line-height:9px;gap:4px;color:var(--muted);margin-bottom:4px}
-.userbox p,.agentcopy {font-size:10px;line-height:13px;margin:0;overflow-wrap:anywhere}
-.agentline {display:flex;gap:6px;align-items:flex-start}
-.avatar {width:17px;height:17px;flex:none;background:var(--tint);border:1px solid var(--line);display:grid;place-items:center;color:var(--accent)}
-.avatar .icon {width:13px;height:13px}
-.agenthead {color:var(--accent);gap:5px;height:11px;font-size:10px}
-.agenthead b {font-weight:600}.clock {color:var(--faint)}
-.agentcopy {margin:2px 0 6px;color:var(--text)}
-.trace,.reviewcard {border:1px solid var(--line);background:var(--inset);margin:1px 0 0}
-.tracetop,.cardtop {display:flex;align-items:center;gap:5px;padding:5px 7px;background:var(--raised);border-bottom:1px solid var(--line);font-size:9px}
+.row,.tag,.btn,.tab,.userhead,.agenthead,.keyhint,.logo,.topbar,.flat,.sessionhead,.subhead,.tracetop,.cardtop,.toolhead,.planline,.actionline {display:flex;align-items:center}
+.gap {gap:5px}.grow {flex:1;min-width:0}.muted {color:var(--muted)}.accent,.flat.action {color:var(--accent)}.good {color:var(--success)}.bad {color:var(--danger)}
+.tiny,.clock,.keyhint,.time {font-size:8px;line-height:9px}
+.clock,.time {color:var(--faint)}
+.tag,.flat {gap:4px;font-size:9px;line-height:10px}.flat {color:var(--muted)}
+.topbar {height:21px;flex:none;gap:6px;padding:0 7px;background:var(--inset);border-bottom:1px solid var(--line);position:relative;z-index:3}
+.logo {gap:4px;color:var(--accent)}.logo b {font: bold 18px/18px 'Unifont',monospace}.logo svg {width:13px;height:13px}
+.slash,.minor {color:var(--faint)}.minor,.switch {font-size:9px}
+.switch,.more,.close-panel {display:flex;align-items:center;justify-content:center;height:15px;padding:0 4px}
+.switch {margin-left:auto;color:var(--muted);gap:3px}.switch i {width:5px;height:5px;background:var(--accent)}
+.more {font-size:14px;min-width:18px;border:1px solid var(--line);background:var(--raised)}
+.more[aria-expanded=true] {background:var(--selected);border-color:var(--focus)}
+.close-panel {color:var(--muted)}
+.pop {position:absolute;right:6px;top:calc(100% + 2px);width:116px;padding:3px;background:var(--raised);border:1px solid var(--input-border)}
+.pop h2 {font-size:9px;line-height:11px;color:var(--muted);font-weight:normal;margin:0;padding:3px 4px;border-bottom:1px solid var(--line)}
+.popitem {width:100%;display:flex;gap:6px;padding:3px 4px;align-items:center;text-align:left;font-size:9px;line-height:10px}
+.popitem .end {margin-left:auto;color:var(--faint)}.popitem:disabled {color:var(--faint)}
+.popgroup+.popgroup {border-top:1px solid var(--line);margin-top:2px;padding-top:2px}
+.menu-palettes {display:grid;grid-template-columns:1fr 1fr;margin-top:2px}.menu-palettes .palette {font-size:9px;padding:3px}.menu-palettes .sample {width:10px;height:7px}
+.work {display:grid;grid-template-columns:300px 1fr;flex:1;min-height:0}
+.dock,.view,.deskwrap,.codepane,.world {min-height:0;min-width:0;display:flex;flex-direction:column}
+.dock {border-right:1px solid var(--line)}.view,.deskwrap {flex:1}
+.tabs {height:20px;flex:none;border-bottom:1px solid var(--line);display:flex;align-items:stretch;gap:3px;padding-left:6px}
+.tab {gap:4px;padding:0 7px;color:var(--muted);font-size:10px;border-bottom:1px solid transparent}
+.tab[aria-current] {color:var(--accent);border-color:var(--accent)}
+.count {background:var(--selected);color:var(--accent);font-size:8px;line-height:9px;min-width:10px;padding:0 2px;text-align:center}
+.scroll {min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent}
+.chatlog {flex:1;padding:5px 8px}
+.sessionhead {gap:5px;margin-bottom:4px}
+.sessionhead h1 {margin:0;font-weight:normal;font-size:9px;line-height:12px}
+.sessionmeta {font-size:8px;color:var(--faint);margin-left:auto}
+.userbox {background:var(--raised);border-left:1px solid var(--input-border);padding:3px 5px;margin-bottom:4px}
+.userhead {font-size:8px;line-height:9px;gap:3px;color:var(--muted)}
+.userbox p,.agentcopy {font-size:9px;line-height:11px;margin:1px 0;overflow-wrap:anywhere}
+.agentline {display:flex;gap:4px;align-items:flex-start}
+.avatar {width:13px;height:13px;flex:none;background:var(--selected);border:1px solid var(--line);display:grid;place-items:center;color:var(--accent)}
+.agenthead {color:var(--accent);gap:5px;height:10px;font-size:9px}.agentcopy {margin:2px 0 4px}
+.trace,.reviewcard,.reviewlist {border:1px solid var(--line);background:var(--inset)}
+.tracetop,.cardtop {gap:4px;padding:3px 5px;background:var(--raised);border-bottom:1px solid var(--line);font-size:9px}
 .tracetop .clock,.cardtop .clock {margin-left:auto}
-.meter {display:flex;gap:2px}
-.meter i {height:3px;width:10px;background:var(--line)}
-.meter i.lit {background:var(--accent)}
-.tracebody {padding:3px 7px 4px}
-.toolrow {display:grid;align-items:center;grid-template-columns:10px 61px 1fr auto;gap:4px;min-height:15px}
-.toolrow .act {font-size:9px}.toolrow .detail {font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.toolrow .time {font-size:8px;color:var(--faint)}
-.toolrow.current {color:var(--accent)}.toolrow.current .detail,.toolrow.current .time {color:var(--accent)}
-.wait {color:var(--faint)}
-.runtools {display:flex;align-items:center;gap:6px;margin:5px 0 0;color:var(--muted)}
-.btn {justify-content:center;gap:4px;background:var(--raised);border:1px solid var(--line);padding:2px 6px;min-height:16px;white-space:nowrap;font-size:9px;line-height:10px}
-.btn.primary,.btn.primary:hover {background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-.btn.danger {color:var(--danger);background:transparent}
-.flat {font-size:9px;line-height:11px;color:var(--muted);display:inline-flex;gap:4px;align-items:center}
-.flat.action {color:var(--accent)}
-.composer {flex:none;margin:3px 12px 8px}
-.entry {display:flex;align-items:center;gap:5px;padding:3px 4px 3px 7px;border:1px solid var(--line);background:var(--inset);min-height:23px}
-.entry:focus-within {border-color:var(--accent)}
-.entry .prompt {color:var(--accent);font-size:13px}
-.entry input {width:0;flex:1;background:transparent;border:0;color:var(--text);font-size:10px;outline:0}
+.meter {display:flex;gap:2px}.meter i {height:3px;width:7px;background:var(--line)}.meter i.lit {background:var(--accent)}
+.tracebody {padding:1px 5px 3px}.toolhead,.planline {gap:4px;min-height:13px;font-size:9px;line-height:10px}
+details>summary {cursor:pointer;list-style:none}summary::-webkit-details-marker {display:none}
+.twisty {font-size:8px;width:6px}.twisty:before {content:'▸'}details[open]>summary .twisty:before {content:'▾'}
+details[open]>summary {color:var(--text)}
+.planline {color:var(--muted);border-bottom:1px solid var(--line);margin-bottom:1px}
+.planline .clock,.toolhead .time {margin-left:auto}
+.thought,.branch {margin:0 0 2px 4px;padding:1px 0 1px 7px;border-left:1px solid var(--line);font-size:9px;line-height:11px;color:var(--muted)}
+.branch>div {display:flex;gap:4px;align-items:center;min-height:11px}
+.branch small {font-size:8px}.branch .reason {padding-left:13px;color:var(--tool-failed)}
+.toolhead .name {min-width:56px}.toolhead .desc {color:var(--muted);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.done {color:var(--tool-done)}.running {color:var(--tool-running)}.waiting {color:var(--tool-waiting)}.failed {color:var(--tool-failed)}
+.current {background:var(--selected);border-left:1px solid var(--tool-running);padding-left:3px;margin-left:-4px}
+.runtools,.cardaction,.queue,.actions {display:flex;align-items:center;gap:5px}
+.runtools {margin:4px 0 0;color:var(--muted)}
+.btn {justify-content:center;gap:3px;background:var(--raised);border:1px solid var(--line);padding:2px 5px;min-height:15px;white-space:nowrap;font-size:9px;line-height:9px}
+.btn.primary {background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.danger {color:var(--danger)}
+.composer {flex:none;margin:2px 8px 5px}
+.entry {display:flex;align-items:center;gap:4px;padding:2px 3px 2px 5px;border:1px solid var(--input-border);background:var(--input-bg);min-height:21px}
+.entry:focus-within {border-color:var(--focus)}.entry .prompt {color:var(--accent);font-size:12px}
+.entry input {width:0;flex:1;background:transparent;border:0;color:var(--text);font-size:9px;outline:0}
 .entry input::placeholder {color:var(--faint);opacity:1}
-.entry button {min-height:15px}
-.queue {display:flex;align-items:center;gap:4px;font-size:9px;color:var(--muted);margin:0 0 4px;min-height:10px}
-.queue span:last-child {overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.foot {height:14px;flex:none;padding:0 8px;display:flex;align-items:center;gap:8px;background:var(--inset);border-top:1px solid var(--line);color:var(--muted);font-size:8px;line-height:9px}
-.foot .status {color:var(--success);display:flex;align-items:center;gap:4px}.dot {height:4px;width:4px;background:currentColor;display:inline-block}
-.keyhint {gap:3px}.foot .push {margin-left:auto}kbd {font-size:8px;line-height:8px;border:1px solid var(--line);padding:0 2px;color:var(--muted);font-weight:normal}
-.world {min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--inset)}
-.worldhead {justify-content:space-between;padding:0 8px;font-size:9px}.worldhead .mode {display:flex;align-items:center;gap:4px;color:var(--success);font-size:8px}
-.land {flex:1;position:relative;min-height:0;overflow:hidden}
+.queue-list {max-height:43px;margin-bottom:2px}
+.queue {min-height:13px;font-size:9px;color:var(--muted);line-height:10px}
+.queue b {color:var(--info);font-weight:400}.queue .queued-text {flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.foot {height:13px;flex:none;padding:0 7px;display:flex;align-items:center;gap:6px;background:var(--inset);border-top:1px solid var(--line);color:var(--muted);font-size:8px;line-height:9px}
+.foot .status {display:flex;align-items:center;gap:4px}.foot .push {margin-left:auto}#feedback {color:var(--info)}
+.keyhint {gap:3px}kbd {font:inherit;border:1px solid var(--line);padding:0 2px}
+.world {position:relative;overflow:hidden}
+.land {position:relative;flex:1;min-height:0}
 #art {position:absolute;width:100%;height:100%;object-fit:cover;object-position:center 58%;image-rendering:pixelated}
-.compass {position:absolute;top:7px;left:50%;transform:translateX(-50%);color:var(--on-overlay);background:var(--overlay);padding:2px 5px;font-size:8px;line-height:8px;letter-spacing:1px;white-space:nowrap}
-.worldhud {position:absolute;bottom:8px;left:8px;max-width:calc(100% - 16px);background:var(--overlay);color:var(--on-overlay);padding:5px 7px 4px;border-left:2px solid var(--accent)}
-.worldhud b {font-size:10px;font-weight:400}.worldhud .coords {font-size:8px;line-height:10px;display:block}
-.cardtop {background:var(--tint);color:var(--accent)}.frow {width:100%;display:flex;align-items:center;gap:5px;padding:3px 6px;text-align:left;min-height:17px}
-.frow+.frow {border-top:1px solid var(--line)}.frow .stat {font-size:8px;margin-left:auto;white-space:nowrap}.filekey {font-size:10px}.filenote {font-size:9px;color:var(--muted)}
-.cardaction {display:flex;justify-content:space-between;align-items:center;padding:4px 6px;border-top:1px solid var(--line);color:var(--muted);font-size:8px}
-.deskwrap {padding:9px 11px 7px;display:flex;flex:1;min-height:0;flex-direction:column}
-.desktitle {margin:0 0 3px;font-size:15px;line-height:17px}
-.deskintro {color:var(--muted);font-size:9px;line-height:11px;margin-bottom:7px}
-.reviewlist {border:1px solid var(--line);flex:none;background:var(--inset)}
-.reviewlist .frow {min-height:18px}
-.selected {background:var(--tint);box-shadow:inset 2px 0 var(--accent);color:var(--accent)}
-.reviewinfo {flex:1;min-height:0;margin-top:7px;padding:0 1px}
-.subhead {display:flex;gap:5px;align-items:center;margin:1px 0 4px;font-size:11px;line-height:13px;font-weight:600}
-.summary {color:var(--muted);font-size:9px;line-height:12px;margin:0 0 4px}
-.diffbox {background:var(--inset);border:1px solid var(--line);padding:3px 5px;font-size:9px;line-height:12px}
-.diffrow {display:flex;gap:6px;align-items:baseline}.diffrow span:first-child {color:var(--success)}
-.diffrow.removed span:first-child {color:var(--danger)}
-.actions {flex:none;display:flex;gap:5px;align-items:center;margin-top:5px;padding-top:5px;border-top:1px solid var(--line)}
-.actions .flat:last-child {margin-left:auto}
-.explorer {display:grid;grid-template-columns:93px 1fr;flex:1;min-height:0;border:1px solid var(--line);background:var(--inset)}
-.filelist {border-right:1px solid var(--line);min-width:0}
-.treehead,.codehead {font-size:9px;line-height:11px;padding:4px 5px;color:var(--muted);background:var(--raised);border-bottom:1px solid var(--line)}
-.treehead {display:flex;align-items:center;gap:3px}
-.treebtn {display:flex;width:100%;padding:4px 3px 4px 5px;gap:3px;align-items:center;text-align:left;font-size:9px}
-.codepane {min-width:0;min-height:0;display:flex;flex-direction:column}
-.codehead {display:flex;gap:3px;align-items:center;justify-content:space-between}.codehead b {font-weight:400;color:var(--text)}
-.codelines {padding:4px 0;font:9px/12px 'Unifont','WenQuanYi Zen Hei Sharp',monospace;flex:1;white-space:pre;tab-size:2}
-.codelines div {min-width:max-content}.codelines i {display:inline-block;font-style:normal;text-align:right;width:16px;margin-right:5px;color:var(--faint)}
-.sectionkey {color:var(--accent)}.string {color:var(--success)}
-.editor {resize:none;flex:1;min-height:0;width:100%;background:var(--inset);border:0;color:var(--text);font:9px/12px 'Unifont','WenQuanYi Zen Hei Sharp',monospace;padding:4px;white-space:pre;tab-size:2}
-.modalwrap {position:absolute;inset:0;display:grid;place-items:center;background:var(--overlay);z-index:4}
-.dialog {width:222px;background:var(--panel);border:1px solid var(--accent);padding:11px}.dialog h2 {font-size:13px;line-height:15px;margin:0 0 5px}.dialog p {font-size:10px;line-height:13px;margin:0 0 8px}
-.mobilelist {display:none}
-.small .work {grid-template-columns:293px 1fr}.small .topbar {height:21px}.small .tabs,.small .worldhead {height:19px}.small .tab {padding:0 5px}
-.small .chatlog {padding:5px 8px}.small .headline {font-size:12px;line-height:13px;margin-bottom:4px}.small .userbox {padding:3px 5px;margin-bottom:5px}
-.small .userhead {margin-bottom:1px}.small .userbox p,.small .agentcopy {font-size:9px;line-height:10px}.small .agentcopy {margin:1px 0 3px}
-.small .agentline {gap:4px}.small .avatar {width:13px;height:13px}.small .avatar .icon {width:10px;height:10px}
-.small .tracetop,.small .cardtop {padding:3px 5px}.small .toolrow {min-height:12px;grid-template-columns:8px 56px 1fr auto}
-.small .tracebody {padding:2px 5px}.small .composer {margin:2px 8px 4px}.small .entry {min-height:19px;padding:1px 3px}
-.small .runtools {margin-top:3px}.small .foot {height:12px}.small .foot .extra {display:none}
-.small .deskwrap {padding:5px 8px}.small .desktitle {font-size:12px;line-height:14px}.small .deskintro {margin-bottom:4px}
-.small .frow,.small .reviewlist .frow {min-height:13px;padding:2px 5px}.small .filelist {display:none}
-.small .filelist.open {display:block;position:absolute;top:0;left:0;bottom:0;width:102px;background:var(--panel);z-index:1;border-right:1px solid var(--line)}
-.small .explorer {grid-template-columns:1fr;position:relative}.small .mobilelist {display:inline-flex}.small .worldhud {left:5px;bottom:5px}
-.small .reviewinfo {margin-top:4px}.small .actions {margin-top:3px;padding-top:3px}.small .extra {display:none}
-.game.closed .work {display:flex}.game.closed .dock,.game.closed .topbar,.game.closed .worldhead {display:none}
-.game.closed .world {flex:1}.game.closed #art {object-fit:cover;object-position:center 52%}
-@media(max-width:680px){body{padding:10px 0}.sheethead,.sheetfoot{padding:0 5px;font-size:12px;gap:6px 10px}.sheetfoot .import{margin-left:0}}
-
-.sessionhead {display:flex;align-items:center;gap:7px;margin-bottom:7px}
-.crest {width:27px;height:27px;flex:none}
-.sessionhead .headline {margin:0 0 2px;font-size:15px;line-height:16px}
-.sessionmeta {font-size:8px;line-height:9px;color:var(--muted)}
-.sessionhead>.clock {margin-left:auto;align-self:center}
-.toolrow {grid-template-columns:10px 66px 1fr auto;min-height:16px}
-.toolrow.current {background:var(--tint);box-shadow:inset 1px 0 var(--accent);margin:0 -3px;padding:0 3px}
+.glass {position:absolute;background:var(--overlay);color:var(--on-overlay);text-shadow:1px 1px var(--text-shadow)}
+.compass {top:6px;left:50%;transform:translateX(-50%);padding:2px 4px;font-size:8px;line-height:8px;white-space:nowrap}
+.mode {left:6px;top:6px;display:flex;gap:3px;align-items:center;padding:3px 4px;font-size:8px;line-height:9px}
+.worldhud {bottom:6px;left:6px;padding:3px 5px;border-left:1px solid var(--preview-file)}
+.worldhud b {font-size:9px;font-weight:normal}.coords {display:block;font-size:8px;line-height:9px}
+.poi {display:flex;gap:3px;align-items:center;padding:2px 3px;font-size:8px;border-left:2px solid var(--preview-file)}
+.poi:before {content:'';position:absolute;right:100%;bottom:-4px;width:6px;height:4px;border-left:1px solid var(--preview-file);border-top:1px solid var(--preview-file)}
+.camera {bottom:6px;right:6px;display:flex;gap:4px;align-items:center;padding:3px 4px;font-size:8px;line-height:9px}
+.camera span {display:flex;gap:2px;align-items:center}.camera span+span {padding-left:4px;border-left:1px solid currentColor}
+.preview-key {left:6px;bottom:31px;padding:2px 4px;display:flex;gap:5px;font-size:8px}
+.addmark,.delmark {display:inline-block;width:5px;height:5px;vertical-align:middle;background:var(--preview-add)}.delmark {background:transparent;border:1px solid var(--preview-remove)}
+.hud {right:7px;top:7px;min-width:86px;padding:5px 6px;border-left:2px solid var(--preview-file);font-size:9px;text-align:left;line-height:11px}
+.hud strong,.hud span {display:flex;align-items:center;gap:4px}.hud span {margin-top:3px;font-size:8px}.hud kbd {margin-left:auto;border-color:currentColor}
+.game.closed .dock,.game.closed .topbar,.game.closed .foot,.game.closed .mode,.game.closed .worldhud,.game.closed .camera,.game.closed .poi,.game.closed .preview-key {display:none}
+.game.closed .work {display:flex}.game.closed .world {flex:1}
 .sprite {width:14px;height:14px;flex:none;vertical-align:middle}
-.frow {padding:2px 6px;gap:6px}
-.reviewlist .frow {min-height:21px}
-.spec {display:flex;align-items:center;gap:16px;background:var(--raised);border:1px solid var(--line);border-bottom:0;padding:4px 6px;font-size:10px}
-.spec small {display:block;font-size:8px;line-height:10px;color:var(--muted)}
-.mat {display:flex;align-items:center;gap:5px}.mat .sprite {width:22px;height:22px}
-.small .sessionhead {gap:5px;margin-bottom:4px}.small .crest {width:19px;height:19px}.small .sessionhead .headline {font-size:12px;line-height:13px;margin:0}.small .sessionmeta {font-size:8px;line-height:8px}
-.small .toolrow {grid-template-columns:8px 62px 1fr auto}.small .sprite {width:10px;height:10px}
-.small .reviewlist .frow {min-height:14px}.small .spec {gap:12px;padding:2px 4px}.small .mat .sprite {width:14px;height:14px}
+.cardtop {color:var(--accent)}.frow {width:100%;display:flex;align-items:center;gap:4px;padding:2px 4px;min-height:18px;text-align:left}
+.frow+.frow {border-top:1px solid var(--line)}.frow .stat {font-size:8px;margin-left:auto;white-space:nowrap}
+.filekey {font-size:10px}.filenote {font-size:9px;color:var(--muted)}.warn {color:var(--warning)}
+.cardaction {justify-content:space-between;padding:3px 5px;border-top:1px solid var(--line);color:var(--muted);font-size:8px}
+.deskwrap {padding:6px 8px}.desktitle {margin:0 0 2px;font-size:18px;line-height:18px}
+.deskintro {color:var(--muted);font-size:9px;line-height:11px;margin-bottom:4px}
+.reviewlist {flex:none}.selected {background:var(--selected);box-shadow:inset 1px 0 var(--accent);color:var(--accent)}
+.reviewinfo {flex:1;min-height:0;margin-top:5px}
+.subhead {gap:4px;margin:1px 0 3px;font-size:10px;line-height:12px}
+.summary {color:var(--muted);font-size:9px;line-height:11px;margin:0 0 4px}
+.spec {display:flex;gap:14px;align-items:center;background:var(--raised);border:1px solid var(--line);padding:3px 5px;font-size:10px}
+.spec small {display:block;color:var(--muted);font-size:8px;line-height:9px}.mat {display:flex;align-items:center;gap:4px}.mat .sprite {width:18px;height:18px}
+.parts {display:flex;flex-wrap:wrap;gap:3px 8px;color:var(--muted);padding:3px 0;font-size:9px;line-height:11px}.parts b {font-weight:normal;color:var(--text)}
+.validation {font-size:9px;line-height:11px;margin:1px 0 4px;display:flex;gap:3px;align-items:baseline}
+.diff {border:1px solid var(--line);background:var(--inset);margin-bottom:2px}
+.diff summary {font-size:9px;padding:3px 5px;display:flex;align-items:center;gap:3px}.diff summary small {margin-left:auto;color:var(--faint);font-size:8px}
+.diff .summary {margin:0;padding:4px 5px;border-top:1px solid var(--line)}
+.patch {overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--scrollbar) transparent;font:9px/12px 'Unifont',monospace}
+.patch div {white-space:pre;width:max-content;min-width:100%;padding:0 4px}.plus {color:var(--diff-add-text);background:var(--diff-add-bg)}.minus {color:var(--diff-remove-text);background:var(--diff-remove-bg)}
+.patch .context {color:var(--muted)}.patch .omitted {color:var(--faint);font-size:8px}
+.actions {flex:none;margin-top:3px;padding-top:4px;border-top:1px solid var(--line)}.actions .flat:last-child {margin-left:auto}
+.explorer {position:relative;display:grid;grid-template-columns:78px 1fr;flex:1;min-height:0;border:1px solid var(--line);background:var(--inset)}
+.filelist {border-right:1px solid var(--line);min-width:0}
+.treehead,.codehead {font-size:9px;line-height:11px;padding:3px 4px;color:var(--muted);background:var(--raised);border-bottom:1px solid var(--line);display:flex;gap:3px;align-items:center}
+.treebtn {display:flex;width:100%;padding:4px 2px;gap:2px;align-items:center;text-align:left;font-size:9px}
+.codehead {justify-content:space-between}.codehead b {font-weight:400;color:var(--text)}
+.codelines,.editor {font:9px/11px 'Unifont',monospace;white-space:pre;tab-size:2;flex:1}
+.codelines {padding:3px 0}.codelines div {min-width:max-content}.codelines i {display:inline-block;font-style:normal;text-align:right;width:13px;margin-right:4px;color:var(--faint)}
+.sectionkey {color:var(--accent)}.string {color:var(--muted)}
+.editor {resize:none;min-height:0;width:100%;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);padding:3px}
+.modalwrap {position:absolute;inset:0;display:grid;place-items:center;background:var(--overlay);z-index:4}
+.dialog {width:222px;background:var(--panel);border:1px solid var(--focus);padding:9px}.dialog h2 {font-size:9px;margin:0 0 4px}.dialog p {font-size:10px;line-height:12px;margin:0 0 7px}
+.followup,.notehistory {margin-top:4px;padding:3px 5px;background:var(--raised);border-left:1px solid var(--accent);font-size:9px;line-height:11px;overflow-wrap:anywhere}
+.followup p {margin:1px 0 3px}.notehistory {color:var(--muted)}
+.mobilelist {display:none}
+.small .work {grid-template-columns:244px 1fr}.small .topbar {height:18px}.small .tabs {height:17px}.small .tab {padding:0 5px}
+.small .desktitle {font-size:9px;line-height:11px}.small .chatlog,.small .deskwrap {padding:4px 6px}.small .toolhead,.small .planline {min-height:11px}.small .composer {margin:1px 6px 3px}.small .entry {min-height:18px;padding:1px 2px 1px 4px}
+.small .foot {height:11px}.small .foot .extra {display:none}.small .filelist {display:none}
+.small .filelist.open {display:block;position:absolute;inset:0 auto 0 0;width:86px;background:var(--panel);z-index:1}
+.small .explorer {grid-template-columns:1fr}.small .mobilelist {display:inline-flex}
+.small .frow {min-height:15px;padding:1px 3px}.small .reviewinfo {margin-top:3px}.small .sprite {width:12px;height:12px}
+@media(max-width:680px){body{padding:6px 0}.sheethead,.sheetnav,.themebar,.sheetfoot{padding-left:4px;padding-right:4px;font-size:12px}.sheetnav a,.palette{padding:3px 4px}.themebar .import{margin-left:0}}
 
-.followup,.notehistory {margin-top:5px;padding:4px 6px;background:var(--raised);border-left:2px solid var(--accent);font-size:9px;line-height:13px}
-.followup p {margin:0 0 3px;overflow-wrap:anywhere}
-.notehistory {color:var(--muted);overflow-wrap:anywhere}
-
-.poi {position:absolute;display:flex;align-items:center;gap:3px;font-size:8px;line-height:9px;padding:2px 4px;border-left:2px solid var(--accent);background:var(--overlay);color:var(--on-overlay)}
-.poi:before {content:'';position:absolute;right:100%;bottom:-4px;width:7px;height:4px;border-left:1px solid var(--accent);border-top:1px solid var(--accent)}
 </style></head>
 <body data-scene="narrow">
 <main class="sheet" id="sheet">
-<header class="sheethead"><strong>Prompt2Structure</strong><span>/</span><span>建造工作台</span><span>/</span><span>窄屏</span><span class="dims" id="dimensions"></span></header>
-<div id="frame"><section id="game" class="game" aria-label="Minecraft 内的 P2S 工作台">
-<div id="underlay" style="display:contents">
-<header class="topbar"><span class="logo" id="brand" aria-label="P2S"></span><span class="slash">/</span><strong class="project">松脊营地</strong><span class="minor">lookout</span><button class="switch" type="button" data-act="theme" title="切换主题" aria-label="切换主题"><i class="swatches"></i><span id="themeName"></span> ⇄</button></header>
-<div class="work"><section class="dock"><nav id="tabs" class="tabs" aria-label="工作台视图"></nav><div id="view" class="view"></div></section>
-<aside class="world" aria-label="游戏世界"><div class="worldhead"><span class="tag" id="worldTitle"></span><button id="worldmode" class="mode" data-act="preview" title="切换提案预览与已应用的世界"></button></div>
-<div class="land"><canvas id="art" role="img" aria-label="像素山景，西坡云杉林和湖畔的瞭望塔建造选区"></canvas><span class="poi" id="poi" hidden></span><span class="compass" aria-label="面向西北">W · ┊ NW ┊ · N</span><div class="worldhud"><b id="placename"></b><span class="coords">XYZ &nbsp;128 / 78 / −64</span></div></div></aside></div>
-<footer class="foot"><span id="status" class="status"></span><span id="feedback" role="status"></span><span class="push"></span><span id="hotkeys" class="row gap"></span></footer>
-</div>
-<div class="modalwrap" id="modal" hidden><section class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogText"><h2 id="dialogTitle"></h2><p id="dialogText"></p><div class="row gap"><button class="btn" id="cancel">返回</button><button class="btn danger" id="confirm"></button></div></section></div>
-</section></div>
-<nav class="sheetfoot" aria-label="样稿目录"><a href="index.html">样稿目录</a>
+<header class="sheethead"><strong>Prompt2Structure</strong><span>/</span><span>建造工作台</span><span class="dims" id="dimensions"></span></header>
+<nav class="sheetnav" aria-label="样稿目录"><a href="index.html">样稿目录</a>
 <a href="running.html">运行中</a>
 <a href="pending.html">待审卡片</a>
 <a href="review.html">逐份审阅</a>
 <a href="files.html">工作区文件</a>
-<a href="narrow.html" class="current" aria-current="page">窄屏</a><button id="importBtn" class="import">载入主题 JSON</button><input type="file" accept=".json,application/json" id="themeFile" hidden></nav>
-<div class="sheetfoot"><button class="flat" style="font-size:inherit" id="restart">↺ 从发起开始</button><button class="flat action" style="font-size:inherit" id="advance">推进演示：生成完成 →</button><span id="importMessage" role="status"></span></div>
-</main><script id="themeData" type="application/json">{
-  "version": 1,
+<a href="narrow.html" aria-current="page">窄屏</a>
+<a href="hud.html">面板 HUD</a>
+<a href="running.html?menu=open">更多菜单</a></nav>
+<div class="themebar"><div class="palettes" id="palettes" role="group" aria-label="主题"></div><button id="importBtn" class="import">载入主题 JSON</button><input type="file" accept=".json,application/json" id="themeFile" hidden></div>
+<div id="frame"><section id="game" class="game" aria-label="Minecraft 内的 P2S 工作台">
+<div id="underlay" style="display:contents">
+<header class="topbar"><span class="logo" id="brand" aria-label="P2S"></span><span class="slash">/</span><strong>松脊营地</strong><span class="slash">/</span><span class="minor">lookout</span><button class="switch" type="button" data-act="appearance" aria-controls="pop"><i></i><span id="themeName"></span></button><button class="more" id="more" data-act="more" aria-label="更多菜单" aria-controls="pop" aria-expanded="false">⋯</button><button class="close-panel" data-act="close" aria-label="收起面板（O）">×</button><section class="pop" id="pop" hidden aria-label="工作台菜单"></section></header>
+<div class="work"><section class="dock"><nav id="tabs" class="tabs" aria-label="工作台视图"></nav><div id="view" class="view"></div></section>
+<aside class="world" aria-label="游戏世界"><div class="land"><canvas id="art" role="img" aria-label="松脊营地西坡、云杉林与山脊瞭望塔的像素预览"></canvas><button id="worldmode" class="mode glass" data-act="preview"></button><span class="compass glass" aria-label="面向西北">W · ┊ NW ┊ · N</span><span class="poi glass" id="poi" hidden></span><span class="preview-key glass" id="legend" hidden></span><div class="worldhud glass"><b id="placename"></b><span class="coords">XYZ　128 / 78 / −64</span></div><div class="camera glass" id="camera" aria-label="3D 预览控件位置示意"></div><button class="hud glass" hidden id="hud" data-act="open" aria-label="打开 Agent 工作台"></button></div></aside></div>
+<footer class="foot"><span id="status" class="status"></span><span id="feedback" role="status"></span><span class="push"></span><span id="hotkeys" class="row gap"></span></footer></div>
+<div class="modalwrap" id="modal" hidden><section class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogText"><h2 id="dialogTitle"></h2><p id="dialogText"></p><div class="row gap"><button class="btn" id="cancel">返回</button><button class="btn danger" id="confirm"></button></div></section></div>
+</section></div><div class="sheetfoot"><button id="restart">↺ 从发起开始</button><button id="advance">推进演示：生成完成 →</button><span id="importMessage" role="status"></span></div></main>
+
+<script id="themeData" type="application/json">{
+  "version": 2,
   "default": "ember",
   "themes": [
     {
       "id": "ember",
       "name": "余烬",
       "colors": {
-        "backdrop": "#181d1c",
-        "panel": "#202725",
-        "raised": "#29312e",
-        "inset": "#1b211f",
-        "line": "#404942",
-        "text": "#f0efdf",
-        "muted": "#b3b9aa",
-        "faint": "#98a398",
-        "accent": "#ffb767",
-        "on-accent": "#251e18",
-        "tint": "#3e372c",
-        "success": "#a7d7b1",
-        "danger": "#ffaaa0",
-        "overlay": "#1a221ee8",
-        "on-overlay": "#f1f1df"
+        "backdrop": "#202624",
+        "inset": "#262c29",
+        "panel": "#2b322e",
+        "raised": "#333935",
+        "line": "#4e544e",
+        "text": "#c5c6b7",
+        "muted": "#afb1a4",
+        "faint": "#9a9d91",
+        "accent": "#d4ad84",
+        "on-accent": "#302a24",
+        "hover": "#f1eee40b",
+        "pressed": "#f1eee417",
+        "focus": "#d2b18c",
+        "input-bg": "#242a28",
+        "input-border": "#5c615a",
+        "selected": "#3e4037",
+        "scrollbar": "#6a6f66",
+        "success": "#a0be9b",
+        "warning": "#cdb086",
+        "danger": "#d9a69e",
+        "info": "#97b9cf",
+        "diff-add-bg": "#38423b",
+        "diff-add-text": "#a0be9b",
+        "diff-remove-bg": "#3f3f3b",
+        "diff-remove-text": "#d9a69e",
+        "tool-done": "#a0be9b",
+        "tool-running": "#d4ad84",
+        "tool-waiting": "#a9ab9e",
+        "tool-failed": "#d9a69e",
+        "preview-add": "#aac4a3",
+        "preview-remove": "#dbaba1",
+        "preview-file": "#d4ad84",
+        "overlay": "#272e2be6",
+        "on-overlay": "#c5c6b7",
+        "text-shadow": "#15181655"
       }
     },
     {
       "id": "glacier",
       "name": "冰川",
       "colors": {
-        "backdrop": "#b8c9ca",
-        "panel": "#e0e9e7",
-        "raised": "#f0f4eb",
-        "inset": "#d4e0de",
-        "line": "#9aafaf",
-        "text": "#1c343e",
-        "muted": "#38565d",
-        "faint": "#4b656a",
-        "accent": "#0b666a",
-        "on-accent": "#f1f6e9",
-        "tint": "#c1d9d4",
-        "success": "#286643",
-        "danger": "#9b4036",
-        "overlay": "#dce9e6ed",
-        "on-overlay": "#1b3e46"
+        "backdrop": "#c9d3d3",
+        "inset": "#d3dddd",
+        "panel": "#dbe5e5",
+        "raised": "#e3e9e6",
+        "line": "#b6c2c4",
+        "text": "#384e56",
+        "muted": "#485d64",
+        "faint": "#52666d",
+        "accent": "#2f5d67",
+        "on-accent": "#e5eeec",
+        "hover": "#18191c0b",
+        "pressed": "#18191c16",
+        "focus": "#305b64",
+        "input-bg": "#e7ebe6",
+        "input-border": "#a7b5b7",
+        "selected": "#c6d4d5",
+        "scrollbar": "#98a7aa",
+        "success": "#375c49",
+        "warning": "#595238",
+        "danger": "#614a4c",
+        "info": "#2f586f",
+        "diff-add-bg": "#c8d5d3",
+        "diff-add-text": "#375c49",
+        "diff-remove-bg": "#cdd3d3",
+        "diff-remove-text": "#614a4c",
+        "tool-done": "#375c49",
+        "tool-running": "#2f5d67",
+        "tool-waiting": "#556970",
+        "tool-failed": "#614a4c",
+        "preview-add": "#375c49",
+        "preview-remove": "#614a4c",
+        "preview-file": "#2f5d67",
+        "overlay": "#dfe7e5ec",
+        "on-overlay": "#384e56",
+        "text-shadow": "#443c321e"
+      }
+    },
+    {
+      "id": "indigo",
+      "name": "靛夜",
+      "colors": {
+        "backdrop": "#20252f",
+        "inset": "#262b39",
+        "panel": "#2b3042",
+        "raised": "#333848",
+        "line": "#4e5364",
+        "text": "#c4c8d8",
+        "muted": "#afb3c3",
+        "faint": "#999dae",
+        "accent": "#9fafd2",
+        "on-accent": "#262c3a",
+        "hover": "#f1eee40b",
+        "pressed": "#f1eee417",
+        "focus": "#a5b3d3",
+        "input-bg": "#242936",
+        "input-border": "#5c6172",
+        "selected": "#383e52",
+        "scrollbar": "#6a6e80",
+        "success": "#9abda7",
+        "warning": "#c4b094",
+        "danger": "#cfa7ab",
+        "info": "#92b9d8",
+        "diff-add-bg": "#38404e",
+        "diff-add-text": "#9abda7",
+        "diff-remove-bg": "#3e3e4e",
+        "diff-remove-text": "#cfa7ab",
+        "tool-done": "#9abda7",
+        "tool-running": "#9fafd2",
+        "tool-waiting": "#a8adbd",
+        "tool-failed": "#cfa7ab",
+        "preview-add": "#a5c3ad",
+        "preview-remove": "#d2acad",
+        "preview-file": "#9fafd2",
+        "overlay": "#272c3be6",
+        "on-overlay": "#c4c8d8",
+        "text-shadow": "#15181655"
+      }
+    },
+    {
+      "id": "clay",
+      "name": "陶笺",
+      "colors": {
+        "backdrop": "#d7c9c3",
+        "inset": "#e1d3cc",
+        "panel": "#eadbd4",
+        "raised": "#ede2da",
+        "line": "#c8b9b2",
+        "text": "#554640",
+        "muted": "#64554f",
+        "faint": "#6d5e58",
+        "accent": "#754951",
+        "on-accent": "#f5e7e1",
+        "hover": "#18191c0b",
+        "pressed": "#18191c16",
+        "focus": "#70494e",
+        "input-bg": "#efe6dd",
+        "input-border": "#baaba5",
+        "selected": "#dbc9c4",
+        "scrollbar": "#ad9e97",
+        "success": "#475843",
+        "warning": "#694d32",
+        "danger": "#724546",
+        "info": "#3e546a",
+        "diff-add-bg": "#d7ccc3",
+        "diff-add-text": "#475843",
+        "diff-remove-bg": "#dccac4",
+        "diff-remove-text": "#724546",
+        "tool-done": "#475843",
+        "tool-running": "#754951",
+        "tool-waiting": "#70615b",
+        "tool-failed": "#724546",
+        "preview-add": "#475843",
+        "preview-remove": "#724546",
+        "preview-file": "#754951",
+        "overlay": "#ecdfd7ec",
+        "on-overlay": "#554640",
+        "text-shadow": "#443c321e"
+      }
+    },
+    {
+      "id": "fern",
+      "name": "苔庭",
+      "colors": {
+        "backdrop": "#252a24",
+        "inset": "#2c3229",
+        "panel": "#33392e",
+        "raised": "#3b4035",
+        "line": "#555a4f",
+        "text": "#c6cabc",
+        "muted": "#b1b6a8",
+        "faint": "#9da194",
+        "accent": "#a9bf91",
+        "on-accent": "#263023",
+        "hover": "#f1eee40b",
+        "pressed": "#f1eee417",
+        "focus": "#aec198",
+        "input-bg": "#2a2f28",
+        "input-border": "#62675b",
+        "selected": "#404839",
+        "scrollbar": "#6f7468",
+        "success": "#9dc09b",
+        "warning": "#c4b389",
+        "danger": "#cfab9e",
+        "info": "#95bcc8",
+        "diff-add-bg": "#3f493b",
+        "diff-add-text": "#9dc09b",
+        "diff-remove-bg": "#45463b",
+        "diff-remove-text": "#cfab9e",
+        "tool-done": "#9dc09b",
+        "tool-running": "#a9bf91",
+        "tool-waiting": "#acb0a2",
+        "tool-failed": "#cfab9e",
+        "preview-add": "#a7c6a3",
+        "preview-remove": "#d2b0a1",
+        "preview-file": "#a9bf91",
+        "overlay": "#2e342be6",
+        "on-overlay": "#c6cabc",
+        "text-shadow": "#15181655"
+      }
+    },
+    {
+      "id": "mauve",
+      "name": "暮藤",
+      "colors": {
+        "backdrop": "#28272e",
+        "inset": "#312d37",
+        "panel": "#39333f",
+        "raised": "#403a46",
+        "line": "#5c5460",
+        "text": "#d0c4d0",
+        "muted": "#bbb0bc",
+        "faint": "#a69ba7",
+        "accent": "#c4a7c7",
+        "on-accent": "#352c38",
+        "hover": "#f1eee40b",
+        "pressed": "#f1eee417",
+        "focus": "#c6acc8",
+        "input-bg": "#2e2b34",
+        "input-border": "#69616d",
+        "selected": "#48404e",
+        "scrollbar": "#776e7a",
+        "success": "#a3baa8",
+        "warning": "#caae96",
+        "danger": "#d5a5ab",
+        "info": "#9cb6d5",
+        "diff-add-bg": "#45434b",
+        "diff-add-text": "#a3baa8",
+        "diff-remove-bg": "#4b404b",
+        "diff-remove-text": "#d5a5ab",
+        "tool-done": "#a3baa8",
+        "tool-running": "#c4a7c7",
+        "tool-waiting": "#b5aab6",
+        "tool-failed": "#d5a5ab",
+        "preview-add": "#acc1ae",
+        "preview-remove": "#d8aaad",
+        "preview-file": "#c4a7c7",
+        "overlay": "#332f39e6",
+        "on-overlay": "#d0c4d0",
+        "text-shadow": "#15181655"
+      }
+    },
+    {
+      "id": "vellum",
+      "name": "砂纸",
+      "colors": {
+        "backdrop": "#d5cfbe",
+        "inset": "#dfd9c7",
+        "panel": "#e8e1ce",
+        "raised": "#ece6d6",
+        "line": "#c5bead",
+        "text": "#514b3e",
+        "muted": "#605a4c",
+        "faint": "#696355",
+        "accent": "#6c502b",
+        "on-accent": "#f3ecdc",
+        "hover": "#18191c0b",
+        "pressed": "#18191c16",
+        "focus": "#684f2e",
+        "input-bg": "#eee9da",
+        "input-border": "#b8b1a0",
+        "selected": "#d8cfba",
+        "scrollbar": "#aaa493",
+        "success": "#445a3b",
+        "warning": "#674e29",
+        "danger": "#70463e",
+        "info": "#3b5664",
+        "diff-add-bg": "#d5d1bd",
+        "diff-add-text": "#445a3b",
+        "diff-remove-bg": "#dacfbd",
+        "diff-remove-text": "#70463e",
+        "tool-done": "#445a3b",
+        "tool-running": "#6c502b",
+        "tool-waiting": "#6c6658",
+        "tool-failed": "#70463e",
+        "preview-add": "#445a3b",
+        "preview-remove": "#70463e",
+        "preview-file": "#6c502b",
+        "overlay": "#eae4d2ec",
+        "on-overlay": "#514b3e",
+        "text-shadow": "#443c321e"
+      }
+    },
+    {
+      "id": "graphite",
+      "name": "石墨",
+      "colors": {
+        "backdrop": "#242729",
+        "inset": "#2b2e30",
+        "panel": "#323436",
+        "raised": "#3a3b3d",
+        "line": "#545658",
+        "text": "#c8cac9",
+        "muted": "#b3b5b4",
+        "faint": "#9ea0a0",
+        "accent": "#b5b9b6",
+        "on-accent": "#2e3232",
+        "hover": "#f1eee40b",
+        "pressed": "#f1eee417",
+        "focus": "#b8bcb9",
+        "input-bg": "#292c2d",
+        "input-border": "#626465",
+        "selected": "#404344",
+        "scrollbar": "#707272",
+        "success": "#9bbfa0",
+        "warning": "#cab18a",
+        "danger": "#d7a7a4",
+        "info": "#92bbd6",
+        "diff-add-bg": "#3e4442",
+        "diff-add-text": "#9bbfa0",
+        "diff-remove-bg": "#454143",
+        "diff-remove-text": "#d7a7a4",
+        "tool-done": "#9bbfa0",
+        "tool-running": "#b5b9b6",
+        "tool-waiting": "#adafaf",
+        "tool-failed": "#d7a7a4",
+        "preview-add": "#a5c5a7",
+        "preview-remove": "#d9aca7",
+        "preview-file": "#b5b9b6",
+        "overlay": "#2d3031e6",
+        "on-overlay": "#c8cac9",
+        "text-shadow": "#15181655"
       }
     }
   ]
@@ -235,9 +528,11 @@ button,a,input,textarea { -webkit-tap-highlight-color:transparent }
 </script>
 <script>// All artwork is rasterized on a logical-pixel grid using solid rectangles.
 function paintWorld(canvas, view) {
-  const W = 282, H = 296;
+  const H=296, W=Math.max(282,Math.round(canvas.clientWidth*H/Math.max(1,canvas.clientHeight)));
+  const left=Math.floor((W-282)/2), right=282+left+1;
   canvas.width = W; canvas.height = H;
   const g = canvas.getContext('2d');
+  g.translate(left,0);
   const r = (x,y,w,h,c) => { g.fillStyle=c; g.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h)); };
   function poly(points, c) {
     const min=Math.max(0,Math.floor(Math.min(...points.map(p=>p[1]))));
@@ -260,21 +555,23 @@ function paintWorld(canvas, view) {
     for(let i=0;i<=n;i+=step)r(a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n,1,1,c);
   }
   const noise=(x,z,k=0)=>{const n=Math.sin(x*127.1+z*311.7+k*74.7)*43758.5453; return n-Math.floor(n);};
-  r(0,0,W,H,'#eeb989');
+  r(-left,0,W,H,'#eeb989');
   // Broken, stepped bands of high cloud in late alpine light.
-  [[0,34,'#c59490'],[34,23,'#dda796'],[57,19,'#edb998'],[76,19,'#f5c8a0'],[95,35,'#f5d4a6']].forEach(([y,h,c])=>r(0,y,W,h,c));
+  [[0,34,'#c59490'],[34,23,'#dda796'],[57,19,'#edb998'],[76,19,'#f5c8a0'],[95,35,'#f5d4a6']].forEach(([y,h,c])=>r(-left,y,W,h,c));
   [[8,25,21],[27,23,16],[152,34,26],[171,32,27],[212,55,24],[226,52,11],[37,62,29],[54,59,11],[83,49,12],[6,81,24]].forEach(([x,y,w])=>{
     r(x,y,w,2,'#f8c7a6');r(x+5,y+2,w+12,1,'#eeb29b');
   });
   r(38,52,21,21,'#ffecb6');r(38,67,21,1,'#ffdcac');
   r(33,70,20,2,'#f5c49f');r(37,72,11,1,'#f5c49f');
   function range(peaks,base,shade,light,snow) {
+    for(let x=-20;x>=-left-24;x-=24)peaks.unshift([x,80+noise(x,2)*24]);
+    for(let x=304;x<=right+24;x+=24)peaks.push([x,84+noise(x,4)*24]);
     const ridge=[];
     for(let i=0;i<peaks.length-1;i++){
       const [x,y]=peaks[i],[u,v]=peaks[i+1];ridge.push(peaks[i]);
       for(let a=x+3;a<u;a+=3){const t=(a-x)/(u-x);ridge.push([a,y+(v-y)*t+Math.round(noise(a,i)*3)-1]);}
     }
-    poly([[0,139],...ridge,peaks.at(-1),[282,139]],base);
+    poly([[-left,139],...ridge,peaks.at(-1),[right,139]],base);
     for(let i=1;i<peaks.length-1;i++) {
       const [x,y]=peaks[i],[a,b]=peaks[i-1],[u,v]=peaks[i+1];
       if(y>=b||y>=v) continue;
@@ -288,11 +585,11 @@ function paintWorld(canvas, view) {
   range([[-2,102],[22,85],[42,97],[63,83],[78,88],[114,46],[138,77],[148,66],[171,93],[186,78],[198,85],[222,62],[240,80],[258,73],[284,89]],'#c19388','#a88085','#f9dbb5',true);
   range([[-2,97],[17,108],[43,91],[55,101],[73,86],[95,106],[123,94],[147,113],[165,90],[180,99],[205,80],[227,101],[251,86],[285,97]],'#968c8d','#837e84','#d6b7a2',true);
   const far=[];
-  for(let x=0;x<=284;x+=2)far.push([x,113+Math.sin(x*.028)*5+Math.sin(x*.11)*2-noise(x,1)*4]);
-  poly([[0,149],...far,[284,149]],'#798687');
-  r(0,136,W,160,'#77999b');
-  for(let i=0;i<335;i++) {
-    const x=noise(i,2)*W,y=137+noise(i,5)*107;
+  for(let x=-left;x<=right+2;x+=2)far.push([x,113+Math.sin(x*.028)*5+Math.sin(x*.11)*2-noise(x,1)*4]);
+  poly([[-left,149],...far,[right+2,149]],'#798687');
+  r(-left,136,W,160,'#77999b');
+  for(let i=0;i<335*W/282;i++) {
+    const x=noise(i,2)*W-left,y=137+noise(i,5)*107;
     r(x,y,2+noise(i,6)*11,1,noise(i,7)>.5?'#9fb1a7':'#678e92');
   }
   for(let i=0;i<48;i++){const y=136+i*.65; r(48+(noise(i,8)-.5)*(i*.9+5),y,2+noise(i,9)*8,1,'#d1bf9c');}
@@ -300,7 +597,7 @@ function paintWorld(canvas, view) {
     r(x,y-h,1,h,c);
     for(let i=1;i<5;i++) {const w=Math.max(1,Math.round(h*i*.045));r(x-w,y-h+i*h*.17,w*2+1,h*.18,c);}
   }
-  for(let x=0;x<W;x+=2) {
+  for(let x=-left;x<right+1;x+=2) {
     const y=131+Math.sin(x*.035)*5+Math.sin(x*.1)*2;
     distantPine(x,y,3+noise(x,1)*7,'#657d7a');r(x,y,2,136-y+4,'#657d7a');
   }
@@ -348,7 +645,7 @@ function paintWorld(canvas, view) {
     }
     box(x-.16,z-.16,y+h*1.01,.34,.34,.24,green[3]);
   }
-  [[-16,0,6],[-14,2,7],[-12,2,9],[-10,-1,6],[-8,-3,5],[4,-14,6],[7,-13,10],[10,-13,7],[12,-11,11],[13,-7,8],[16,-7,12],[-7,7,6]].forEach(t=>pine(...t));
+  [[-28,10,7],[-24,7,9],[-21,7,5],[18,-16,8],[24,-13,10],[-16,0,6],[-14,2,7],[-12,2,9],[-10,-1,6],[-8,-3,5],[4,-14,6],[7,-13,10],[10,-13,7],[12,-11,11],[13,-7,8],[16,-7,12],[-7,7,6]].forEach(t=>pine(...t));
   const stone=['#aaa799','#8e8b7f','#666e65'];
   for(const [x,z,w,h] of [[-3,23,3.2,.8],[1.1,21.8,1.9,.6],[2.5,23.4,1,.8],[10,15.2,2.8,.55],[12.1,15.9,2.2,.45],[9,15.7,1,.5]]){
     box(x,z,0,w,w*.63,h,stone);box(x+.13,z+.07,h,w*.55,w*.31,.27,['#bcb39a','#9c9981','#848978']);
@@ -426,10 +723,18 @@ function paintWorld(canvas, view) {
   }
   // Dashed selection corners belong to the game overlay, so follow the UI theme.
   if(view.preview){
-    const c=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const css=getComputedStyle(document.documentElement);
+    const c=css.getPropertyValue('--preview-file').trim();
     const bb=[[-6,-5,0,6,6,15.4],[-4.9,-4.9,15.4,4.9,4.9,20],[-4.3,4.6,0,-1,15.6,10]][view.selected];
     const [x,z,y,X,Z,Y]=bb;
     if(view.review){
+      const add=css.getPropertyValue('--preview-add').trim(),remove=css.getPropertyValue('--preview-remove').trim();
+      const tiles=[[[2,9.8,3],[4,9.8,4]],[[-2,18,2],[1,17.5,3]],[[-3,6,8],[-3,4,10]]][view.selected];
+      for(const [tx,ty,tz] of tiles){
+        const [sx,sy]=P(tx,ty,tz);
+        r(sx-2,sy,5,1,add);r(sx,sy-2,1,5,add);
+        if(view.replaces){line([sx+4,sy-2],[sx+8,sy+2],remove);line([sx+8,sy-2],[sx+4,sy+2],remove);}
+      }
       [[x,Y,z],[X,Y,z],[X,Y,Z],[x,Y,Z]].forEach((a,i,all)=>{
         const b=all[(i+1)%4];line(P(...a),P(...b),c,3);
         line(P(...a),P(a[0],Y-1,a[2]),c);
@@ -450,6 +755,13 @@ function paintWorld(canvas, view) {
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const paths = {
+  warning:'M4 0h1v2h1v2h1v2h1v2h1v1H0V8h1V6h1V4h1V2h1z M4 3v3h1V3z M4 7v1h1V7z',
+  rotate:'M1 3h2V2h4v1h1v3H7V4H3v2H2V5H1V4H0V3z M6 6h2v1H7v1H3V7h3z',
+  zoom:'M1 0h4v1h1v4H5v1H1V5H0V1h1z M1 1v4h4V1z M5 5h1v1h1v1h1v1h1v1H7V8H6V7H5z',
+  reset:'M0 0h3v1H1v2H0z M6 0h3v3H8V1H6z M0 6h1v2h2v1H0z M8 6h1v3H6V8h2z M4 4h1v1H4z',
+  undo:'M3 1h1v2h3v1h1v1h1v3H7V5H4v2H3V6H2V5H1V4H0V3h1V2h2z',
+  redo:'M5 1h1v1h2v1h1v1H8v1H7v1H6v1H5V5H2v3H0V5h1V4h1V3h3z',
+  settings:'M0 2h2V1h2v1h5v1H4v1H2V3H0z M0 6h5V5h2v1h2v1H7v1H5V7H0z',
   chat:'M0 1h9v6H4L1 9V7H0z M1 2v4h2v1l1-1h4V2z',
   folder:'M0 2h4l1 1h4v5H0z M1 4v3h7V4z',
   review:'M1 1h6v1h2v7H1z M2 2v6h6V3H6V2z M3 5h1v1h1V5h1V4h1v2H6v1H4V6H3z',
@@ -469,8 +781,7 @@ const paths = {
 };
 const icon = (name,cl='') => '<svg aria-hidden="true" class="icon '+cl+'" viewBox="0 0 9 9"><path fill="currentColor" fill-rule="evenodd" d="'+paths[name]+'"/></svg>';
 const logo='<svg viewBox="0 0 17 17" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" d="M1 7h3V5h3V3h3V1h3v3h3v7h-3v2h-3v2H7v2H4v-3H1z"/><path fill="var(--on-accent)" d="M3 8h3V6h3V4h2v2H9v2H6v2H3z M7 11h3V9h3V7h1v3h-2v2H9v2H7z"/></svg>';
-// The crest and the three inventory sprites fit on a Minecraft-sized texture sheet.
-const crest='<svg class="crest" viewBox="0 0 27 27" aria-hidden="true" shape-rendering="crispEdges"><rect width="27" height="27" fill="var(--tint)"/><path d="M2 8V2h6M19 2h6v6M2 19v6h6M25 19v6h-6" fill="none" stroke="var(--line)"/><path fill="var(--accent)" d="M13 3h1v2h3v2h3v2H8V7h3V5h2z M9 10h2v4H9z M13 10h2v4h-2z M17 10h2v4h-2z M7 14h14v2H7z M9 17h2v5H9z M17 17h2v5h-2z M11 20h2v-1h2v-2h2v2h-2v2h-2v1h-2z M5 22h17v1H5z"/></svg>';
+// The inventory sprites fit on a Minecraft-sized texture sheet.
 function sprite(i) {
   const body=[
     '<path fill="#dca96e" d="M2 5l7-4 7 4-7 4z"/><path fill="#ab784f" d="M2 5l7 4v8l-7-4z"/><path fill="#73553f" d="M9 9l7-4v8l-7 4z"/><path fill="none" stroke="#986b49" d="M5 5l4-2 4 2-4 2z M4 7v6m3-5v6"/><path stroke="#ad8055" d="M12 8v6m2-7v6"/>',
@@ -489,22 +800,41 @@ function useTheme(id,remember=true) {
   const t=catalog.themes.find(t=>t.id===id)||catalog.themes[0];themeId=t.id;
   for(const [name,value] of Object.entries(t.colors))document.documentElement.style.setProperty('--'+name,value);
   $('themeName').textContent=t.name;
+  $('palettes').innerHTML=paletteButtons();
+  if(state)drawMenu();
   if(remember)try{localStorage.setItem('p2s-layout-theme',id);}catch{}
 }
-function cycleTheme(){const i=catalog.themes.findIndex(t=>t.id===themeId);useTheme(catalog.themes[(i+1)%catalog.themes.length].id);world();}
+const legacyFields='backdrop panel raised inset line text muted faint accent on-accent tint success danger overlay on-overlay'.split(' ');
+function upgradeLegacy(t) {
+  const c=t.colors;
+  const [r,g,b]=[1,3,5].map(i=>parseInt(c.panel.slice(i,i+2),16));
+  const base=colors.themes.find(x=>x.id===(.213*r+.715*g+.072*b>128?'glacier':'ember')).colors;
+  const {tint,...common}=c;
+  return {...t,colors:{...base,...common,selected:tint,focus:c.accent,'input-bg':c.inset,'input-border':c.line,
+    'tool-done':c.success,'tool-running':c.accent,'tool-waiting':c.faint,'tool-failed':c.danger,
+    'diff-add-text':c.success,'diff-remove-text':c.danger,'preview-file':c.accent,'preview-add':c.success,'preview-remove':c.danger}};
+}
 async function importTheme(file){
   if(!file)return;
-  try{
+  try {
     const data=JSON.parse(await file.text());
+    if(![1,2].includes(data.version)||!Array.isArray(data.themes)||!data.themes.length)throw Error();
+    const keys=data.version===1?legacyFields:defaultColors;
     const ids=new Set();
-    if(data.version!==1||!Array.isArray(data.themes)||!data.themes.length||data.themes.some(t=>{
-      if(!t||typeof t.id!=='string'||!t.id||ids.has(t.id)||typeof t.name!=='string'||!t.name||!t.colors)return true;
+    for(const t of data.themes){
+      if(!t||typeof t.id!=='string'||!t.id.trim()||ids.has(t.id)||typeof t.name!=='string'||!t.name.trim()||!t.colors)throw Error();
       ids.add(t.id);
-      return Object.keys(t.colors).length!==defaultColors.length||defaultColors.some(k=>!/^#[\da-f]{6}([\da-f]{2})?$/i.test(t.colors[k]));
-    })||!ids.has(data.default))throw Error();
-    catalog=data;useTheme(data.default,false);world();$('importMessage').textContent='已载入 '+file.name+'，可用游戏顶栏切换配色。';
-  }catch{$('importMessage').textContent='读取失败，请检查版本、配色字段和十六进制颜色。';}
+      if(Object.keys(t.colors).length!==keys.length||keys.some(k=>typeof t.colors[k]!=='string'||!/^#[\da-f]{6}([\da-f]{2})?$/i.test(t.colors[k])))throw Error();
+    }
+    if(!ids.has(data.default))throw Error();
+    const merged=new Map(colors.themes.map(t=>[t.id,t]));
+    for(const t of data.themes)merged.set(t.id,data.version===1?upgradeLegacy(t):t);
+    catalog={version:2,default:data.default,themes:[...merged.values()]};
+    useTheme(data.default,false);world();
+    $('importMessage').textContent='已载入 '+file.name+(data.version===1?' · 已补全旧版字段':'');
+  }catch{$('importMessage').textContent='读取失败，请检查版本、字段和十六进制颜色。';}
 }
+
 const files=[
   {key:'tower.toml',name:'塔身',title:'架高塔身',part:'tower',block:'spruce_log',label:'云杉木',size:[9,16,9],origin:[0,0,0],summary:'四根云杉立柱托起观景台，窗沿留出一圈看山的位置。',rows:['云杉立柱 × 4','环形观景台 × 1'],delta:124},
   {key:'roof.toml',name:'屋顶',title:'覆上铜顶',part:'roof',block:'weathered_cut_copper',label:'锈铜',size:[11,5,11],origin:[-1,16,-1],summary:'屋面向外挑出一格，逐层收窄。保留塔顶的小旗。',rows:['阶梯形屋面 × 5 层','四面各出檐 1 格'],delta:76},
@@ -551,6 +881,7 @@ function toml(i) {
     lines.push('','[[part.action]]','type = "box"','block = "'+block+'"','from = ['+from.join(', ')+']','to = ['+to.join(', ')+']');
     if(block==='main'&&i===2)lines.push('facing = "north"');
   });
+  if(i===1)lines.push('','[[part]]','name = "finial"','priority = 1');
   return lines.join('\n');
 }
 function copperVariant(text){
@@ -559,35 +890,120 @@ function copperVariant(text){
 const sample='在山脊上建一座木瞭望塔，要有铜屋顶，再用栈梯接到西坡。';
 const entry=document.body.dataset.scene;
 let state, onConfirm;
+function paletteButtons() {
+  return catalog.themes.map((t,i) => {
+    const swatch = '<span class="sample" aria-hidden="true" style="--sw-panel:'+t.colors.panel+';--sw-line:'+t.colors.line+';--sw-accent:'+t.colors.accent+'"><i></i></span>';
+    return button('palette:'+i,swatch+esc(t.name),'palette','aria-pressed="'+(themeId===t.id)+'"');
+  }).join('');
+}
+function drawMenu() {
+  const pop=$('pop'), page=state.menu;
+  pop.hidden=!page;
+  $('more').setAttribute('aria-expanded',String(Boolean(page)));
+  document.querySelector('.switch').setAttribute('aria-expanded',String(page==='appearance'));
+  if(!page)return;
+  const item=(action,ic,label,end='',disabled=false)=>button(action,icon(ic)+label+'<span class="end">'+end+'</span>','popitem',disabled?'disabled':'');
+  const group=rows=>'<div class="popgroup">'+rows.join('')+'</div>';
+  const back=button('moreHome','‹　更多菜单','popitem');
+  if(page==='more'){
+    pop.innerHTML=group([item('menu:session','chat','切换会话','›'),item('menu:project','folder','切换项目','›')])+
+      group([item('undo','undo','撤销','',!state.past.length),item('redo','redo','重做','',!state.future.length),item('menu:checkpoint','pin','检查点','›')])+
+      group([item('diagnostics','file','导出诊断'),item('menu:settings','settings','设置','›'),item('appearance','layers','外观（主题）','›')]);
+  }else if(page==='appearance'){
+    pop.innerHTML=back+'<h2>外观（主题）</h2><div class="menu-palettes">'+paletteButtons()+'</div>';
+  }else if(page==='checkpoint'){
+    pop.innerHTML=back+'<h2>工作区检查点</h2>'+item('checkpoint','pin','保存当前状态','',state.phase!=='ready')+item('restore','undo','恢复检查点','',!state.checkpoint);
+  }else if(page==='settings'){
+    pop.innerHTML=back+'<h2>设置</h2>'+item('preview','eye','提案预览',state.preview?'开':'关')+item('appearance','layers','外观（主题）','›');
+  }else {
+    const session=page==='session';
+    pop.innerHTML=back+'<h2>'+(session?'切换会话':'切换项目')+'</h2>'+item('more',session?'chat':'folder',session?'山脊瞭望塔':'松脊营地','✓');
+  }
+}
+function closeMenu(focus=false) {
+  state.menu='';drawMenu();
+  if(focus)$('more').focus();
+}
+function checkpointState() {
+  return {statuses:[...state.statuses],saved:[...state.saved],proposed:[...state.proposed],base:[...state.base],manual:[...state.manual],selected:state.selected};
+}
+function rememberDecision() {
+  state.past.push(checkpointState());
+  state.future=[];
+}
+function restoreDecision(snapshot) {
+  Object.assign(state,structuredClone(snapshot));
+  state.manual=new Set(snapshot.manual);
+  select(snapshot.selected);
+  state.notice='已恢复文件状态';
+}
+function downloadDiagnostics() {
+  const report={theme:themeId,phase:state.phase,queued:state.queue.length,pending:pending(),files:files.map((f,i)=>({file:f.key,status:state.statuses[i]}))};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='p2s-mock-diagnostics.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 function init(which){
-  const complete=['pending','review','files'].includes(which),done=which==='files';
-  state={phase:which==='start'?'idle':complete?'ready':'running',tab:['review','files'].includes(which)?which:'chat',
-    prompt:which==='start'?'':sample, draft:which==='start'?sample:'', queue:[],activeNote:'',notePaused:false,handledNotes:[], statuses:Array(3).fill(done?'applied':complete?'pending':'building'),
-    saved:files.map((_,i)=>done?toml(i):null), proposed:files.map((_,i)=>toml(i)),selected:which==='review'?1:0, preview:true,
-    editing:false, editText:'', fileDrawer:false,closed:false, notice:'', scroll:{},detail:false, round:1, manual:new Set()};
+  const reviewSeed=which==='review'||which==='hud';
+  const complete=['pending','files','review','hud'].includes(which), done=which==='files';
+  const proposed=files.map((_,i)=>toml(i));
+  const saved=done?[...proposed]:[null,null,null];
+  const statuses=Array(3).fill(done?'applied':complete?'pending':'building');
+  if(reviewSeed){
+    // A later review round gives the roof a real, previously applied copper palette.
+    saved[0]=proposed[0];statuses[0]='applied';
+    saved[1]=proposed[1].replace('minecraft:weathered_cut_copper','minecraft:cut_copper');
+  }
+  state={phase:which==='start'?'idle':complete?'ready':'running',tab:which==='review'||done?which:'chat',
+    prompt:which==='start'?'':sample,draft:which==='start'?sample:'',queue:['running','index','narrow'].includes(which)?['栈梯外侧也要扶手。']:[],
+    activeNote:which==='hud'?'检查栈梯外侧的扶手。':'',notePaused:false,handledNotes:[],statuses,saved,base:[...saved],proposed,
+    selected:reviewSeed?1:0,preview:true,editing:false,editText:'',fileDrawer:false,closed:which==='hud',notice:'',scroll:{},manual:new Set(),
+    folds:new Set(which==='narrow'||window.innerWidth<760?[]:['script']),menu:new URLSearchParams(location.search).get('menu')==='open'&&which!=='start'?'more':'',past:[],future:[],checkpoint:null};
   render();
 }
+function fileWarnings(i) {
+  const source=state.statuses[i]==='discarded'?state.saved[i]:state.proposed[i];
+  return (source||'').split(/^\s*\[\[part\]\]\s*$/m).slice(1)
+    .filter(part=>!/^\s*\[\[part\.action\]\]/m.test(part))
+    .map(part=>'部件 '+(part.match(/^\s*name\s*=\s*"([^"]+)"/m)?.[1]||'未命名')+' 为空，应用时不会放置方块。');
+}
+
 function button(action,label,cl='btn',extra=''){return '<button type="button" class="'+cl+'" data-act="'+action+'" '+extra+'>'+label+'</button>';}
 function pending(){return state.statuses.filter(s=>s==='pending').length;}
 const statusLabel = {pending:'待审',applied:'已应用',discarded:'已丢弃',building:'生成中'};
 function row(i,full=false){
-  const f=files[i],s=state.statuses[i];
-  return button('pick:'+i,sprite(i)+'<span class="filekey">'+f.key+'</span><span class="filenote">'+f.name+'</span><span class="stat '+(s==='applied'?'good':s==='pending'?'accent':'muted')+'">'+(s==='pending'?(full?'待审 · ':'')+(state.manual.has(i)?'手改':'+'+f.delta+' 方块'):statusLabel[s])+'</span>'+icon('arrow','muted'),'frow'+(full&&i===state.selected?' selected':''),'aria-label="'+f.key+'，'+statusLabel[s]+'"');
+  const f=files[i],s=state.statuses[i],warnings=fileWarnings(i);
+  const stat=s==='pending'?(state.manual.has(i)?'手改':state.saved[i]?'换材质':'+'+f.delta+' 方块'):statusLabel[s];
+  return button('pick:'+i,sprite(i)+'<span class="filekey">'+f.key+'</span><span class="filenote">'+f.name+'</span>'+
+    (warnings.length?'<span class="warn" title="'+esc(warnings.join(' '))+'">'+icon('warning')+' '+warnings.length+'</span>':'')+
+    '<span class="stat '+(s==='pending'?'accent':s==='applied'?'good':'muted')+'">'+(full&&s==='pending'?'待审 · ':'')+stat+'</span>'+icon('arrow','muted'),
+    'frow'+(full&&i===state.selected?' selected':''),'aria-label="'+f.key+'，'+statusLabel[s]+(warnings.length?'，'+warnings.length+' 条校验警告':'')+'"');
 }
+
 function reviewCard(){
   const n=pending();
   return '<div class="reviewcard"><div class="cardtop">'+icon('layers')+'<b>'+(n?'有 '+n+' 份文件待审':'审阅已结束')+'</b><span class="clock">TOML</span></div>'+files.map((_,i)=>row(i)).join('')+'<div class="cardaction"><span>逐份决定是否应用到世界</span>'+button('firstReview',(n?'开始审阅':'查看结果')+icon('arrow'),'btn primary')+'</div></div>';
 }
+function fold(key,summary,body,cl='') {
+  return '<details class="'+cl+'" data-fold="'+key+'"'+(state.folds.has(key)?' open':'')+'><summary class="'+(key==='diff'?'':'planline')+'"><i aria-hidden="true" class="twisty"></i>'+summary+'</summary>'+body+'</details>';
+}
 function trace(){
   const paused=state.phase==='stopped';
-  const list=[
-    ['inspect_world','读取山脊选区','0.8s'],
-    ['task','屋顶子 Agent 已返回','3.2s'],
-    ['script','推演塔身与栈梯落点',paused?'中止':'执行中'],
-    ['write','写入 3 份 TOML','等待']
-  ];
-  return '<div class="trace"><div class="tracetop">'+icon('layers','accent')+'<b>工具进度</b><span class="clock">2 / 4</span><span class="meter"><i class="lit"></i><i class="lit"></i><i></i><i></i></span></div><div class="tracebody">'+list.map(([name,desc,time],i)=>'<div class="toolrow '+(i===2?'current':i===3?'wait':'')+'">'+icon(i<2?'check':i===2?(paused?'stop':'run'):'idle',i<2?'good':'')+'<span class="act">'+name+'</span><span class="detail">'+desc+'</span><span class="time">'+time+'</span></div>').join('')+'</div></div><div class="runtools">'+(paused?button('resume',icon('run')+'重新运行','btn'):button('stop',icon('stop')+'停止','btn danger'))+'<span class="tiny">'+(paused?'已停止，排队消息保留':'运行中 · 追加的消息会进入队列')+'</span></div>';
+  const thought='山脊向西逐格下降，先取西坡的落脚点，再定塔基。屋面由子任务细化，栈梯沿坡收短一格。';
+  const tool=(ic,cl,name,desc,time)=>'<div class="toolhead">'+icon(ic,cl)+'<span class="name">'+name+'</span><span class="desc">'+desc+'</span><span class="time '+cl+'">'+time+'</span></div>';
+  const stop=paused?button('resume',icon('run')+'继续','flat'):button('stop',icon('stop')+'停止','flat');
+  const scriptChildren='<div class="branch"><div>'+icon('check','done')+'ws.load <small>读取塔身</small></div><div>'+icon('cross','failed')+'geo.translate <small class="failed">首次失败</small></div><div class="reason">偏移量缺少 Z 坐标，已补为 0。</div><div>'+icon(paused?'stop':'run','running')+'geo.translate <small>'+ (paused?'已停止':'重新计算落点')+'</small></div></div>';
+  const plan='<div class="branch"><div>'+icon('check','done')+'确认塔基</div><div>'+icon('run','running')+'铺设塔身与栈梯</div><div>'+icon('idle','waiting')+'整理待审文件</div></div>';
+  return '<div class="trace"><div class="tracetop">'+icon('layers','accent')+'<b>工具进度</b><span class="clock">2 / 4</span><span class="meter"><i class="lit"></i><i class="lit"></i><i></i><i></i></span>'+stop+'</div><div class="tracebody">'+
+    fold('thought','思考<span class="clock">'+Array.from(thought).length+' 字</span>','<p class="thought">'+thought+'</p>')+
+    fold('plan','计划 · 铺设塔身与栈梯<span class="clock">1 / 3</span>',plan)+
+    tool('check','done','inspect_world','读取山脊选区','0.8s')+
+    tool('check','done','task','细化屋顶','3.2s')+
+    '<div class="branch"><div>'+icon('agent','done')+'屋顶子 Agent <small class="done">已返回 · 5 层收坡</small></div></div>'+
+    fold('script','<span class="running">script</span> 推演落点<span class="clock running">'+(paused?'已停止':'执行中')+'</span>',scriptChildren,'current')+
+    tool('idle','waiting','write','写入三份 TOML','等待')+'</div></div>';
 }
+
 function busy(){return state.phase==='running'||Boolean(state.activeNote&&!state.notePaused);}
 function acceptsQueue(){return busy()||state.phase==='stopped'||Boolean(state.activeNote);}
 function noteLog(){
@@ -598,22 +1014,72 @@ function noteLog(){
   if(state.activeNote)html+='<div class="followup"><div class="userhead">'+icon('queue')+(state.notePaused?'已停止追加任务':'正在处理追加要求')+'</div><p>'+esc(state.activeNote)+'</p>'+button(state.notePaused?'resume':'stop',icon(state.notePaused?'run':'stop')+(state.notePaused?'继续处理':'停止'),'btn')+'</div>';
   return html;
 }
+function queueView(){
+  if(!state.queue.length)return '';
+  return '<div class="queue-list scroll" aria-label="待处理消息">'+state.queue.map((msg,i)=>'<div class="queue">'+icon('queue')+'<b>已排队</b><span class="queued-text" title="'+esc(msg)+'">'+esc(msg)+'</span>'+button('withdraw:'+i,'撤回','flat','aria-label="撤回第 '+(i+1)+' 条排队消息"')+'</div>').join('')+'</div>';
+}
 function chat(){
-  const running=acceptsQueue(),idle=state.phase==='idle',ready=state.phase==='ready';
-  const agentText=ready?(pending()?'三份改动已整理好。点文件就能在山脊上看它的效果。':'审阅已结束。你可以继续交代下一步。'):'我会顺着西坡安排入口，先确认落脚点，再铺开塔身和屋顶。';
-  const title='山脊瞭望塔';
-  const queued=state.queue.length;
-  const log='<header class="sessionhead">'+crest+'<div><h1 class="headline">'+title+'</h1><span class="sessionmeta">山脊选区 · 24 × 32 × 24</span></div><span class="clock">会话 '+String(state.round).padStart(2,'0')+'</span></header>'+
-    (idle?'<div class="userbox"><div class="userhead">'+icon('pin')+'山脊选区</div><p>已选中西坡。描述你想在这里建什么。</p></div>':
-    '<div class="userbox"><div class="userhead">'+icon('user')+'你</div><p>'+esc(state.prompt)+'</p></div><div class="agentline"><span class="avatar">'+icon('agent')+'</span><div class="grow"><div class="agenthead"><b>P2S Agent</b><span class="clock">· 建造助手</span></div><p class="agentcopy">'+agentText+'</p></div></div>'+(ready?reviewCard()+noteLog():trace()));
-  const label=running?'排队':'发送';
-  return '<div class="scroll chatlog" id="scroller">'+log+'</div><div class="composer">'+(queued?'<div class="queue">'+icon('queue','accent')+'<b>队列 '+queued+'</b><span>'+esc(state.queue[0])+'</span></div>':'')+'<div class="entry"><span class="prompt">›</span><input id="prompt" aria-label="给 Agent 的消息" maxlength="512" placeholder="'+(running?'追加建造要求…':'描述下一步…')+'" value="'+esc(state.draft)+'">'+button('send',icon(running?'queue':'arrow')+'<span id="sendLabel">'+label+'</span>','btn primary')+'</div></div>';
+  const idle=state.phase==='idle',ready=state.phase==='ready',running=acceptsQueue();
+  const copy=ready?(pending()?'文件整理好了。点选一份，就能在右边看对应的部位。':'文件已审完。接下来想改哪里？'):'入口放在西坡。我先定塔基，再把栈梯接到观景台。';
+  const session='<header class="sessionhead">'+icon('pin','accent')+'<h1>山脊瞭望塔</h1><span class="sessionmeta">西坡选区 · 24 × 32 × 24</span></header>';
+  const log=idle?'<div class="userbox"><div class="userhead">'+icon('pin')+'山脊选区</div><p>已选中西坡。描述你想在这里建什么。</p></div>':
+    '<div class="userbox"><div class="userhead">'+icon('user')+'你</div><p>'+esc(state.prompt)+'</p></div><div class="agentline"><span class="avatar">'+icon('agent')+'</span><div class="grow"><div class="agenthead"><b>P2S Agent</b></div><p class="agentcopy">'+copy+'</p></div></div>'+(ready?reviewCard()+noteLog():trace());
+  return '<div class="scroll chatlog" id="scroller">'+session+log+'</div><div class="composer">'+queueView()+'<div class="entry"><span class="prompt">›</span><input id="prompt" aria-label="给 Agent 的消息" maxlength="512" placeholder="'+(running?'追加建造要求…':'描述下一步…')+'" value="'+esc(state.draft)+'">'+button('send',icon(running?'queue':'arrow')+(running?'排队':'发送'),'btn primary')+'</div></div>';
+}
+// Compare the actual two revisions. Skip common edges before matching interior lines.
+function diffLines(before,after){
+  const a=before?before.split('\n'):[],b=after?after.split('\n'):[];
+  let first=0,ae=a.length,be=b.length;
+  while(first<ae&&first<be&&a[first]===b[first])first++;
+  while(ae>first&&be>first&&a[ae-1]===b[be-1]){ae--;be--;}
+  const rows=[];
+  if(first>0)rows.push(['context',a[first-1]]);
+  let i=first,j=first;
+  const n=ae-first,m=be-first;
+  // Large pasted files can always be represented as one replacement hunk.
+  if(n*m<=150000&&n&&m){
+    const lcs=Array.from({length:n+1},()=>new Uint32Array(m+1));
+    for(let x=n-1;x>=0;x--)for(let y=m-1;y>=0;y--)
+      lcs[x][y]=a[x+first]===b[y+first]?1+lcs[x+1][y+1]:Math.max(lcs[x+1][y],lcs[x][y+1]);
+    while(i<ae&&j<be){
+      if(a[i]===b[j]){rows.push(['context',a[i++]]);j++;}
+      else if(lcs[i-first+1][j-first]>=lcs[i-first][j-first+1])rows.push(['minus',a[i++]]);
+      else rows.push(['plus',b[j++]]);
+    }
+  }
+  while(i<ae)rows.push(['minus',a[i++]]);
+  while(j<be)rows.push(['plus',b[j++]]);
+  if(ae<a.length)rows.push(['context',a[ae]]);
+  return rows;
 }
 function review(){
-  const f=files[state.selected],s=state.statuses[state.selected],n=pending();
-  if(state.phase!=='ready')return '<div class="deskwrap"><h1 class="desktitle">文件审阅</h1><p class="summary">当前没有待审文件。生成结束后，会在对话里提醒你。</p>'+button('tab:chat','返回对话','flat action')+'</div>';
-  return '<div class="deskwrap"><h1 class="desktitle">文件审阅</h1><div class="deskintro">'+(n?'还有 '+n+' 份待决定。点选文件，右侧标出对应部位。':'本轮文件已全部处理。')+'</div><div class="reviewlist">'+files.map((_,i)=>row(i,true)).join('')+'</div><div class="reviewinfo scroll" id="scroller"><h2 class="subhead">'+icon('layers','accent')+f.title+'</h2><p class="summary">'+esc(state.manual.has(state.selected)?'已保存手动修改，应用后更新工作区。':f.summary)+'</p><div class="spec"><span class="mat">'+sprite(state.selected)+'<span><small>主要材料</small>'+(state.selected===1&&copperVariant(s==='discarded'?state.saved[1]:state.proposed[1])?'切制铜块':f.label)+'</span></span><span><small>占用范围</small>'+f.size.join(' × ')+'</span></div><div class="diffbox">'+(state.manual.has(state.selected)?'<div class="diffrow"><span>~</span><span>正文有手动修改</span></div>':f.rows.map(t=>'<div class="diffrow"><span>+</span><span>'+t+'</span></div>').join(''))+'</div></div><div class="actions">'+(s==='pending'?button('apply',icon('check')+'应用此文件','btn primary')+button('discard',icon('cross')+'丢弃','btn danger'):'<span class="tag good">'+icon('check')+statusLabel[s]+'</span>')+(s==='discarded'&&state.saved[state.selected]===null?button('tab:chat','返回对话 '+icon('arrow'),'flat'):button('inspectFile','查看 TOML '+icon('arrow'),'flat'))+'</div></div>';
+  if(state.phase!=='ready')return '<div class="deskwrap"><h1 class="desktitle">文件审阅</h1><p class="summary">生成结束后，待审文件会出现在这里。</p>'+button('tab:chat','返回对话','flat action')+'</div>';
+  const i=state.selected,f=files[i],s=state.statuses[i],warnings=fileWarnings(i);
+  const rows=diffLines(state.base[i],state.proposed[i]), added=rows.filter(r=>r[0]==='plus').length,removed=rows.filter(r=>r[0]==='minus').length;
+  const note=state.manual.has(i)?'手改逐行和上次应用的正文比较。':i===1&&state.base[i]?'只替换屋面的调色板条目，五层屋面的坐标沿用原稿。':[
+    '四根柱子共用 main，观景台使用单独的 deck 材料。',
+    '五层屋面共用同一项铜材质，换色时只需改调色板。',
+    '台阶朝向西坡，扶手在台阶外侧一格。'][i];
+  const diff='<p class="summary">Agent · '+note+'</p><div class="patch" aria-label="TOML 差异">'+(added||removed?rows.map(([type,line])=>'<div class="'+type+'">'+({plus:'+ ',minus:'− ',context:'  '}[type])+esc(line)+'</div>').join(''):'<div class="context">正文与基线相同</div>')+'</div>';
+  let mat=i===1&&copperVariant(s==='discarded'?state.saved[i]:state.proposed[i])?'切制铜块':f.label;
+  let size=f.size.join(' × '),parts=f.rows,summary=f.summary;
+  if(state.manual.has(i)){
+    const text=(s==='discarded'?state.saved[i]:state.proposed[i])||'';
+    const main=text.match(/^main\s*=\s*"([^"]+)"/m)?.[1];
+    mat=main==='minecraft:'+f.block?f.label:main==='minecraft:cut_copper'?'切制铜块':main||'见正文';
+    size=text.match(/^size\s*=\s*\[([\d,\s]+)\]/m)?.[1].split(',').map(v=>v.trim()).join(' × ')||'见正文';
+    parts=text.split(/^\s*\[\[part\]\]\s*$/m).slice(1).map(part=>part.match(/^\s*name\s*=\s*"([^"]+)"/m)?.[1]||'未命名');
+    summary=s==='discarded'?'手改已丢弃。':s==='applied'?'手改已应用。':'手改已保存，等待应用。';
+  }
+  return '<div class="deskwrap"><h1 class="desktitle">文件审阅</h1><div class="deskintro">'+(pending()?'还有 '+pending()+' 份待决定':'本轮文件已全部处理')+'</div><div class="reviewlist">'+files.map((_,j)=>row(j,true)).join('')+'</div>'+
+    '<div class="reviewinfo scroll" id="scroller"><h2 class="subhead">'+icon('layers','accent')+f.title+'</h2><p class="summary">'+summary+'</p><div class="spec"><span class="mat">'+sprite(i)+'<span><small>主要材料</small>'+esc(mat)+'</span></span><span><small>占用范围</small>'+esc(size)+'</span></div><div class="parts"><b>部件</b>'+parts.map(r=>'<span>'+esc(r)+'</span>').join('')+'</div>'+
+    warnings.map(warning=>'<div class="validation warn">'+icon('warning')+'校验警告 · '+esc(warning)+'</div>').join('')+
+    fold('diff','查看差异 <small>TOML　+'+added+' / −'+removed+'</small>',diff,'diff')+'</div><div class="actions">'+
+    (s==='pending'?button('apply',icon('check')+'应用此文件','btn primary')+button('discard',icon('cross')+'丢弃','btn danger'):'<span class="tag muted">'+icon(s==='applied'?'check':'cross')+statusLabel[s]+'</span>')+
+    (s==='discarded'&&state.saved[i]===null?button('tab:chat','返回对话 '+icon('arrow'),'flat'):button('inspectFile','查看 TOML '+icon('arrow'),'flat'))+'</div></div>';
 }
+
+
 function fileView(){
   const i=state.selected,f=files[i],s=state.statuses[i],available=j=>state.saved[j]!==null||state.statuses[j]==='pending';
   const src=s==='pending'?state.proposed[i]:state.saved[i];
@@ -626,17 +1092,20 @@ function fileView(){
 }
 function world(){
   if(!state)return;
-  const layers=files.map((_,i)=>state.statuses[i]==='applied'||state.saved[i]!==null||(state.preview&&['pending','building'].includes(state.statuses[i])&&state.phase!=='idle'));
-  const focus=state.tab==='review'&&state.phase==='ready'&&state.statuses[state.selected]==='pending'&&state.preview;
-  paintWorld($('art'),{layers,selected:state.selected,brightCopper:copperVariant(state.preview&&state.statuses[1]==='pending'?state.proposed[1]:state.saved[1]),preview:state.preview&&state.phase!=='idle'&&(state.phase!=='ready'||pending()>0),review:focus});
+  const showDraft=state.preview&&!state.closed;
+  const layers=files.map((_,i)=>state.statuses[i]==='applied'||state.saved[i]!==null||(showDraft&&['pending','building'].includes(state.statuses[i])&&state.phase!=='idle'));
+  const focus=!state.closed&&state.tab==='review'&&state.phase==='ready'&&state.statuses[state.selected]==='pending'&&state.preview;
+  paintWorld($('art'),{layers,selected:state.selected,brightCopper:copperVariant(showDraft&&state.statuses[1]==='pending'?state.proposed[1]:state.saved[1]),replaces:focus&&state.base[state.selected]!==null&&state.base[state.selected]!==state.proposed[state.selected],preview:!state.closed&&state.preview&&state.phase!=='idle'&&(state.phase!=='ready'||pending()>0),review:focus});
+  $('legend').hidden=!focus||state.closed;
+  $('legend').innerHTML='<span><i class="addmark"></i> ＋ 新增</span>'+(state.base[state.selected]!==null&&state.base[state.selected]!==state.proposed[state.selected]?'<span><i class="delmark"></i> × 替换前</span>':'');
   $('worldmode').innerHTML=icon('layers')+(state.preview?'预览开启':'仅看已应用');
   $('worldmode').setAttribute('aria-pressed',String(state.preview));
   const poi=$('poi');poi.hidden=!focus;
   if(focus){
     poi.textContent=files[state.selected].key;
     const [x,y]=[[178,151],[179,107],[95,197]][state.selected];
-    const art=$('art'),scale=Math.max(art.clientWidth/282,art.clientHeight/296);
-    poi.style.left=Math.min(art.clientWidth-62,Math.max(5,x*scale-(282*scale-art.clientWidth)*.5))+'px';
+    const art=$('art'),scale=Math.max(art.clientWidth/art.width,art.clientHeight/art.height);
+    poi.style.left=Math.min(art.clientWidth-62,Math.max(5,(x+Math.floor((art.width-282)/2))*scale-(art.width*scale-art.clientWidth)*.5))+'px';
     poi.style.top=(y*scale-(296*scale-art.clientHeight)*.58-8)+'px';
   }
   $('placename').textContent=focus?'选中 · '+files[state.selected].name:'松脊营地 · 西坡';
@@ -648,7 +1117,12 @@ function render(focus=''){
   $('view').innerHTML=state.tab==='chat'?chat():state.tab==='review'?review():fileView();
   const el=$('scroller');if(el)el.scrollTop=state.scroll[state.tab]||0;
   $('status').innerHTML='<i class="dot"></i>'+(busy()?'Agent 运行中':state.phase==='stopped'||state.notePaused?'Agent 已停止':pending()?'等待审阅':'工作区就绪');
+  const status=busy()?'运行中':state.phase==='stopped'||state.notePaused?'已停止':pending()?'等待审阅':'就绪';
+  $('status').className='status '+(busy()?'running':pending()?'waiting':'done');
+  $('hud').hidden=!state.closed;
+  $('hud').innerHTML='<strong>'+icon(busy()?'run':'agent')+'Agent '+status+'</strong><span>待审 '+pending()+' 份 <kbd>O 打开</kbd></span>';
   $('feedback').textContent=state.notice;
+  drawMenu();
   $('hotkeys').innerHTML=state.closed?button('open','<kbd>O</kbd> 打开面板','flat'):'<span class="keyhint extra"><kbd>Alt 1–3</kbd> 视图</span><span class="keyhint"><kbd>Esc</kbd> 返回</span>';
   $('advance').hidden=!busy();$('advance').textContent=state.activeNote?'推进演示：完成队首 →':'推进演示：生成完成 →';
   world();if(focus&&$(focus))$(focus).focus();
@@ -663,7 +1137,7 @@ function changeTab(tab){
   }
   state.tab=tab;state.fileDrawer=false;state.notice='';render();
 }
-function select(i){state.selected=i;state.scroll.review=0;state.scroll.files=0;state.fileDrawer=false;}
+function select(i){state.folds.delete('diff');state.selected=i;state.scroll.review=0;state.scroll.files=0;state.fileDrawer=false;}
 function protect(next) {
   if(state.editing&&state.editText!==(state.statuses[state.selected]==='pending'?state.proposed[state.selected]:state.saved[state.selected])) {
     ask('放弃未保存的修改？','当前正文里的改动还没有保存。','放弃修改',()=>{state.editing=false;next();});return;
@@ -706,6 +1180,7 @@ function decide(status){
   rememberScroll();
   const i=state.selected;
   if(state.statuses[i]!=='pending')return;
+  rememberDecision();
   if(status==='applied')state.saved[i]=state.proposed[i];
   state.statuses[i]=status;state.notice=files[i].name+' · '+statusLabel[status];
   const next=[1,2,3].map(d=>(i+d)%3).find(j=>state.statuses[j]==='pending');
@@ -731,21 +1206,43 @@ function act(action){
   else if(a==='save'){
     const i=state.selected;
     if(!state.editText.trim()){state.notice='正文为空，请补全后保存';render('editor');return;}
+    rememberDecision();
+    if(state.statuses[i]!=='pending')state.base[i]=state.saved[i];
     state.proposed[i]=state.editText;state.statuses[i]='pending';state.phase='ready';state.manual.add(i);state.editing=false;state.tab='review';state.notice='手改已存为待审';render();
   }
   else if(a==='cancelEdit')protect(()=>render());
-  else if(a==='theme')cycleTheme();
-  else if(a==='preview'){state.preview=!state.preview;world();}
-  else if(a==='open'){state.closed=false;render();}
+  else if(a==='withdraw'){rememberScroll();state.queue.splice(+v,1);state.notice='已撤回排队消息';render('prompt');}
+  else if(a==='palette'){
+    const fromMenu=state.menu==='appearance';
+    useTheme(catalog.themes[+v].id);world();
+    (fromMenu?$('pop'):$('palettes')).querySelector('[aria-pressed=true]')?.focus();
+  }
+  else if(a==='more'||a==='moreHome'||a==='menu'||a==='appearance'){
+    const page=a==='menu'?v:a==='appearance'?'appearance':'more';
+    state.menu=state.menu===page&&a!=='moreHome'?'':page;drawMenu();
+    if(state.menu)$('pop').querySelector('button:not(:disabled)')?.focus();else $('more').focus();
+  }
+  else if(a==='close')protect(()=>{state.closed=true;state.menu='';render();$('hud').focus();});
+  else if(a==='diagnostics'){downloadDiagnostics();closeMenu(true);}
+  else if(a==='checkpoint'){state.checkpoint=checkpointState();state.notice='已保存工作区检查点';closeMenu(true);render();}
+  else if(a==='restore'&&state.checkpoint)protect(()=>ask('恢复工作区检查点？','将恢复保存时的文件和审阅决定。','恢复',()=>{
+    rememberDecision();restoreDecision(state.checkpoint);closeMenu(true);render();}));
+  else if(a==='undo'||a==='redo'){
+    const [from,to]=a==='undo'?[state.past,state.future]:[state.future,state.past];
+    if(from.length)protect(()=>{to.push(checkpointState());restoreDecision(from.pop());closeMenu(true);render();});
+  }
+  else if(a==='preview'){state.preview=!state.preview;world();drawMenu();}
+  else if(a==='open'){state.closed=false;render();$('more').focus();}
 }
 function back(){
   if(!$('modal').hidden){dismiss();return;}
+  if(state.menu){closeMenu(true);return;}
   if(state.closed)return;
   if(state.editing){act('cancelEdit');return;}
   if(state.fileDrawer){state.fileDrawer=false;render();return;}
   if(document.activeElement===$('prompt')){document.activeElement.blur();return;}
   if(state.tab!=='chat'){changeTab('chat');return;}
-  state.closed=true;render();$('hotkeys').querySelector('button')?.focus();
+  state.closed=true;render();$('hud').focus();
 }
 function resize(){
   const small=entry==='narrow'||window.innerWidth<760;
@@ -755,7 +1252,16 @@ function resize(){
   $('frame').style.width=w*scale+'px';$('frame').style.height=h*scale+'px';
   $('sheet').style.width=w*scale+'px';$('dimensions').textContent=w+' × '+h+'  /  '+Number(scale.toFixed(2))+'×';
 }
-document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(b)act(b.dataset.act);});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]');
+  if(state.menu&&!e.target.closest('#pop,#more,.switch'))closeMenu();
+  if(b)act(b.dataset.act);
+});
+document.addEventListener('toggle',e=>{
+  if(!e.target.matches('details[data-fold]')||!e.target.isConnected)return;
+  if(e.target.open)state.folds.add(e.target.dataset.fold);
+  else state.folds.delete(e.target.dataset.fold);
+},true);
 document.addEventListener('input',e=>{
   if(e.target.id==='prompt'){state.draft=e.target.value;}
   if(e.target.id==='editor')state.editText=e.target.value;
@@ -771,7 +1277,7 @@ document.addEventListener('keydown',e=>{
   if(e.altKey&&['1','2','3'].includes(e.key)){e.preventDefault();act('tab:'+['chat','files','review'][+e.key-1]);return;}
   if(e.target.id==='prompt'&&e.key==='Enter'){e.preventDefault();send();}
   if(e.target.id==='editor'&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();act('save');}
-  if(e.code==='KeyO'&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA'].includes(e.target.tagName)){e.preventDefault();protect(()=>{state.closed=true;render();});}
+  if(e.code==='KeyO'&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&!['INPUT','TEXTAREA'].includes(e.target.tagName)){e.preventDefault();act('close');}
 });
 $('cancel').onclick=dismiss;$('confirm').onclick=()=>{const next=onConfirm;dismiss();next?.();};
 $('importBtn').onclick=()=>$('themeFile').click();
@@ -779,7 +1285,12 @@ $('themeFile').onchange=async e=>{await importTheme(e.target.files[0]);e.target.
 $('advance').onclick=finish;
 $('restart').onclick=()=>protect(()=>init('start'));
 $('brand').innerHTML=logo+'<b>P2S</b>';
-$('worldTitle').innerHTML=icon('eye')+'世界预览';
+$('camera').innerHTML=[['rotate','旋转'],['zoom','缩放'],['reset','复位']].map(([ic,label])=>'<span aria-disabled="true" title="3D 预览控件示意">'+icon(ic)+label+'</span>').join('');
 useTheme(savedTheme()||catalog.default,false);resize();init(entry);
+if(entry==='running'&&state.menu==='more'){
+  document.querySelector('.sheetnav [aria-current]')?.removeAttribute('aria-current');
+  document.querySelector('.sheetnav a[href*="?menu"]').setAttribute('aria-current','page');
+  document.title='更多菜单 · 松脊营地 · P2S';
+}
 window.addEventListener('resize',()=>{resize();world();});
 </script></body></html>
