@@ -119,6 +119,26 @@ class Window:
         press(self.display, button, 0, 0)
         self.flush()
 
+    def request_quit(self):
+        """Send the same WM_DELETE_WINDOW request as the window manager close button."""
+        class ClientMessage(c.Structure):
+            _fields_ = [('type',Int),('serial',ULong),('send_event',Int),('display',Ptr),
+                        ('window',ULong),('message_type',ULong),('format',Int),('data',c.c_long*5)]
+        class Event(c.Union):
+            _fields_ = [('message',ClientMessage),('padding',c.c_long*24)]
+        atom = bind(self.x, 'XInternAtom', ULong, Ptr, c.c_char_p, Int)
+        event = Event()
+        event.message.type = 33
+        event.message.display = self.display
+        event.message.window = self.window
+        event.message.message_type = atom(self.display,b'WM_PROTOCOLS',0)
+        event.message.format = 32
+        event.message.data[0] = atom(self.display,b'WM_DELETE_WINDOW',0)
+        send = bind(self.x,'XSendEvent',Int,Ptr,ULong,Int,c.c_long,c.POINTER(Event))
+        if not send(self.display,self.window,0,0,c.byref(event)):
+            raise RuntimeError('Window close request was not delivered')
+        self.flush()
+
     def screenshot(self, path):
         fn = bind(self.x, "XGetImage", c.POINTER(Image), Ptr, ULong, Int, Int, UInt, UInt, ULong, Int)
         image = fn(self.display, self.root, self.left, self.top, self.width, self.height, 0xffffffff, 2)
@@ -151,6 +171,7 @@ def main():
     parser.add_argument("--run-dir", type=Path, required=True)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("info")
+    sub.add_parser("quit",help="Close this game window and let Minecraft save the isolated world")
     sub.add_parser("screenshot").add_argument("path", type=Path)
     click = sub.add_parser("click")
     click.add_argument("x", type=int); click.add_argument("y", type=int); click.add_argument("button", nargs="?", type=int, default=1)
@@ -162,6 +183,8 @@ def main():
     try:
         if args.command == "info":
             print(json.dumps({"title":window.title, "width":window.width, "height":window.height,"left":window.left,"top":window.top}))
+        elif args.command == "quit":
+            window.request_quit()
         elif args.command == "screenshot":
             window.screenshot(args.path)
         elif args.command == "click":

@@ -9,7 +9,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-CASES = re.compile(r'P2S-ACCEPT-(PING|BUILD|ALL|DISCARD|CHOICE|PLAN|STOP|ERROR)(?:-([a-z0-9]+))?')
+CASES = re.compile(r'P2S-ACCEPT-(PING|BUILD|ALL|DISCARD|CHOICE|PLAN|STOP|ERROR|TOOLS|RECALL)(?:-([a-z0-9]+))?')
 BLOCKS = ('minecraft:gold_block', 'minecraft:diamond_block')
 
 
@@ -57,6 +57,39 @@ def reply(body):
 
     if case in {'BUILD', 'ALL', 'DISCARD'}:
         msg, finish = tool_calls([('write', file_args(case, tag, i)) for i in range(2)])
+    elif case == 'TOOLS':
+        path = f'workspace/accept-all-{tag}-0.toml'
+        script = ("const r = tools.read({path: " + json.dumps(path) + "}); "
+                  "return r.content.indexOf('minecraft:gold_block') >= 0 ? 'VFS-PASS-' + (3 * 4) : 'VFS-FAIL'")
+        msg, finish = tool_calls([('read', {'path': path, 'committed': True}),
+                                  ('script', {'source': script}),
+                                  ('sh', {'command': 'grep -c gold_block ' + path})])
+        if finish == 'stop':
+            results = {}
+            for message in history:
+                if message.get('role') == 'tool':
+                    try:
+                        data = json.loads(message.get('content', ''))
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(data, dict):
+                        results[message.get('tool_call_id')] = data
+            read, script_result, shell = [results.get(f'fixture_TOOLS_{tag}_{i}', {}) for i in range(3)]
+            passed = {
+                'read': read.get('ok') is True and read.get('version') == 'committed'
+                        and 'minecraft:gold_block' in str(read.get('content', '')),
+                'script': script_result.get('ok') is True and 'VFS-PASS-12' in str(script_result.get('output', ''))
+                          and script_result.get('nested_call_count') == 1 and not script_result.get('nested_call_failures'),
+                'sh': shell.get('ok') is True and shell.get('exit_code') == 0 and str(shell.get('stdout', '')).strip() == '1',
+            }
+            failed = [tool for tool, ok in passed.items() if not ok]
+            msg['content'] = ('FAIL TOOLS ' + ','.join(failed) if failed else 'ACK TOOLS') + ' ' + tag
+    elif case == 'RECALL':
+        users = [str(m.get('content', '')) for m in messages[:start] if m.get('role') == 'user']
+        previous = all(any(f'P2S-ACCEPT-{action}-{tag}' in text for text in users) for action in ('PLAN','TOOLS'))
+        isolated = all(f'P2S-ACCEPT-PING-fresh{tag}' not in text for text in users)
+        msg = {'role': 'assistant', 'content': ('ACK RECALL ' if previous and isolated else 'FAIL RECALL ') + tag}
+        finish = 'stop'
     elif case == 'CHOICE':
         msg, finish = tool_calls([('ask_user', {'prompt':'Select a test material', 'options':[
             {'id':'stone','label':'Stone'}, {'id':'wood','label':'Wood'}]})])
@@ -141,6 +174,21 @@ def serve_existing_fixture(game_dir, run_dir):
     return server
 
 
+def prepare_fixture(game_dir, run_dir, stream=False):
+    run_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    config = game_dir / 'config' / 'p2s_client.json'
+    config.parent.mkdir(parents=True, exist_ok=True)
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    server.run_dir = run_dir
+    server.key = secrets.token_urlsafe(24)
+    url = f'http://127.0.0.1:{server.server_port}/v1/chat/completions'
+    config_json = {'apiUrl':url, 'apiKey':server.key, 'model':'p2s-local-fixture', 'useToolCall':True,
+                   'useStreaming':stream, 'autoApplyPatch':False, 'toolset':'v2', 'llm':{'api':'openai-completions'}}
+    with config.open('x') as f:  # never overwrite a real player's settings
+        json.dump(config_json, f)
+    return server
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-dir', type=Path, required=True, help='Private directory for this new test run')
@@ -148,17 +196,8 @@ def main():
     parser.add_argument('--stream', action='store_true')
     args = parser.parse_args()
     os.umask(0o077)
-    args.run_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-    config = args.game_dir / 'config' / 'p2s_client.json'
-    config.parent.mkdir(parents=True, exist_ok=True)
-    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-    server.run_dir = args.run_dir
-    server.key = secrets.token_urlsafe(24)
+    server = prepare_fixture(args.game_dir, args.run_dir, args.stream)
     url = f'http://127.0.0.1:{server.server_port}/v1/chat/completions'
-    config_json = {'apiUrl':url, 'apiKey':server.key, 'model':'p2s-local-fixture', 'useToolCall':True,
-                   'useStreaming':args.stream, 'autoApplyPatch':False, 'toolset':'v2', 'llm':{'api':'openai-completions'}}
-    with config.open('x') as f:  # never overwrite a real player's settings
-        json.dump(config_json, f)
     print(f'fixture ready on {url}', flush=True)
     try:
         server.serve_forever()

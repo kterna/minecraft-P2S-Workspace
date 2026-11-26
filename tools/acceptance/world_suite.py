@@ -53,12 +53,14 @@ class Game:
     def block(self, pos):
         return self.call('/world/block?' + parse.urlencode(dict(zip(('x','y','z'),pos))))['block']
 
-    def wait(self, description, predicate, timeout=30):
+    def wait(self, description, predicate, timeout=30, fail_on_agent_error=False):
         end = time.monotonic() + timeout
         while True:
             state = self.state()
             if predicate(state):
                 return state
+            if fail_on_agent_error and not state.get('busy') and state.get('status') == 'error':
+                raise RuntimeError(f'{description}: game reported error: {state.get("lastAssistant","")}')
             if time.monotonic() >= end:
                 summary = {k:state.get(k) for k in ('screen','status','busy','pendingPaths','selectedPath','pendingPath','lastAssistant')}
                 raise TimeoutError(f'{description}: {summary}')
@@ -119,7 +121,7 @@ class Acceptance:
         state = g.wait('server acknowledges new project', lambda s:s.get('projectName')==name and s.get('projectId'))
         self.check('created a project in the chosen selection', True, project=state['projectId'], pos1=a, pos2=b)
         g.action('message',text='P2S-ACCEPT-PING-'+self.tag)
-        g.wait('real mod/provider round trip', lambda s: not s['busy'] and 'ACK PING '+self.tag in str(s.get('lastAssistant')))
+        g.wait('real mod/provider round trip', lambda s: not s['busy'] and 'ACK PING '+self.tag in str(s.get('lastAssistant')), fail_on_agent_error=True)
         self.check('chat reached the scripted provider and came back',True)
         self.picture('01-project-chat')
         start_exports = set((self.args.game_dir/'config/p2s_exports').glob('*.zip'))
