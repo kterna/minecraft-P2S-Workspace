@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="slate-mist">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2S UI 效果图 04 · 文件页（工作区列表与 TOML 手改）</title>
+<style>
+  :root {
+    --bg-canvas: #191C23EB;
+    --bg-surface: #20242DF2;
+    --bg-elevated: #272C37FA;
+    --bg-inset: #13161CF2;
+    --bg-hover: #2E3442F5;
+    --bg-selected: #2A3346F5;
+    --border-subtle: #2E3440D9;
+    --border-default: #3B4354EB;
+    --border-focus: #7B9ED9FF;
+    --text-primary: #D8DEE9FF;
+    --text-secondary: #97A1B3FF;
+    --text-muted: #667084FF;
+    --text-on-accent: #12161FFF;
+    --accent-primary: #7B9ED9FF;
+    --accent-hover: #8CAEE4FF;
+    --accent-soft: #7B9ED924;
+    --semantic-success: #7BB696FF;
+    --semantic-success-bg: #1D2C26EB;
+    --semantic-warning: #CFA972FF;
+    --semantic-warning-bg: #2B241CEB;
+    --semantic-danger: #CC7B82FF;
+    --semantic-danger-bg: #2E1E23EB;
+    --syntax-section: #8AAAE0FF;
+    --syntax-key: #B4C1D6FF;
+    --syntax-string: #8BC0A3FF;
+    --syntax-number: #CFA972FF;
+    --diff-add-bg: #1B2D25E6;
+    --diff-add-text: #8FD1ACFF;
+    --diff-del-bg: #301F24E6;
+    --diff-del-text: #E09299FF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #0D0F14; color: #CBD2DF;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+
+  .gallery-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 10px 20px; background: #12151C;
+    border-bottom: 1px solid #242936; font-size: 13px; flex-wrap: wrap;
+  }
+  .gallery-left, .gallery-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gallery-brand { font-weight: 600; color: #E5E9F0; margin-right: 6px; }
+  .nav-pill {
+    text-decoration: none; color: #939DB0; padding: 4px 10px;
+    border-radius: 5px; border: 1px solid transparent;
+  }
+  .nav-pill:hover { background: #1B202B; color: #E5E9F0; }
+  .nav-pill.active { background: #232938; color: #E5E9F0; border-color: #343D52; }
+  .meta-badge {
+    font-size: 12px; color: #7D8799; padding: 3px 8px;
+    background: #171B24; border: 1px solid #242A38; border-radius: 4px;
+  }
+  .theme-switch-group {
+    display: inline-flex; background: #171B24; border: 1px solid #272E3E;
+    border-radius: 6px; padding: 2px; gap: 2px;
+  }
+  .theme-btn {
+    background: transparent; color: #8D97AA; border: none;
+    padding: 4px 9px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  }
+  .theme-btn:hover { color: #E5E9F0; }
+  .theme-btn.active { background: #2A3244; color: #ECEFF4; }
+  .json-btn {
+    background: #1A1F2B; color: #A7B4CA; border: 1px solid #2B3345;
+    padding: 4px 10px; font-size: 12px; border-radius: 5px; cursor: pointer;
+  }
+  .json-btn:hover { background: #232A3A; color: #ECEFF4; }
+
+  .stage-wrap { display: flex; flex-direction: column; align-items: center; padding: 16px 16px 28px; }
+  .stage-scale-box { width: 1280px; height: 720px; transform-origin: top center; }
+
+  .mc-screen {
+    position: relative; width: 1280px; height: 720px; overflow: hidden;
+    border: 2px solid #222733; background: #7A9AC0;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+    font-size: 16px; line-height: 20px;
+    -webkit-font-smoothing: none; font-smooth: never; user-select: none;
+  }
+  .mc-screen *, .mc-screen *::before, .mc-screen *::after {
+    border-radius: 0 !important; box-shadow: none !important;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+  }
+  .mc-world-svg {
+    position: absolute; inset: 0; width: 1280px; height: 720px;
+    display: block; shape-rendering: crispEdges;
+  }
+
+  .world-hud-top {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; gap: 8px; align-items: center; z-index: 4;
+  }
+  .world-chip {
+    background: var(--bg-canvas); border: 2px solid var(--border-subtle);
+    color: var(--text-primary); padding: 4px 10px; height: 30px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .world-hud-bottom {
+    position: absolute; right: 12px; bottom: 12px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 4;
+  }
+  .world-hint {
+    background: var(--bg-canvas); border: 2px solid var(--border-subtle);
+    color: var(--text-secondary); padding: 4px 10px; height: 28px; display: inline-flex; align-items: center;
+  }
+  .mc-hotbar {
+    display: flex; background: #1A1D24D9; border: 2px solid #3C4454; padding: 2px; gap: 2px;
+  }
+  .hotbar-slot {
+    width: 32px; height: 32px; background: #12151BB8; border: 2px solid #2A303D;
+    display: flex; align-items: center; justify-content: center; color: #8892A6;
+  }
+  .hotbar-slot.active { border-color: var(--accent-primary); background: #232A38D8; color: var(--text-primary); }
+
+  /* Files Mode Drawer (384mc = 768px, leaves 500px world on right) */
+  .p2s-drawer {
+    position: absolute; left: 12px; top: 12px; width: 768px; height: 696px;
+    background: var(--bg-canvas); border: 2px solid var(--border-default);
+    display: flex; flex-direction: column; z-index: 10;
+  }
+  .p2s-drawer.collapsed { display: none; }
+
+  .drawer-collapsed-pill {
+    position: absolute; left: 12px; top: 12px; height: 38px;
+    background: var(--bg-elevated); border: 2px solid var(--border-default);
+    color: var(--text-primary); display: none; align-items: center;
+    gap: 10px; padding: 0 12px; z-index: 15; cursor: pointer;
+  }
+  .drawer-collapsed-pill.visible { display: inline-flex; }
+
+  .topbar-row {
+    height: 38px; padding: 0 10px; background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;
+  }
+  .topbar-left, .topbar-right { display: flex; align-items: center; gap: 4px; }
+
+  .tabbar-row {
+    height: 42px; padding: 0 10px; background: var(--bg-surface);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .tabs-group { display: flex; align-items: stretch; height: 40px; gap: 4px; }
+  .tab-item {
+    display: inline-flex; align-items: center; gap: 6px; padding: 0 12px;
+    color: var(--text-secondary); text-decoration: none; border-bottom: 4px solid transparent;
+    cursor: pointer; font-size: 16px; line-height: 20px;
+  }
+  .tab-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .tab-item.active { color: var(--text-primary); background: var(--bg-canvas); border-bottom-color: var(--accent-primary); }
+  .tab-badge {
+    padding: 0 6px; height: 20px; display: inline-flex; align-items: center;
+    background: var(--semantic-warning-bg); color: var(--semantic-warning);
+    border: 2px solid var(--semantic-warning);
+  }
+
+  .mc-btn {
+    height: 26px; padding: 0 8px; background: var(--bg-surface);
+    border: 2px solid var(--border-subtle); color: var(--text-secondary);
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer; font-size: 16px; line-height: 20px; text-decoration: none;
+  }
+  .mc-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+  .mc-btn.ghost { background: transparent; border-color: transparent; padding: 0 6px; }
+  .mc-btn.ghost:hover { background: var(--bg-hover); border-color: var(--border-subtle); }
+  .mc-btn.primary { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--text-on-accent); }
+  .mc-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .mc-btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* Split Body: Slim Tree + TOML Editor */
+  .files-split {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  .explorer-pane {
+    width: 236px;
+    background: var(--bg-surface);
+    border-right: 2px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .explorer-pane.hidden { display: none; }
+  .explorer-actions {
+    height: 38px;
+    padding: 0 6px;
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+  }
+  .explorer-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .tree-folder {
+    padding: 4px 6px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tree-file {
+    padding: 4px 6px 4px 18px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+  }
+  .tree-file:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .tree-file.selected {
+    background: var(--bg-selected);
+    border-color: var(--border-subtle);
+    border-left: 4px solid var(--accent-primary);
+    padding-left: 16px;
+    color: var(--text-primary);
+  }
+  .tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot-pending { width: 8px; height: 8px; background: var(--semantic-warning); flex-shrink: 0; }
+
+  /* Editor Right Pane */
+  .editor-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .editor-head {
+    height: 38px;
+    padding: 0 10px;
+    background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .editor-title-wrap {
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+  }
+  .editor-path {
+    color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rev-tag { color: var(--text-muted); flex-shrink: 0; }
+  .dirty-dot { color: var(--semantic-warning); }
+
+  /* Contextual Banner (either Selection-to-Chat or Read-Only Guard) */
+  .editor-subbar {
+    height: 34px;
+    padding: 0 10px;
+    background: var(--accent-soft);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+  .editor-subbar.guard {
+    background: var(--semantic-warning-bg);
+    border-bottom-color: var(--semantic-warning);
+    color: var(--semantic-warning);
+  }
+
+  .code-canvas {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--bg-inset);
+    padding: 6px 0;
+  }
+  .code-canvas::-webkit-scrollbar { width: 6px; }
+  .code-canvas::-webkit-scrollbar-thumb { background: var(--border-default); }
+
+  .code-line {
+    display: flex;
+    align-items: center;
+    min-height: 24px;
+    line-height: 24px;
+    padding-right: 12px;
+    white-space: pre;
+    cursor: text;
+  }
+  .code-line:hover { background: var(--bg-hover); }
+  .code-line.selected-line { background: var(--bg-selected); }
+  .code-ln {
+    width: 44px;
+    text-align: right;
+    padding-right: 10px;
+    color: var(--text-muted);
+    border-right: 2px solid var(--border-subtle);
+    margin-right: 10px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .code-line.selected-line .code-ln {
+    color: var(--accent-primary);
+    border-right-color: var(--accent-primary);
+  }
+  .code-text { flex: 1; color: var(--text-primary); }
+  .tok-sec { color: var(--syntax-section); }
+  .tok-key { color: var(--syntax-key); }
+  .tok-str { color: var(--syntax-string); }
+  .tok-num { color: var(--syntax-number); }
+  .tok-com { color: var(--text-muted); }
+
+  .editor-caret {
+    display: inline-block; width: 2px; height: 18px;
+    background: var(--accent-primary); vertical-align: middle; margin-left: 1px;
+    animation: mcBlink 1s steps(2) infinite;
+  }
+  @keyframes mcBlink { 0%,49%{opacity:1;} 50%,100%{opacity:0.25;} }
+
+  .editor-footer {
+    height: 30px;
+    padding: 0 10px;
+    background: var(--bg-surface);
+    border-top: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .mc-popover {
+    position: absolute; top: 40px; background: var(--bg-elevated);
+    border: 2px solid var(--border-default); padding: 8px; z-index: 30;
+    display: none; flex-direction: column; gap: 6px;
+  }
+  .mc-popover.open { display: flex; }
+  .popover-right { right: 10px; width: 256px; }
+  .popover-title {
+    color: var(--text-secondary); padding-bottom: 4px;
+    border-bottom: 2px solid var(--border-subtle); display: flex; justify-content: space-between;
+  }
+  .popover-row {
+    padding: 6px 8px; background: var(--bg-surface); border: 2px solid var(--border-subtle);
+    color: var(--text-primary); cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  }
+  .popover-row:hover { background: var(--bg-hover); }
+  .popover-row.selected { background: var(--bg-selected); border-color: var(--accent-primary); }
+
+  .json-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(8,10,14,0.78);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .json-modal-backdrop.open { display: flex; }
+  .json-modal {
+    width: 680px; max-width: 100%; max-height: 85vh; background: #141821;
+    border: 1px solid #2B3344; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .json-modal-head {
+    padding: 12px 16px; border-bottom: 1px solid #242B3A;
+    display: flex; justify-content: space-between; align-items: center; color: #E5E9F0; font-size: 14px;
+  }
+  .json-pre {
+    margin: 0; padding: 14px 16px; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55;
+    color: #BAC5D8; background: #0F1219;
+  }
+  .note-caption { margin-top: 12px; font-size: 12px; color: #7D8799; text-align: center; }
+</style>
+</head>
+<body>
+
+<header class="gallery-bar">
+  <div class="gallery-left">
+    <span class="gallery-brand">P2S · B+C 界面效果图</span>
+    <a class="nav-pill" href="index.html">目录</a>
+    <a class="nav-pill" href="01-chat-running.html">01 对话运行中</a>
+    <a class="nav-pill" href="02-chat-pending.html">02 待审卡片(3)</a>
+    <a class="nav-pill" href="03-review-diff.html">03 审阅 Diff</a>
+    <a class="nav-pill active" href="04-files-editor.html">04 文件编辑</a>
+    <a class="nav-pill" href="05-narrow-480x270.html">05 窄屏 480×270</a>
+  </div>
+  <div class="gallery-right">
+    <span class="meta-badge">逻辑 640×360 · 2× = 1280×720</span>
+    <div class="theme-switch-group">
+      <button class="theme-btn active" data-theme-id="slate-mist">冷灰青</button>
+      <button class="theme-btn" data-theme-id="rose-dusk">暮玫瑰</button>
+      <button class="theme-btn" data-theme-id="warm-stone">暖石灰</button>
+    </div>
+    <button class="json-btn" id="openJsonBtn">{ 主题 JSON }</button>
+  </div>
+</header>
+
+<main class="stage-wrap">
+  <div class="stage-scale-box" id="stageBox">
+    <div class="mc-screen" id="mcScreen">
+
+      <!-- World Scene Highlighting Main Hall -->
+      <svg class="mc-world-svg" viewBox="0 0 320 180" preserveAspectRatio="none" aria-hidden="true">
+        <rect x="0" y="0" width="320" height="28" fill="#82A0C2"/>
+        <rect x="0" y="28" width="320" height="24" fill="#92AECB"/>
+        <rect x="0" y="52" width="320" height="22" fill="#A2BBD4"/>
+        <rect x="0" y="74" width="320" height="24" fill="#B2C7DD"/>
+        <rect x="280" y="16" width="14" height="14" fill="#EFE4C4"/>
+        <rect x="218" y="24" width="32" height="6" fill="#DCE5F0"/>
+
+        <rect x="200" y="76" width="52" height="22" fill="#6D8496"/>
+        <rect x="252" y="70" width="68" height="28" fill="#6F8698"/>
+
+        <rect x="0" y="96" width="320" height="84" fill="#5B7847"/>
+        <rect x="196" y="110" width="124" height="70" fill="#5E7D4A"/>
+        <rect x="196" y="124" width="124" height="2" fill="#537041"/>
+        <rect x="196" y="140" width="124" height="2" fill="#537041"/>
+        <rect x="196" y="156" width="124" height="2" fill="#537041"/>
+
+        <!-- Main Hall Focus Bounding Box -->
+        <rect x="216" y="64" width="68" height="58" fill="#CFC9BD"/>
+        <rect x="216" y="64" width="6" height="58" fill="#5B422E"/>
+        <rect x="278" y="64" width="6" height="58" fill="#5B422E"/>
+        <rect x="222" y="88" width="56" height="4" fill="#5B422E"/>
+        <rect x="236" y="96" width="14" height="26" fill="#463324"/>
+        <rect x="258" y="74" width="12" height="10" fill="#6F8A9C"/>
+        <rect x="208" y="56" width="84" height="8" fill="#454C59"/>
+        <rect x="214" y="48" width="72" height="8" fill="#505868"/>
+        <rect x="222" y="42" width="56" height="6" fill="#5D6678"/>
+        <rect x="206" y="40" width="88" height="84" fill="none" stroke="#7B9ED9" stroke-width="1"/>
+
+        <rect x="254" y="92" width="6" height="1" fill="#ECEFF4AA"/>
+        <rect x="256" y="90" width="2" height="5" fill="#ECEFF4AA"/>
+      </svg>
+
+      <div class="world-hud-top">
+        <div class="world-chip">
+          <span id="worldChipText">当前边界: main_hall.toml (20×14×16)</span>
+        </div>
+      </div>
+
+      <div class="world-hud-bottom">
+        <div class="world-hint">偶尔手动微调 TOML · Ctrl+S 保存立即同步结构</div>
+        <div class="mc-hotbar">
+          <div class="hotbar-slot active">斧</div>
+          <div class="hotbar-slot">石</div>
+          <div class="hotbar-slot">木</div>
+          <div class="hotbar-slot">瓦</div>
+        </div>
+      </div>
+
+      <div class="drawer-collapsed-pill" id="collapsedPill">
+        <span>P2S · main_hall.toml</span>
+        <span style="color:var(--accent-primary)">展开 »</span>
+      </div>
+
+      <aside class="p2s-drawer" id="drawer">
+        <div class="topbar-row">
+          <div class="topbar-left">
+            <button class="mc-btn">江南庭院 · S4 ▾</button>
+            <button class="mc-btn ghost">+</button>
+          </div>
+          <div class="topbar-right">
+            <button class="mc-btn ghost" title="撤销">↶</button>
+            <button class="mc-btn ghost" title="重做">↷</button>
+            <button class="mc-btn" title="检查点">◆2</button>
+            <button class="mc-btn ghost" title="更多">···</button>
+            <button class="mc-btn ghost" id="settingsBtn">⚙</button>
+            <button class="mc-btn ghost">✕</button>
+          </div>
+        </div>
+
+        <div class="tabbar-row">
+          <nav class="tabs-group">
+            <a class="tab-item" href="02-chat-pending.html">对话</a>
+            <a class="tab-item" href="03-review-diff.html">审阅 <span class="tab-badge">3</span></a>
+            <a class="tab-item active" href="04-files-editor.html">文件</a>
+          </nav>
+          <div class="topbar-right">
+            <button class="mc-btn ghost" id="collapseDrawerBtn" title="收起仅看世界">«</button>
+          </div>
+        </div>
+
+        <div class="mc-popover popover-right" id="settingsPopover">
+          <div class="popover-title"><span>外观主题 (JSON)</span><span style="color:var(--text-muted)">热切换</span></div>
+          <div class="popover-row theme-opt selected" data-theme-id="slate-mist"><span>冷灰青 · Slate Mist</span><span>●</span></div>
+          <div class="popover-row theme-opt" data-theme-id="rose-dusk"><span>暮玫瑰 · Rosé Dusk</span><span></span></div>
+          <div class="popover-row theme-opt" data-theme-id="warm-stone"><span>暖石灰 · Warm Stone</span><span></span></div>
+        </div>
+
+        <div class="files-split">
+          <!-- Left Slim Explorer -->
+          <div class="explorer-pane" id="explorerPane">
+            <div class="explorer-actions">
+              <button class="mc-btn ghost" title="新建文件">+文</button>
+              <button class="mc-btn ghost" title="新建目录">+夹</button>
+              <button class="mc-btn ghost" title="重命名">改</button>
+              <button class="mc-btn ghost" title="删除">删</button>
+            </div>
+            <div class="explorer-list">
+              <div class="tree-folder">▾ workspace/</div>
+              <div class="tree-file selected" data-file="main_hall">
+                <span class="tree-name">main_hall.toml</span>
+              </div>
+              <div class="tree-file" data-file="pavilion_roof">
+                <span class="tree-name">pavilion_roof.toml</span>
+                <span class="dot-pending" title="有待审改动"></span>
+              </div>
+              <div class="tree-file" data-file="corridor_frame">
+                <span class="tree-name">corridor_frame.toml</span>
+                <span class="dot-pending" title="有待审改动"></span>
+              </div>
+              <div class="tree-file" data-file="courtyard_floor">
+                <span class="tree-name">courtyard_floor.toml</span>
+                <span class="dot-pending" title="有待审改动"></span>
+              </div>
+              <div class="tree-folder" style="margin-top:6px;">▸ archive/</div>
+              <div class="tree-file" style="color:var(--text-muted)" data-file="old_gate">
+                <span class="tree-name">old_gate.toml</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right TOML Editor -->
+          <div class="editor-pane">
+            <div class="editor-head">
+              <div class="editor-title-wrap">
+                <button class="mc-btn ghost" id="toggleTreeBtn" title="收起/展开目录树">‹</button>
+                <span class="editor-path" id="editorPath">workspace/main_hall.toml</span>
+                <span class="rev-tag" id="editorRev">rev.4</span>
+                <span class="dirty-dot" id="dirtyDot">• 未保存</span>
+              </div>
+              <div class="topbar-right">
+                <button class="mc-btn" id="formatBtn">格式化</button>
+                <button class="mc-btn primary" id="saveBtn">保存</button>
+              </div>
+            </div>
+
+            <!-- Context Quote Bar (or Read-Only Pending Guard when pending file selected) -->
+            <div class="editor-subbar" id="editorSubbar">
+              <span id="subbarText">已选中 L14–L17（4 行）· 可直接引用给 Agent 修改</span>
+              <a class="mc-btn" id="subbarAction" href="01-chat-running.html">+ 引用到下条对话</a>
+            </div>
+
+            <div class="code-canvas" id="codeCanvas"></div>
+
+            <footer class="editor-footer">
+              <span id="footerCursor">行 16, 列 19 · TOML v1</span>
+              <span id="footerHint">点击左树待审文件(●)可查看只读锁保护效果</span>
+            </footer>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="note-caption">点击左侧目录中带琥珀点的待审文件（如 pavilion_roof.toml），会触发只读保护条并引导前往审阅；干净文件可直接手改并保存。</div>
+</main>
+
+<div class="json-modal-backdrop" id="jsonModal">
+  <div class="json-modal">
+    <div class="json-modal-head">
+      <span>当前主题 JSON（与 CSS 变量一一对应）</span>
+      <div style="display:flex;gap:8px;">
+        <button class="json-btn" id="copyJsonBtn">复制 JSON</button>
+        <button class="json-btn" id="closeJsonBtn">关闭</button>
+      </div>
+    </div>
+    <pre class="json-pre" id="jsonPre"></pre>
+  </div>
+</div>
+
+<script>
+const THEMES = {
+  "slate-mist": {
+    schema_version: 1,
+    meta: { id: "slate-mist", name: "冷灰青 · Slate Mist", mode: "dark" },
+    colors: {
+      "bg-canvas": "#191C23EB", "bg-surface": "#20242DF2", "bg-elevated": "#272C37FA", "bg-inset": "#13161CF2",
+      "bg-hover": "#2E3442F5", "bg-selected": "#2A3346F5", "border-subtle": "#2E3440D9", "border-default": "#3B4354EB",
+      "border-focus": "#7B9ED9FF", "text-primary": "#D8DEE9FF", "text-secondary": "#97A1B3FF", "text-muted": "#667084FF",
+      "text-on-accent": "#12161FFF", "accent-primary": "#7B9ED9FF", "accent-hover": "#8CAEE4FF", "accent-soft": "#7B9ED924",
+      "semantic-success": "#7BB696FF", "semantic-success-bg": "#1D2C26EB", "semantic-warning": "#CFA972FF", "semantic-warning-bg": "#2B241CEB",
+      "semantic-danger": "#CC7B82FF", "semantic-danger-bg": "#2E1E23EB", "syntax-section": "#8AAAE0FF", "syntax-key": "#B4C1D6FF",
+      "syntax-string": "#8BC0A3FF", "syntax-number": "#CFA972FF", "diff-add-bg": "#1B2D25E6", "diff-add-text": "#8FD1ACFF",
+      "diff-del-bg": "#301F24E6", "diff-del-text": "#E09299FF"
+    }
+  },
+  "rose-dusk": {
+    schema_version: 1,
+    meta: { id: "rose-dusk", name: "暮玫瑰 · Rosé Dusk", mode: "dark" },
+    colors: {
+      "bg-canvas": "#1E1B29EB", "bg-surface": "#252233F2", "bg-elevated": "#2D293EFA", "bg-inset": "#171421F2",
+      "bg-hover": "#353049F5", "bg-selected": "#382E42F5", "border-subtle": "#363149D9", "border-default": "#463F5EEB",
+      "border-focus": "#D498A5FF", "text-primary": "#E0DEF4FF", "text-secondary": "#A59EC4FF", "text-muted": "#726C8FFF",
+      "text-on-accent": "#1A1624FF", "accent-primary": "#D498A5FF", "accent-hover": "#E0AAB6FF", "accent-soft": "#D498A524",
+      "semantic-success": "#84B9B3FF", "semantic-success-bg": "#1D2B2DEB", "semantic-warning": "#D7B07AFF", "semantic-warning-bg": "#2C251EEB",
+      "semantic-danger": "#CE798CFF", "semantic-danger-bg": "#2E1E26EB", "syntax-section": "#D498A5FF", "syntax-key": "#C2BCDDFF",
+      "syntax-string": "#8EC2BCFF", "syntax-number": "#D7B07AFF", "diff-add-bg": "#1C2B2DE6", "diff-add-text": "#95CCC6FF",
+      "diff-del-bg": "#311E27E6", "diff-del-text": "#E292A3FF"
+    }
+  },
+  "warm-stone": {
+    schema_version: 1,
+    meta: { id: "warm-stone", name: "暖石灰 · Warm Stone", mode: "light" },
+    colors: {
+      "bg-canvas": "#EAE6DFF2", "bg-surface": "#E2DDD4F5", "bg-elevated": "#F2EFE9FA", "bg-inset": "#DCD6CBF5",
+      "bg-hover": "#D7D1C5F5", "bg-selected": "#D0DAE5F5", "border-subtle": "#CEC8BCFF", "border-default": "#BCB5A7FF",
+      "border-focus": "#4F749EFF", "text-primary": "#2D3138FF", "text-secondary": "#595E68FF", "text-muted": "#838790FF",
+      "text-on-accent": "#F5F3EEFF", "accent-primary": "#4F749EFF", "accent-hover": "#42658DFF", "accent-soft": "#4F749E20",
+      "semantic-success": "#477B61FF", "semantic-success-bg": "#D7E4DBEB", "semantic-warning": "#9B6F3BFF", "semantic-warning-bg": "#EAE0D0EB",
+      "semantic-danger": "#A8565CFF", "semantic-danger-bg": "#ECDCDEEB", "syntax-section": "#466A94FF", "syntax-key": "#434852FF",
+      "syntax-string": "#477B61FF", "syntax-number": "#9B6F3BFF", "diff-add-bg": "#D6E5DBE8", "diff-add-text": "#2F5E47FF",
+      "diff-del-bg": "#ECD9DBE8", "diff-del-text": "#8B3E44FF"
+    }
+  }
+};
+
+const DOCS = {
+  main_hall: {
+    path: "workspace/main_hall.toml",
+    rev: "rev.4",
+    pending: false,
+    size: "20×14×16",
+    selectedLines: [14, 15, 16, 17],
+    caretLine: 16,
+    lines: [
+      `<span class="tok-key">format_version</span> = <span class="tok-num">1</span>`,
+      ``,
+      `<span class="tok-sec">[workspace]</span>`,
+      `<span class="tok-key">name</span> = <span class="tok-str">"main_hall"</span>`,
+      `<span class="tok-key">origin</span> = [<span class="tok-num">96</span>, <span class="tok-num">64</span>, <span class="tok-num">52</span>]`,
+      `<span class="tok-key">size</span> = [<span class="tok-num">20</span>, <span class="tok-num">14</span>, <span class="tok-num">16</span>]`,
+      ``,
+      `<span class="tok-sec">[palette]</span>`,
+      `<span class="tok-key">wall</span> = <span class="tok-str">"minecraft:calcite"</span>`,
+      `<span class="tok-key">beam</span> = <span class="tok-str">"minecraft:dark_oak_log"</span>`,
+      `<span class="tok-key">roof</span> = <span class="tok-str">"minecraft:deepslate_tile_stairs"</span>`,
+      ``,
+      `<span class="tok-sec">[[part]]</span>`,
+      `<span class="tok-key">name</span> = <span class="tok-str">"front_pillars"</span>`,
+      `<span class="tok-key">priority</span> = <span class="tok-num">10</span>`,
+      `<span class="tok-sec">[[part.action]]</span>`,
+      `<span class="tok-key">type</span> = <span class="tok-str">"line"</span>`,
+      `<span class="tok-key">block</span> = <span class="tok-str">"$beam"</span>`,
+      `<span class="tok-key">from</span> = [<span class="tok-num">2</span>, <span class="tok-num">1</span>, <span class="tok-num">1</span>]`,
+      `<span class="tok-key">to</span> = [<span class="tok-num">2</span>, <span class="tok-num">6</span>, <span class="tok-num">1</span>]`
+    ]
+  },
+  pavilion_roof: {
+    path: "workspace/pavilion_roof.toml",
+    rev: "staged",
+    pending: true,
+    size: "18×12×18",
+    selectedLines: [],
+    caretLine: -1,
+    lines: [
+      `<span class="tok-com"># 当前展示的是暂存待审版本（只读）</span>`,
+      `<span class="tok-key">format_version</span> = <span class="tok-num">1</span>`,
+      ``,
+      `<span class="tok-sec">[palette]</span>`,
+      `<span class="tok-key">eave</span> = <span class="tok-str">"minecraft:dark_oak_stairs"</span>`,
+      `<span class="tok-key">tile</span> = <span class="tok-str">"minecraft:deepslate_tile_slab"</span>`,
+      `<span class="tok-key">ridge</span> = <span class="tok-str">"minecraft:deepslate_tile_wall"</span>`,
+      ``,
+      `<span class="tok-sec">[[part]]</span>`,
+      `<span class="tok-key">name</span> = <span class="tok-str">"gable_eave_east"</span>`,
+      `<span class="tok-key">priority</span> = <span class="tok-num">20</span>`,
+      `<span class="tok-sec">[[part.action]]</span>`,
+      `<span class="tok-key">type</span> = <span class="tok-str">"plane"</span>`,
+      `<span class="tok-key">block</span> = <span class="tok-str">"$tile"</span>`,
+      `<span class="tok-key">axis</span> = <span class="tok-str">"y"</span>`,
+      `<span class="tok-key">mode</span> = <span class="tok-str">"outline"</span>`,
+      `<span class="tok-key">from</span> = [<span class="tok-num">0</span>, <span class="tok-num">6</span>, <span class="tok-num">0</span>]`
+    ]
+  },
+  corridor_frame: {
+    path: "workspace/corridor_frame.toml",
+    rev: "staged",
+    pending: true,
+    size: "18×12×18",
+    selectedLines: [],
+    caretLine: -1,
+    lines: [
+      `<span class="tok-com"># 暂存待审 · 回廊柱网与云杉木栏杆</span>`,
+      `<span class="tok-sec">[palette]</span>`,
+      `<span class="tok-key">pillar</span> = <span class="tok-str">"minecraft:stripped_spruce_log"</span>`,
+      `<span class="tok-key">rail</span> = <span class="tok-str">"minecraft:spruce_fence"</span>`,
+      `<span class="tok-key">lamp</span> = <span class="tok-str">"minecraft:lantern[hanging=true]"</span>`
+    ]
+  },
+  courtyard_floor: {
+    path: "workspace/courtyard_floor.toml",
+    rev: "staged",
+    pending: true,
+    size: "18×12×18",
+    selectedLines: [],
+    caretLine: -1,
+    lines: [
+      `<span class="tok-com"># 暂存待审 · 青石板地面铺装</span>`,
+      `<span class="tok-sec">[[part]]</span>`,
+      `<span class="tok-key">name</span> = <span class="tok-str">"bluestone_paving"</span>`,
+      `<span class="tok-key">block</span> = <span class="tok-str">"minecraft:polished_deepslate"</span>`
+    ]
+  },
+  old_gate: {
+    path: "archive/old_gate.toml",
+    rev: "rev.1",
+    pending: false,
+    size: "10×8×6",
+    selectedLines: [],
+    caretLine: 4,
+    lines: [
+      `<span class="tok-sec">[workspace]</span>`,
+      `<span class="tok-key">name</span> = <span class="tok-str">"old_gate"</span>`,
+      `<span class="tok-key">origin</span> = [<span class="tok-num">84</span>, <span class="tok-num">64</span>, <span class="tok-num">50</span>]`,
+      `<span class="tok-key">size</span> = [<span class="tok-num">10</span>, <span class="tok-num">8</span>, <span class="tok-num">6</span>]`
+    ]
+  }
+};
+
+let currentThemeId = localStorage.getItem("p2s_theme") || "slate-mist";
+if (!THEMES[currentThemeId]) currentThemeId = "slate-mist";
+function applyTheme(id) {
+  const t = THEMES[id] || THEMES["slate-mist"];
+  currentThemeId = t.meta.id;
+  localStorage.setItem("p2s_theme", currentThemeId);
+  for (const [k, v] of Object.entries(t.colors)) document.documentElement.style.setProperty("--" + k, v);
+  document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeId === currentThemeId));
+  document.querySelectorAll(".theme-opt").forEach(r => {
+    const on = r.dataset.themeId === currentThemeId;
+    r.classList.toggle("selected", on);
+    r.lastElementChild.textContent = on ? "●" : "";
+  });
+  document.getElementById("jsonPre").textContent = JSON.stringify(t, null, 2);
+}
+applyTheme(currentThemeId);
+document.querySelectorAll("[data-theme-id]").forEach(el => el.addEventListener("click", () => applyTheme(el.dataset.themeId)));
+
+function fitStage() {
+  const box = document.getElementById("stageBox");
+  const avail = window.innerWidth - 32;
+  const scale = avail < 1280 ? Math.max(0.45, avail / 1280) : 1;
+  box.style.transform = scale < 1 ? `scale(${scale})` : "none";
+  box.parentElement.style.height = scale < 1 ? `${Math.ceil(720 * scale) + 48}px` : "auto";
+}
+fitStage();
+window.addEventListener("resize", fitStage);
+
+let isDirty = true;
+function loadDoc(key) {
+  const doc = DOCS[key] || DOCS.main_hall;
+  document.querySelectorAll(".tree-file").forEach(el => el.classList.toggle("selected", el.dataset.file === key));
+  document.getElementById("editorPath").textContent = doc.path;
+  document.getElementById("editorRev").textContent = doc.rev;
+  document.getElementById("worldChipText").textContent = `当前边界: ${doc.path.split("/").pop()} (${doc.size})`;
+
+  const subbar = document.getElementById("editorSubbar");
+  const subText = document.getElementById("subbarText");
+  const subAct = document.getElementById("subbarAction");
+  const dirty = document.getElementById("dirtyDot");
+  const saveBtn = document.getElementById("saveBtn");
+  const formatBtn = document.getElementById("formatBtn");
+
+  if (doc.pending) {
+    subbar.classList.add("guard");
+    subText.textContent = "此文件存在待审改动，已锁定只读以防修订号冲突";
+    subAct.textContent = "前往审阅 →";
+    subAct.href = `03-review-diff.html#file=${doc.path.split("/").pop()}`;
+    dirty.style.display = "none";
+    saveBtn.disabled = true;
+    formatBtn.disabled = true;
+  } else {
+    subbar.classList.remove("guard");
+    subText.textContent = "已选中 L14–L17（4 行）· 可直接引用给 Agent 修改";
+    subAct.textContent = "+ 引用到下条对话";
+    subAct.href = "01-chat-running.html";
+    dirty.style.display = isDirty && key === "main_hall" ? "inline" : "none";
+    saveBtn.disabled = false;
+    formatBtn.disabled = false;
+  }
+
+  const canvas = document.getElementById("codeCanvas");
+  canvas.innerHTML = "";
+  doc.lines.forEach((html, i) => {
+    const ln = i + 1;
+    const row = document.createElement("div");
+    row.className = "code-line" + (doc.selectedLines.includes(ln) ? " selected-line" : "");
+    row.innerHTML = `<span class="code-ln">${ln}</span><span class="code-text">${html}${ln === doc.caretLine ? '<span class="editor-caret"></span>' : ''}</span>`;
+    canvas.appendChild(row);
+  });
+}
+
+loadDoc("main_hall");
+document.querySelectorAll(".tree-file").forEach(el => el.addEventListener("click", () => loadDoc(el.dataset.file)));
+document.getElementById("saveBtn").addEventListener("click", () => {
+  isDirty = false;
+  document.getElementById("dirtyDot").style.display = "none";
+  document.getElementById("editorRev").textContent = "rev.5";
+  document.getElementById("footerCursor").textContent = "已保存至工作区 (rev.5) · TOML 校验通过";
+});
+document.getElementById("toggleTreeBtn").addEventListener("click", () => {
+  const pane = document.getElementById("explorerPane");
+  const hidden = pane.classList.toggle("hidden");
+  document.getElementById("toggleTreeBtn").textContent = hidden ? "›" : "‹";
+});
+
+document.getElementById("settingsBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  document.getElementById("settingsPopover").classList.toggle("open");
+});
+document.getElementById("mcScreen").addEventListener("click", e => {
+  if (!e.target.closest(".mc-popover")) document.getElementById("settingsPopover").classList.remove("open");
+});
+document.getElementById("collapseDrawerBtn").addEventListener("click", () => {
+  document.getElementById("drawer").classList.add("collapsed");
+  document.getElementById("collapsedPill").classList.add("visible");
+});
+document.getElementById("collapsedPill").addEventListener("click", () => {
+  document.getElementById("drawer").classList.remove("collapsed");
+  document.getElementById("collapsedPill").classList.remove("visible");
+});
+
+document.getElementById("openJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.add("open"));
+document.getElementById("closeJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.remove("open"));
+document.getElementById("jsonModal").addEventListener("click", e => { if (e.target.id === "jsonModal") e.target.classList.remove("open"); });
+document.getElementById("copyJsonBtn").addEventListener("click", () => {
+  navigator.clipboard?.writeText(document.getElementById("jsonPre").textContent);
+  document.getElementById("copyJsonBtn").textContent = "已复制";
+  setTimeout(() => document.getElementById("copyJsonBtn").textContent = "复制 JSON", 1200);
+});
+</script>
+</body>
+</html>

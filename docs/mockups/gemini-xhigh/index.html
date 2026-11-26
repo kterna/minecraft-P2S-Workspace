@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="slate-mist">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2S「B+C 结合」游戏内 Agent UI 设计总览</title>
+<style>
+  :root {
+    --bg-canvas: #191C23EB;
+    --bg-surface: #20242DF2;
+    --bg-elevated: #272C37FA;
+    --bg-inset: #13161CF2;
+    --bg-hover: #2E3442F5;
+    --bg-selected: #2A3346F5;
+    --border-subtle: #2E3440D9;
+    --border-default: #3B4354EB;
+    --border-focus: #7B9ED9FF;
+    --text-primary: #D8DEE9FF;
+    --text-secondary: #97A1B3FF;
+    --text-muted: #667084FF;
+    --text-on-accent: #12161FFF;
+    --accent-primary: #7B9ED9FF;
+    --accent-hover: #8CAEE4FF;
+    --accent-soft: #7B9ED924;
+    --semantic-success: #7BB696FF;
+    --semantic-success-bg: #1D2C26EB;
+    --semantic-warning: #CFA972FF;
+    --semantic-warning-bg: #2B241CEB;
+    --semantic-danger: #CC7B82FF;
+    --semantic-danger-bg: #2E1E23EB;
+    --syntax-section: #8AAAE0FF;
+    --syntax-key: #B4C1D6FF;
+    --syntax-string: #8BC0A3FF;
+    --syntax-number: #CFA972FF;
+    --diff-add-bg: #1B2D25E6;
+    --diff-add-text: #8FD1ACFF;
+    --diff-del-bg: #301F24E6;
+    --diff-del-text: #E09299FF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #0D0F14; color: #D8DEE9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+
+  .gallery-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 12px 24px; background: #12151C;
+    border-bottom: 1px solid #242936; font-size: 13px; flex-wrap: wrap;
+  }
+  .gallery-left, .gallery-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gallery-brand { font-weight: 600; color: #ECEFF4; margin-right: 6px; }
+  .nav-pill {
+    text-decoration: none; color: #939DB0; padding: 4px 10px;
+    border-radius: 5px; border: 1px solid transparent;
+  }
+  .nav-pill:hover { background: #1B202B; color: #E5E9F0; }
+  .nav-pill.active { background: #232938; color: #E5E9F0; border-color: #343D52; }
+  .theme-switch-group {
+    display: inline-flex; background: #171B24; border: 1px solid #272E3E;
+    border-radius: 6px; padding: 2px; gap: 2px;
+  }
+  .theme-btn {
+    background: transparent; color: #8D97AA; border: none;
+    padding: 4px 9px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  }
+  .theme-btn:hover { color: #E5E9F0; }
+  .theme-btn.active { background: #2A3244; color: #ECEFF4; }
+  .json-btn {
+    background: #1A1F2B; color: #A7B4CA; border: 1px solid #2B3345;
+    padding: 4px 10px; font-size: 12px; border-radius: 5px; cursor: pointer;
+  }
+  .json-btn:hover { background: #232A3A; color: #ECEFF4; }
+
+  .container {
+    max-width: 1220px;
+    margin: 0 auto;
+    padding: 28px 24px 48px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 20px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 960px) { .hero { grid-template-columns: 1fr; } }
+
+  .hero-card {
+    background: #141821;
+    border: 1px solid #242A38;
+    border-radius: 8px;
+    padding: 22px 24px;
+  }
+  .hero-kicker {
+    font-size: 12px;
+    color: #8BAEE5;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+  }
+  .hero-title {
+    margin: 0 0 10px;
+    font-size: 22px;
+    font-weight: 600;
+    color: #ECEFF4;
+  }
+  .hero-desc {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.65;
+    color: #9AA4B6;
+  }
+  .principles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  @media (max-width: 720px) { .principles { grid-template-columns: 1fr; } }
+  .principle-box {
+    background: #10131B;
+    border: 1px solid #222836;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .principle-box strong { display: block; font-size: 13px; color: #DDE3EE; margin-bottom: 4px; }
+  .principle-box span { font-size: 12px; color: #838D9F; line-height: 1.5; display: block; }
+
+  /* Live MC Theme Specimen Card */
+  .specimen-card {
+    background: #141821;
+    border: 1px solid #242A38;
+    border-radius: 8px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .specimen-mc {
+    background: var(--bg-canvas);
+    border: 2px solid var(--border-default);
+    padding: 10px;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+    font-size: 16px;
+    line-height: 20px;
+    color: var(--text-primary);
+    -webkit-font-smoothing: none;
+  }
+  .specimen-tabs {
+    display: flex;
+    gap: 6px;
+    border-bottom: 2px solid var(--border-subtle);
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .sp-tab { padding: 2px 8px; color: var(--text-secondary); }
+  .sp-tab.on { color: var(--text-primary); border-bottom: 4px solid var(--accent-primary); }
+  .sp-card {
+    background: var(--bg-surface);
+    border: 2px solid var(--border-subtle);
+    border-left: 4px solid var(--semantic-warning);
+    padding: 6px 8px;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+  }
+  .sp-swatches {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+  }
+  .swatch {
+    height: 22px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    position: relative;
+  }
+
+  .section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 0 0 14px;
+  }
+  .section-heading h2 { margin: 0; font-size: 16px; color: #E5E9F0; font-weight: 600; }
+  .section-heading span { font-size: 12px; color: #7C8698; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  .page-card {
+    background: #141821;
+    border: 1px solid #242A38;
+    border-radius: 8px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .page-card:hover {
+    border-color: #465574;
+    transform: translateY(-2px);
+  }
+  .thumb {
+    height: 168px;
+    background: #0F1219;
+    border-bottom: 1px solid #222836;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+    font-size: 14px;
+    line-height: 18px;
+  }
+  .mini-world {
+    position: absolute;
+    inset: 12px;
+    background: #84A1C2;
+    border: 1px solid #2B3344;
+    overflow: hidden;
+  }
+  .mini-grass {
+    position: absolute;
+    left: 0; right: 0; bottom: 0; height: 42%;
+    background: #5B7847;
+  }
+  .mini-panel {
+    position: absolute;
+    left: 6px; top: 6px; bottom: 6px;
+    background: var(--bg-canvas);
+    border: 2px solid var(--border-default);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--text-primary);
+  }
+  .mini-bar {
+    height: 12px;
+    background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-subtle);
+  }
+  .mini-line {
+    height: 10px;
+    background: var(--bg-surface);
+  }
+  .mini-line.accent { background: var(--accent-soft); border-left: 3px solid var(--accent-primary); }
+  .mini-line.warn { background: var(--semantic-warning-bg); border-left: 3px solid var(--semantic-warning); }
+  .mini-line.add { background: var(--diff-add-bg); border-left: 3px solid var(--semantic-success); }
+  .mini-line.del { background: var(--diff-del-bg); border-left: 3px solid var(--semantic-danger); }
+
+  .card-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .card-tag { font-size: 11px; color: #8BAEE5; }
+  .card-title { font-size: 15px; font-weight: 600; color: #ECEFF4; }
+  .card-desc { font-size: 13px; color: #8E98AB; line-height: 1.55; }
+  .card-foot {
+    margin-top: auto;
+    padding-top: 8px;
+    font-size: 12px;
+    color: #A5B5CF;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .json-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(8,10,14,0.78);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .json-modal-backdrop.open { display: flex; }
+  .json-modal {
+    width: 680px; max-width: 100%; max-height: 85vh; background: #141821;
+    border: 1px solid #2B3344; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .json-modal-head {
+    padding: 12px 16px; border-bottom: 1px solid #242B3A;
+    display: flex; justify-content: space-between; align-items: center; color: #E5E9F0; font-size: 14px;
+  }
+  .json-pre {
+    margin: 0; padding: 14px 16px; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55;
+    color: #BAC5D8; background: #0F1219;
+  }
+</style>
+</head>
+<body>
+
+<header class="gallery-bar">
+  <div class="gallery-left">
+    <span class="gallery-brand">P2S · B+C 界面效果图</span>
+    <a class="nav-pill active" href="index.html">目录</a>
+    <a class="nav-pill" href="01-chat-running.html">01 对话运行中</a>
+    <a class="nav-pill" href="02-chat-pending.html">02 待审卡片(3)</a>
+    <a class="nav-pill" href="03-review-diff.html">03 审阅 Diff</a>
+    <a class="nav-pill" href="04-files-editor.html">04 文件编辑</a>
+    <a class="nav-pill" href="05-narrow-480x270.html">05 窄屏 480×270</a>
+  </div>
+  <div class="gallery-right">
+    <div class="theme-switch-group">
+      <button class="theme-btn active" data-theme-id="slate-mist">冷灰青</button>
+      <button class="theme-btn" data-theme-id="rose-dusk">暮玫瑰</button>
+      <button class="theme-btn" data-theme-id="warm-stone">暖石灰</button>
+    </div>
+    <button class="json-btn" id="openJsonBtn">{ 主题 JSON }</button>
+  </div>
+</header>
+
+<div class="container">
+  <section class="hero">
+    <div class="hero-card">
+      <div class="hero-kicker">Prompt2Structure · In-Game Agent UI Proposal</div>
+      <h1 class="hero-title">「B+C 结合」左侧工作抽屉 + 右侧 3D 世界常驻</h1>
+      <p class="hero-desc">
+        针对 Minecraft 640×360 逻辑分辨率重构：默认以 <strong>B（对话为主）</strong> 占据左侧 49% 视野，让右侧建筑选区与实时虚影始终可见；通过顶部 <strong>C（对话 / 审阅 / 文件）</strong> 标签按需切入多文件 Diff 审阅或 TOML 微调，并用统一 JSON 配置文件驱动克制柔和的主题色彩体系。
+      </p>
+      <div class="principles">
+        <div class="principle-box">
+          <strong>真 MC 原生绘制</strong>
+          <span>0 圆角、0 渐变、1px 边框、Unifont 点阵字，640×360 按 2× 放大至 1280×720。</span>
+        </div>
+        <div class="principle-box">
+          <strong>Vibe Coding 动线</strong>
+          <span>95% 停留对话流，待审卡直达单文件 Diff，手改 TOML 收拢为低打扰后门。</span>
+        </div>
+        <div class="principle-box">
+          <strong>JSON 主题一一映射</strong>
+          <span>每套主题独立 JSON 配置，30 个语义 token 与 CSS 变量完全一一对应。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="specimen-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <strong style="font-size:14px;color:#ECEFF4;" id="themeTitle">冷灰青 · Slate Mist</strong>
+        <span style="font-size:12px;color:#838D9F;" id="themeMode">Dark · 92% 透明面板</span>
+      </div>
+      <div class="specimen-mc">
+        <div class="specimen-tabs">
+          <span class="sp-tab on">对话</span>
+          <span class="sp-tab">审阅 3</span>
+          <span class="sp-tab">文件</span>
+        </div>
+        <div class="sp-card">● 3 个待审文件 · +318 / -24 方块 · 风险低</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--text-secondary)">Unifont 8px (2× = 16px)</span>
+          <span style="background:var(--accent-primary);color:var(--text-on-accent);padding:2px 8px;">主强调色</span>
+        </div>
+      </div>
+      <div class="sp-swatches" id="swatchRow">
+        <div class="swatch" style="background:var(--bg-canvas)" title="bg-canvas"></div>
+        <div class="swatch" style="background:var(--bg-elevated)" title="bg-elevated"></div>
+        <div class="swatch" style="background:var(--accent-primary)" title="accent-primary"></div>
+        <div class="swatch" style="background:var(--semantic-success)" title="semantic-success"></div>
+        <div class="swatch" style="background:var(--semantic-warning)" title="semantic-warning"></div>
+        <div class="swatch" style="background:var(--semantic-danger)" title="semantic-danger"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="section-heading">
+    <h2>交互效果图目录（共 5 页，支持页面内实时切换 3 套主题）</h2>
+    <span>全部为单文件自包含 HTML · 可离线直接打开</span>
+  </div>
+
+  <section class="grid">
+    <a class="page-card" href="01-chat-running.html">
+      <div class="thumb">
+        <div class="mini-world">
+          <div class="mini-grass"></div>
+          <div class="mini-panel" style="width:48%;">
+            <div class="mini-bar"></div>
+            <div class="mini-line accent"></div>
+            <div class="mini-line"></div>
+            <div class="mini-line" style="margin-top:auto;border-left:3px solid var(--semantic-warning)"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">01 · 对话首页 · 640×360 @ 2×</div>
+        <div class="card-title">Agent 运行中（进度 / 停止 / 排队）</div>
+        <div class="card-desc">顶部 Plan 4 步进度条、可折叠工具调用流、流式输出光标、输入框上方排队消息条与「■ 停止」按钮，右侧同步显示建筑骨架与线框。</div>
+        <div class="card-foot"><span>01-chat-running.html</span><span>打开 →</span></div>
+      </div>
+    </a>
+
+    <a class="page-card" href="02-chat-pending.html">
+      <div class="thumb">
+        <div class="mini-world">
+          <div class="mini-grass"></div>
+          <div class="mini-panel" style="width:48%;">
+            <div class="mini-bar"></div>
+            <div class="mini-line"></div>
+            <div class="mini-line warn" style="height:44px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">02 · 对话汇总 · 640×360 @ 2×</div>
+        <div class="card-title">对话内 3 文件待审卡片</div>
+        <div class="card-desc">任务完成后收敛为对话内待审汇总卡，列出 3 个 TOML 文件与方块变动，支持单文件直达「审阅」、单文件应用或一键「全部应用」。</div>
+        <div class="card-foot"><span>02-chat-pending.html</span><span>打开 →</span></div>
+      </div>
+    </a>
+
+    <a class="page-card" href="03-review-diff.html">
+      <div class="thumb">
+        <div class="mini-world">
+          <div class="mini-grass"></div>
+          <div class="mini-panel" style="width:57%;">
+            <div class="mini-bar"></div>
+            <div class="mini-line add"></div>
+            <div class="mini-line del"></div>
+            <div class="mini-line add"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">03 · 审阅视图 · 640×360 @ 2×</div>
+        <div class="card-title">多文件逐个 Diff 与世界高亮</div>
+        <div class="card-desc">顶部 3 个待审文件胶囊切换，自动同步右侧 3D 世界单个部位高亮；只显示变更上下文，底部固定应用、就地输入原因丢弃与全部应用。</div>
+        <div class="card-foot"><span>03-review-diff.html</span><span>打开 →</span></div>
+      </div>
+    </a>
+
+    <a class="page-card" href="04-files-editor.html">
+      <div class="thumb">
+        <div class="mini-world">
+          <div class="mini-grass"></div>
+          <div class="mini-panel" style="width:60%;flex-direction:row;gap:4px;">
+            <div style="width:30%;background:var(--bg-surface);height:100%;"></div>
+            <div style="flex:1;background:var(--bg-inset);height:100%;padding:4px;">
+              <div class="mini-line accent"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">04 · 文件视图 · 640×360 @ 2×</div>
+        <div class="card-title">工作区列表与 TOML 手改入口</div>
+        <div class="card-desc">可折叠窄文件树 + 柔和语法着色编辑器，支持选中代码行引用到对话；打开带待审补丁的文件时自动只读锁保护并引导去审阅。</div>
+        <div class="card-foot"><span>04-files-editor.html</span><span>打开 →</span></div>
+      </div>
+    </a>
+
+    <a class="page-card" href="05-narrow-480x270.html">
+      <div class="thumb">
+        <div class="mini-world" style="inset:20px 36px;">
+          <div class="mini-grass"></div>
+          <div class="mini-panel" style="width:58%;">
+            <div class="mini-bar"></div>
+            <div class="mini-line warn"></div>
+            <div class="mini-line"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">05 · 窄屏降级 · 480×270 @ 2×</div>
+        <div class="card-title">窄屏自适应（对话 / 审阅 / 文件）</div>
+        <div class="card-desc">二级工具收进「···」，文件树退化为顶部下拉选择器，审阅改为单行文件步进器；内置页内标签与「⤢」撑满、「«」悬浮收起切换。</div>
+        <div class="card-foot"><span>05-narrow-480x270.html</span><span>打开 →</span></div>
+      </div>
+    </a>
+
+    <div class="page-card" style="justify-content:center;padding:18px 20px;background:#11141C;border-style:dashed;">
+      <div class="card-tag">配套设计文档</div>
+      <div class="card-title" style="margin:6px 0 8px;">ui-layout-gemini-xhigh.md</div>
+      <div class="card-desc">
+        包含完整信息架构、端到端五步任务流程、480×270 降级规则、四层 Esc 行为栈、JSON 主题字段规范以及需要拍板的 5 个决策点。
+      </div>
+      <div class="card-foot" style="color:#7C8698;"><span>docs/proposals/ui-layout-gemini-xhigh.md</span></div>
+    </div>
+  </section>
+</div>
+
+<div class="json-modal-backdrop" id="jsonModal">
+  <div class="json-modal">
+    <div class="json-modal-head">
+      <span>当前主题 JSON（与 CSS 变量一一对应）</span>
+      <div style="display:flex;gap:8px;">
+        <button class="json-btn" id="copyJsonBtn">复制 JSON</button>
+        <button class="json-btn" id="closeJsonBtn">关闭</button>
+      </div>
+    </div>
+    <pre class="json-pre" id="jsonPre"></pre>
+  </div>
+</div>
+
+<script>
+const THEMES = {
+  "slate-mist": {
+    schema_version: 1,
+    meta: { id: "slate-mist", name: "冷灰青 · Slate Mist", mode: "dark", description: "冷调石板灰配雾蓝强调，参考 Linear 与 Nord" },
+    colors: {
+      "bg-canvas": "#191C23EB", "bg-surface": "#20242DF2", "bg-elevated": "#272C37FA", "bg-inset": "#13161CF2",
+      "bg-hover": "#2E3442F5", "bg-selected": "#2A3346F5", "border-subtle": "#2E3440D9", "border-default": "#3B4354EB",
+      "border-focus": "#7B9ED9FF", "text-primary": "#D8DEE9FF", "text-secondary": "#97A1B3FF", "text-muted": "#667084FF",
+      "text-on-accent": "#12161FFF", "accent-primary": "#7B9ED9FF", "accent-hover": "#8CAEE4FF", "accent-soft": "#7B9ED924",
+      "semantic-success": "#7BB696FF", "semantic-success-bg": "#1D2C26EB", "semantic-warning": "#CFA972FF", "semantic-warning-bg": "#2B241CEB",
+      "semantic-danger": "#CC7B82FF", "semantic-danger-bg": "#2E1E23EB", "syntax-section": "#8AAAE0FF", "syntax-key": "#B4C1D6FF",
+      "syntax-string": "#8BC0A3FF", "syntax-number": "#CFA972FF", "diff-add-bg": "#1B2D25E6", "diff-add-text": "#8FD1ACFF",
+      "diff-del-bg": "#301F24E6", "diff-del-text": "#E09299FF"
+    }
+  },
+  "rose-dusk": {
+    schema_version: 1,
+    meta: { id: "rose-dusk", name: "暮玫瑰 · Rosé Dusk", mode: "dark", description: "暮紫深底配柔和玫瑰粉灰强调，参考 Rosé Pine" },
+    colors: {
+      "bg-canvas": "#1E1B29EB", "bg-surface": "#252233F2", "bg-elevated": "#2D293EFA", "bg-inset": "#171421F2",
+      "bg-hover": "#353049F5", "bg-selected": "#382E42F5", "border-subtle": "#363149D9", "border-default": "#463F5EEB",
+      "border-focus": "#D498A5FF", "text-primary": "#E0DEF4FF", "text-secondary": "#A59EC4FF", "text-muted": "#726C8FFF",
+      "text-on-accent": "#1A1624FF", "accent-primary": "#D498A5FF", "accent-hover": "#E0AAB6FF", "accent-soft": "#D498A524",
+      "semantic-success": "#84B9B3FF", "semantic-success-bg": "#1D2B2DEB", "semantic-warning": "#D7B07AFF", "semantic-warning-bg": "#2C251EEB",
+      "semantic-danger": "#CE798CFF", "semantic-danger-bg": "#2E1E26EB", "syntax-section": "#D498A5FF", "syntax-key": "#C2BCDDFF",
+      "syntax-string": "#8EC2BCFF", "syntax-number": "#D7B07AFF", "diff-add-bg": "#1C2B2DE6", "diff-add-text": "#95CCC6FF",
+      "diff-del-bg": "#311E27E6", "diff-del-text": "#E292A3FF"
+    }
+  },
+  "warm-stone": {
+    schema_version: 1,
+    meta: { id: "warm-stone", name: "暖石灰 · Warm Stone", mode: "light", description: "低反光暖羊皮石浅底，适配高亮度白天建筑场景" },
+    colors: {
+      "bg-canvas": "#EAE6DFF2", "bg-surface": "#E2DDD4F5", "bg-elevated": "#F2EFE9FA", "bg-inset": "#DCD6CBF5",
+      "bg-hover": "#D7D1C5F5", "bg-selected": "#D0DAE5F5", "border-subtle": "#CEC8BCFF", "border-default": "#BCB5A7FF",
+      "border-focus": "#4F749EFF", "text-primary": "#2D3138FF", "text-secondary": "#595E68FF", "text-muted": "#838790FF",
+      "text-on-accent": "#F5F3EEFF", "accent-primary": "#4F749EFF", "accent-hover": "#42658DFF", "accent-soft": "#4F749E20",
+      "semantic-success": "#477B61FF", "semantic-success-bg": "#D7E4DBEB", "semantic-warning": "#9B6F3BFF", "semantic-warning-bg": "#EAE0D0EB",
+      "semantic-danger": "#A8565CFF", "semantic-danger-bg": "#ECDCDEEB", "syntax-section": "#466A94FF", "syntax-key": "#434852FF",
+      "syntax-string": "#477B61FF", "syntax-number": "#9B6F3BFF", "diff-add-bg": "#D6E5DBE8", "diff-add-text": "#2F5E47FF",
+      "diff-del-bg": "#ECD9DBE8", "diff-del-text": "#8B3E44FF"
+    }
+  }
+};
+
+let currentThemeId = localStorage.getItem("p2s_theme") || "slate-mist";
+if (!THEMES[currentThemeId]) currentThemeId = "slate-mist";
+function applyTheme(id) {
+  const t = THEMES[id] || THEMES["slate-mist"];
+  currentThemeId = t.meta.id;
+  localStorage.setItem("p2s_theme", currentThemeId);
+  for (const [k, v] of Object.entries(t.colors)) document.documentElement.style.setProperty("--" + k, v);
+  document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeId === currentThemeId));
+  document.getElementById("themeTitle").textContent = t.meta.name;
+  document.getElementById("themeMode").textContent = t.meta.mode === "light" ? "Light · 95% 柔光石面" : "Dark · 92% 透明面板";
+  document.getElementById("jsonPre").textContent = JSON.stringify(t, null, 2);
+}
+applyTheme(currentThemeId);
+document.querySelectorAll("[data-theme-id]").forEach(el => el.addEventListener("click", () => applyTheme(el.dataset.themeId)));
+
+document.getElementById("openJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.add("open"));
+document.getElementById("closeJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.remove("open"));
+document.getElementById("jsonModal").addEventListener("click", e => { if (e.target.id === "jsonModal") e.target.classList.remove("open"); });
+document.getElementById("copyJsonBtn").addEventListener("click", () => {
+  navigator.clipboard?.writeText(document.getElementById("jsonPre").textContent);
+  document.getElementById("copyJsonBtn").textContent = "已复制";
+  setTimeout(() => document.getElementById("copyJsonBtn").textContent = "复制 JSON", 1200);
+});
+</script>
+</body>
+</html>
