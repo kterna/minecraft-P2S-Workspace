@@ -117,4 +117,56 @@ class OpenAiChatCompletionsTest {
         assertEquals("{}", echoed);
         assertFalse(body.has("tools"), "No tools advertised when the context has none");
     }
+
+    @Test
+    void optionalParametersAreOnlySentWhenConfigured() {
+        var context = new StreamFunction.Context("sys", List.of(AgentMessage.User.of("hi")), List.of());
+        JsonObject plain = OpenAiChatCompletions.buildRequestBody(context,
+                new LlmRequestConfig("https://gw.example/v1/chat/completions", "k", "m", 30, true, true));
+        assertFalse(plain.has("temperature"), "temperature must not be hard-coded");
+        assertFalse(plain.has("max_tokens"));
+        assertFalse(plain.has("max_completion_tokens"));
+        assertEquals(java.util.Set.of("model", "messages", "stream"), plain.keySet());
+
+        JsonObject gateway = OpenAiChatCompletions.buildRequestBody(context,
+                new LlmRequestConfig("https://gw.example/v1/chat/completions", "k", "m", 30, true, false, 0.2, 4096));
+        assertEquals(0.2, gateway.get("temperature").getAsDouble());
+        assertEquals(4096, gateway.get("max_tokens").getAsInt());
+        assertFalse(gateway.has("stream"));
+
+        JsonObject openai = OpenAiChatCompletions.buildRequestBody(context,
+                new LlmRequestConfig("https://api.openai.com/v1/chat/completions", "k", "m", 30, true, false, null, 2048));
+        assertEquals(2048, openai.get("max_completion_tokens").getAsInt());
+        assertFalse(openai.has("max_tokens"));
+        assertFalse(openai.has("temperature"));
+    }
+
+    @Test
+    void completionBodyHasNoHardCodedTemperatureAndDropsStoredThinking() {
+        var assistant = new AgentMessage.Assistant("ok", "thought", List.of(), StopReason.STOP, "", 0L);
+        List<JsonObject> stored = OpenAiMessageCodec.toWire("sys", List.of(AgentMessage.User.of("hi"), assistant));
+        assertEquals("thought", stored.get(2).get("reasoning_content").getAsString(), "history keeps thinking");
+
+        JsonObject body = OpenAiChatCompletions.buildCompletionBody(stored,
+                new LlmRequestConfig("https://gw.example/v1/chat/completions", "k", "m", 30, true, true));
+        assertFalse(body.has("temperature"));
+        assertFalse(body.has("stream"));
+        assertFalse(body.getAsJsonArray("messages").get(2).getAsJsonObject().has("reasoning_content"),
+                "thinking is not echoed to providers that do not ask for it");
+    }
+
+    @Test
+    void deepSeekGetsReasoningContentOnEveryAssistantTurn() {
+        var withThinking = new AgentMessage.Assistant("", "plan", List.of(
+                AgentMessage.ToolCall.valid("c1", "read", "{}", new JsonObject())), StopReason.TOOL_USE, "", 0L);
+        var result = new AgentMessage.ToolResult("c1", "read", new JsonObject(), false, 0L);
+        var plain = new AgentMessage.Assistant("done", "", List.of(), StopReason.STOP, "", 0L);
+        var context = new StreamFunction.Context("", List.of(AgentMessage.User.of("hi"), withThinking, result, plain,
+                AgentMessage.User.of("again")), List.of());
+        var messages = OpenAiChatCompletions.buildRequestBody(context,
+                new LlmRequestConfig("https://api.deepseek.com/chat/completions", "k", "deepseek-chat", 30, true, true))
+                .getAsJsonArray("messages");
+        assertEquals("plan", messages.get(1).getAsJsonObject().get("reasoning_content").getAsString());
+        assertEquals("", messages.get(3).getAsJsonObject().get("reasoning_content").getAsString());
+    }
 }

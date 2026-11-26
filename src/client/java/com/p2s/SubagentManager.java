@@ -13,7 +13,6 @@ import com.p2s.agent.core.AgentLoopConfig;
 import com.p2s.agent.core.AgentMessage;
 import com.p2s.agent.core.AgentTool;
 import com.p2s.agent.llm.LlmRequestConfig;
-import com.p2s.agent.llm.OpenAiChatCompletions;
 import com.p2s.agent.llm.OpenAiMessageCodec;
 import com.p2s.agent.tool.RegistryTools;
 import com.p2s.agent.tool.ToolDefinition;
@@ -562,10 +561,10 @@ public final class SubagentManager {
         OpenAiMessageCodec.Decoded decoded = OpenAiMessageCodec.fromWire(history);
 
         // Same core loop as the main agent, restricted by the profile's tools, turns and timeout.
-        ClientContextWindow window = ClientContextWindow.forClient(new OpenAiChatCompletions(() -> {
+        ClientContextWindow window = ClientContextWindow.forClient(() -> {
                     LlmRequestConfig base = P2SClientConfig.llmRequestConfig();
                     return base.withTimeoutSeconds(timeoutSeconds).withStreaming(false);
-                }), (trigger, summary) -> P2SMod.LOGGER.info("Compacted subagent {} context", task.id),
+                }, (trigger, summary) -> P2SMod.LOGGER.info("Compacted subagent {} context", task.id),
                 error -> P2SMod.LOGGER.warn("Subagent {} compaction failed: {}", task.id, error));
         window.restore(task.checkpoint.firstKept(), task.checkpoint.summary(), decoded.messages());
         AgentLoopConfig config = AgentLoopConfig.builder(window)

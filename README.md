@@ -77,6 +77,15 @@ P2S Workspace 是一个把 Minecraft 结构编辑做成“聊天式工作流”�
 - 调整 patch 预览限制、确认阈值、会话超时等运行参数
 - 控制流式输出、自动应用、上下文压缩等客户端行为
 
+在客户端设置的 LLM 页选择协议，填写对应的接口地址、认证信息和模型名。旧配置继续走 Chat Completions。New API 代理开启思考的 Claude 时，先保留网关当前使用的协议和地址，把温度留空。若网关提供原生 Messages 接口，也可以选择 Anthropic Messages 并填写对应地址。主 Agent、子 Agent 和压缩共用这个连接。
+
+LLM 页可设置思考等级、温度。配置文件中的顶层字段仍然有效：
+
+- `temperature`：采样温度。开了思考的 Claude 等模型会拒绝它，留空最稳。
+- `maxTokens`：单次输出上限。Anthropic Messages 必须携带上限，留空时客户端会补默认值。
+
+Google Gemini、Vertex、Bedrock 等连接的地址、鉴权和各协议支持的参数见[连接示例与参数表](docs/architecture/llm-transports.md)。
+
 当前已经没有单独的服务端配置文件；用户可编辑的配置项都归到客户端配置中。
 
 ## 数据与备份

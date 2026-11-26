@@ -5,7 +5,8 @@ import com.p2s.agent.core.AbortSignal;
 import com.p2s.agent.core.AgentMessage;
 import com.p2s.agent.core.AssistantMessageEvent;
 import com.p2s.agent.core.StreamFunction;
-import com.p2s.agent.llm.OpenAiChatCompletions;
+import com.p2s.agent.llm.LlmRequestConfig;
+import com.p2s.agent.llm.LlmTransports;
 
 import java.io.IOException;
 import java.util.List;
@@ -39,13 +40,17 @@ final class ClientContextWindow implements StreamFunction {
         this.onFailure = onFailure;
     }
 
-    static ClientContextWindow forClient(StreamFunction transport,
+    /**
+     * Requests and summaries share one connection: both go through the protocol selected in
+     * {@code config}, which is read again for every request so settings edits apply immediately.
+     */
+    static ClientContextWindow forClient(Supplier<LlmRequestConfig> config,
                                          BiConsumer<ClientHistoryCompactor.Trigger, String> onSummary,
                                          Consumer<String> onFailure) {
-        return new ClientContextWindow(transport, () -> new Settings(P2SClientConfig.isAutoCompactEnabled(),
+        return new ClientContextWindow(LlmTransports.stream(config), () -> new Settings(P2SClientConfig.isAutoCompactEnabled(),
                 P2SClientConfig.getContextWindowTokens(), P2SClientConfig.getCompactKeepRecentTokens(),
                 P2SClientConfig.getCompactPrompt()), (messages, signal) ->
-                OpenAiChatCompletions.completeText(messages, P2SClientConfig.llmRequestConfig(), signal),
+                LlmTransports.completeText(messages, config.get(), signal),
                 onSummary, onFailure);
     }
 

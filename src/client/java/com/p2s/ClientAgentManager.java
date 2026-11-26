@@ -14,7 +14,6 @@ import com.p2s.agent.core.StreamFunction;
 import com.p2s.agent.core.AgentMessage;
 import com.p2s.agent.core.AgentToolResult;
 import com.p2s.agent.core.AssistantMessageEvent;
-import com.p2s.agent.llm.OpenAiChatCompletions;
 import com.p2s.agent.runtime.AgentRunGuard;
 import com.p2s.agent.runtime.AgentRunGuard.RunIdentity;
 import com.p2s.agent.tool.RegistryTools;
@@ -669,7 +668,7 @@ public final class ClientAgentManager {
     }
 
     private static Agent createAgent(LocalSession session, List<AgentMessage> transcript) {
-        session.contextWindow = ClientContextWindow.forClient(new OpenAiChatCompletions(P2SClientConfig::llmRequestConfig),
+        session.contextWindow = ClientContextWindow.forClient(P2SClientConfig::llmRequestConfig,
                 (trigger, summary) -> postToClient(session, session.activeRun, () -> {
                     ClientSessionState.addSystemMessage(P2SI18n.tr("message.p2s.compact.done").getString() + "\n" + summary);
                     if (trigger == ClientHistoryCompactor.Trigger.MANUAL) {

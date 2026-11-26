@@ -1,5 +1,7 @@
 package com.p2s.screen;
 
+import com.p2s.agent.llm.LlmApi;
+import com.p2s.agent.llm.ThinkingLevel;
 import com.p2s.P2SClientConfig;
 import com.p2s.P2SI18n;
 import com.p2s.screen.widget.P2SMultiLineTextEditor;
@@ -32,6 +34,11 @@ public class P2SConfigScreen extends Screen {
     private EditBox apiUrlInput;
     private EditBox apiKeyInput;
     private EditBox modelInput;
+    private EditBox temperatureInput;
+    private LlmApi protocol;
+    private ThinkingLevel thinking;
+    private Button protocolButton;
+    private Button thinkingButton;
     private EditBox timeoutInput;
     private EditBox sessionTimeoutInput;
     private EditBox maxPatchOpsInput;
@@ -181,10 +188,25 @@ public class P2SConfigScreen extends Screen {
         addRenderableWidget(apiKeyInput);
         y += 50;
 
-        modelInput = new EditBox(this.font, left + 10, y + 14, inputWidth, 20, P2SI18n.tr("screen.p2s.config.llm.model"));
+        int column = (inputWidth - 12) / 4;
+        modelInput = new EditBox(this.font, left + 10, y + 14, column, 20, P2SI18n.tr("screen.p2s.config.llm.model"));
         modelInput.setMaxLength(256);
         modelInput.setValue(P2SClientConfig.getModel());
         addRenderableWidget(modelInput);
+        protocol = P2SClientConfig.protocol();
+        thinking = P2SClientConfig.thinking();
+        protocolButton = addRenderableWidget(Button.builder(Component.literal(protocol.label()), btn -> {
+            protocol = protocol.next();
+            btn.setMessage(Component.literal(protocol.label()));
+        }).bounds(left + 14 + column, y + 14, column, 20).build());
+        thinkingButton = addRenderableWidget(Button.builder(thinkingLabel(), btn -> {
+            thinking = ThinkingLevel.cycle(thinking);
+            btn.setMessage(thinkingLabel());
+        }).bounds(left + 18 + 2 * column, y + 14, column, 20).build());
+        temperatureInput = new EditBox(this.font, left + 22 + 3 * column, y + 14, column, 20,
+                P2SI18n.tr("screen.p2s.config.llm.temperature"));
+        temperatureInput.setValue(P2SClientConfig.temperature() == null ? "" : P2SClientConfig.temperature().toString());
+        addRenderableWidget(temperatureInput);
         y += 50;
 
         timeoutInput = new EditBox(this.font, left + 10, y + 14, 120, 20, P2SI18n.tr("screen.p2s.config.llm.timeout"));
@@ -264,6 +286,10 @@ public class P2SConfigScreen extends Screen {
                 .bounds(left + panelWidth - 80, y, 70, 20).build());
     }
 
+    private Component thinkingLabel() {
+        return thinking == null ? P2SI18n.tr("screen.p2s.config.llm.provider_default") : Component.literal(thinking.id());
+    }
+
     private Component toolCallLabel() {
         return P2SI18n.tr("screen.p2s.config.toggle.use_tool_call",
                 P2SI18n.tr(useToolCall ? "screen.p2s.common.on" : "screen.p2s.common.off"));
@@ -297,6 +323,18 @@ public class P2SConfigScreen extends Screen {
     }
 
     private void saveLlmConfig() {
+        Double temperature = null;
+        try {
+            String value = temperatureInput.getValue().trim();
+            if (!value.isEmpty()) {
+                temperature = Double.valueOf(value);
+                if (!Double.isFinite(temperature) || temperature < 0 || temperature > 2) throw new NumberFormatException();
+            }
+        } catch (NumberFormatException ex) {
+            statusText = P2SI18n.tr("screen.p2s.config.llm.invalid_temperature");
+            statusColor = 0xFF5555;
+            return;
+        }
         Integer timeout = parsePositiveInt(timeoutInput == null ? "" : timeoutInput.getValue());
         Integer sessionTimeout = parsePositiveInt(sessionTimeoutInput == null ? "" : sessionTimeoutInput.getValue());
         Integer maxPatchOps = parsePositiveInt(maxPatchOpsInput == null ? "" : maxPatchOpsInput.getValue());
@@ -321,6 +359,7 @@ public class P2SConfigScreen extends Screen {
                 false
         );
         if (ok) {
+            P2SClientConfig.setProtocolOptions(protocol, thinking, temperature);
             P2SClientConfig.setUseStreaming(useStreaming, false);
             P2SClientConfig.setAutoApplyPatch(autoApplyPatch, true);
             statusText = P2SI18n.tr("screen.p2s.status.saved");
@@ -333,6 +372,11 @@ public class P2SConfigScreen extends Screen {
 
     private void resetLlmDefaults() {
         P2SClientConfig.resetLlmConfigDefaults(true);
+        protocol = P2SClientConfig.protocol();
+        thinking = P2SClientConfig.thinking();
+        protocolButton.setMessage(Component.literal(protocol.label()));
+        thinkingButton.setMessage(thinkingLabel());
+        temperatureInput.setValue("");
         if (apiUrlInput != null) apiUrlInput.setValue(P2SClientConfig.getApiUrl());
         if (apiKeyInput != null) apiKeyInput.setValue(P2SClientConfig.getApiKey());
         if (modelInput != null) modelInput.setValue(P2SClientConfig.getModel());
@@ -632,7 +676,7 @@ public class P2SConfigScreen extends Screen {
     private List<EditBox> collectEditBoxes() {
         return switch (currentTab) {
             case GENERAL -> selectionItemInput == null ? List.of() : List.of(selectionItemInput);
-            case LLM -> List.of(apiUrlInput, apiKeyInput, modelInput, timeoutInput, sessionTimeoutInput, maxPatchOpsInput, maxBlocksPerCommitInput, riskAutoApplyThresholdInput, contextWindowTokensInput, compactKeepRecentTokensInput);
+            case LLM -> List.of(apiUrlInput, apiKeyInput, modelInput, temperatureInput, timeoutInput, sessionTimeoutInput, maxPatchOpsInput, maxBlocksPerCommitInput, riskAutoApplyThresholdInput, contextWindowTokensInput, compactKeepRecentTokensInput);
             case SKILLS -> List.of();
         };
     }
@@ -681,6 +725,10 @@ public class P2SConfigScreen extends Screen {
         y += 50;
         gfx.drawString(this.font, P2SI18n.tr("screen.p2s.config.llm.api_key"), left + 10, y, 0xBBBBBB, false);
         y += 50;
+        int column = (panelWidth - 32) / 4;
+        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.config.llm.protocol"), left + 14 + column, y, 0xBBBBBB, false);
+        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.config.llm.thinking"), left + 18 + 2 * column, y, 0xBBBBBB, false);
+        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.config.llm.temperature"), left + 22 + 3 * column, y, 0xBBBBBB, false);
         gfx.drawString(this.font, P2SI18n.tr("screen.p2s.config.llm.model"), left + 10, y, 0xBBBBBB, false);
         y += 50;
         gfx.drawString(this.font, P2SI18n.tr("screen.p2s.config.llm.timeout"), left + 10, y, 0xBBBBBB, false);

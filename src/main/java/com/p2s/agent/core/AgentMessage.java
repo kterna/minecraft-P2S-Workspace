@@ -22,13 +22,21 @@ public sealed interface AgentMessage permits AgentMessage.User, AgentMessage.Ass
         }
     }
 
+    /**
+     * A model reply. {@code replay} carries provider data that must go back verbatim on the
+     * next request to the same model (thinking signatures, encrypted reasoning, Gemini
+     * thought signatures); it is null for failed replies and history from older versions.
+     * {@code usage} is informational and never persisted.
+     */
     record Assistant(
             String text,
             String thinking,
             List<ToolCall> toolCalls,
             StopReason stopReason,
             String errorMessage,
-            long timestamp
+            long timestamp,
+            Replay replay,
+            Usage usage
     ) implements AgentMessage {
         public Assistant {
             text = text == null ? "" : text;
@@ -36,6 +44,12 @@ public sealed interface AgentMessage permits AgentMessage.User, AgentMessage.Ass
             toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
             stopReason = stopReason == null ? StopReason.STOP : stopReason;
             errorMessage = errorMessage == null ? "" : errorMessage;
+            usage = usage == null ? Usage.NONE : usage;
+        }
+
+        public Assistant(String text, String thinking, List<ToolCall> toolCalls, StopReason stopReason,
+                         String errorMessage, long timestamp) {
+            this(text, thinking, toolCalls, stopReason, errorMessage, timestamp, null, null);
         }
 
         public static Assistant failure(StopReason reason, String message) {
@@ -48,6 +62,47 @@ public sealed interface AgentMessage permits AgentMessage.User, AgentMessage.Ass
 
         public boolean hasToolCalls() {
             return !toolCalls.isEmpty();
+        }
+
+        public Assistant withReplay(Replay value) {
+            return new Assistant(text, thinking, toolCalls, stopReason, errorMessage, timestamp, value, usage);
+        }
+
+        public Assistant withUsage(Usage value) {
+            return new Assistant(text, thinking, toolCalls, stopReason, errorMessage, timestamp, replay, value);
+        }
+    }
+
+    /**
+     * Opaque provider data of one assistant reply (pi: thinkingSignature / thoughtSignature /
+     * encrypted reasoning). Only the transport that wrote it interprets {@code data}, and only
+     * when {@code api}, {@code provider} and {@code model} match the current request: signatures
+     * are bound to the model that produced them.
+     */
+    record Replay(String api, String provider, String model, JsonObject data) {
+        public Replay {
+            api = api == null ? "" : api;
+            provider = provider == null ? "" : provider;
+            model = model == null ? "" : model;
+            data = data == null ? new JsonObject() : data.deepCopy();
+        }
+
+        @Override
+        public JsonObject data() {
+            return data.deepCopy();
+        }
+
+        public boolean matches(String api, String provider, String model) {
+            return this.api.equals(api) && this.provider.equals(provider) && this.model.equals(model);
+        }
+    }
+
+    /** Token counts reported by the provider; zero when it reported none. */
+    record Usage(long input, long output, long cacheRead, long cacheWrite, long reasoning) {
+        public static final Usage NONE = new Usage(0, 0, 0, 0, 0);
+
+        public boolean isEmpty() {
+            return input == 0 && output == 0 && cacheRead == 0 && cacheWrite == 0 && reasoning == 0;
         }
     }
 

@@ -1,6 +1,9 @@
 package com.p2s;
 
 import com.google.gson.Gson;
+import com.p2s.agent.llm.LlmApi;
+import com.p2s.agent.llm.LlmRequestConfig;
+import com.p2s.agent.llm.ThinkingLevel;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -60,6 +63,10 @@ public final class P2SClientConfig {
     private static int httpTimeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
     private static boolean useToolCall = DEFAULT_USE_TOOL_CALL;
     private static boolean useStreaming = DEFAULT_USE_STREAMING;
+    /** Optional sampling settings; null means the field is not sent to the provider. */
+    private static Double temperature;
+    private static JsonObject protocolSettings = new JsonObject();
+    private static Integer maxTokens;
     private static boolean autoApplyPatch = DEFAULT_AUTO_APPLY_PATCH;
     /** "v2" (default) or "legacy": which agent tool set the client uses. */
     private static String toolset = "v2";
@@ -108,6 +115,35 @@ public final class P2SClientConfig {
 
     public static synchronized String getApiKey() {
         return apiKey;
+    }
+
+    public static synchronized LlmApi protocol() {
+        return LlmApi.parse(setting("api"));
+    }
+
+    public static synchronized ThinkingLevel thinking() {
+        return ThinkingLevel.parse(setting("thinking"));
+    }
+
+    public static synchronized Double temperature() {
+        return temperature;
+    }
+
+    public static synchronized void setProtocolOptions(LlmApi api, ThinkingLevel thinking, Double value) {
+        protocolSettings.addProperty("api", api.id());
+        if (thinking == null) protocolSettings.remove("thinking");
+        else protocolSettings.addProperty("thinking", thinking.id());
+        temperature = value;
+    }
+
+    private static String setting(String key) {
+        return protocolSettings.has(key) && protocolSettings.get(key).isJsonPrimitive()
+                ? protocolSettings.get(key).getAsString() : "";
+    }
+
+    private static JsonObject options(String key) {
+        return protocolSettings.has(key) && protocolSettings.get(key).isJsonObject()
+                ? protocolSettings.getAsJsonObject(key) : new JsonObject();
     }
 
     public static synchronized String getModel() {
@@ -299,7 +335,6 @@ public final class P2SClientConfig {
         String nextSystemPrompt = rawSystemPrompt == null ? "" : rawSystemPrompt.trim();
 
         if (nextApiUrl == null
-                || nextApiKey == null
                 || nextModel == null
                 || nextTimeout == null
                 || nextToolCall == null
@@ -314,7 +349,7 @@ public final class P2SClientConfig {
         }
 
         apiUrl = nextApiUrl;
-        apiKey = nextApiKey;
+        apiKey = nextApiKey == null ? "" : nextApiKey;
         model = nextModel;
         httpTimeoutSeconds = nextTimeout;
         useToolCall = nextToolCall;
@@ -333,6 +368,9 @@ public final class P2SClientConfig {
     }
 
     public static synchronized void resetLlmConfigDefaults(boolean persist) {
+        protocolSettings = new JsonObject();
+        temperature = null;
+        maxTokens = null;
         apiUrl = DEFAULT_API_URL;
         apiKey = DEFAULT_API_KEY;
         model = DEFAULT_MODEL;
@@ -355,16 +393,15 @@ public final class P2SClientConfig {
         }
     }
 
-    /** Blank values fall back to the built-in defaults, as the previous transport did. */
-    public static synchronized com.p2s.agent.llm.LlmRequestConfig llmRequestConfig() {
-        return new com.p2s.agent.llm.LlmRequestConfig(
-                apiUrl == null || apiUrl.isBlank() ? P2SDefaults.DEFAULT_API_URL : apiUrl,
-                apiKey == null || apiKey.isBlank() ? P2SDefaults.DEFAULT_API_KEY : apiKey,
-                model == null || model.isBlank() ? P2SDefaults.DEFAULT_MODEL : model,
-                httpTimeoutSeconds <= 0 ? P2SDefaults.DEFAULT_TIMEOUT_SECONDS : httpTimeoutSeconds,
-                useToolCall,
-                useStreaming
-        );
+    public static synchronized LlmRequestConfig llmRequestConfig() {
+        Map<String, String> headers = new LinkedHashMap<>();
+        options("headers").entrySet().forEach(entry -> {
+            if (entry.getValue().isJsonPrimitive()) headers.put(entry.getKey(), entry.getValue().getAsString());
+        });
+        return new LlmRequestConfig(protocol(), LlmRequestConfig.connectionId(apiUrl), apiUrl, apiKey,
+                model, httpTimeoutSeconds, useToolCall, useStreaming, thinking(),
+                optionalInt(protocolSettings, "thinkingBudget"), temperature, optionalDouble(protocolSettings, "topP"),
+                maxTokens, headers, options("extraBody"), options("compat"), options("providerOptions"));
     }
 
     public static boolean isSelectionItem(Item item) {
@@ -391,6 +428,8 @@ public final class P2SClientConfig {
         Integer loadedTimeout = null;
         Boolean loadedUseToolCall = null;
         Boolean loadedUseStreaming = null;
+        Double loadedTemperature = null;
+        Integer loadedMaxTokens = null;
         Boolean loadedAutoApplyPatch = null;
         String loadedToolset = null;
         Boolean loadedAutoCompactEnabled = null;
@@ -415,6 +454,10 @@ public final class P2SClientConfig {
                 loadedTimeout = root.has("httpTimeoutSeconds") ? root.get("httpTimeoutSeconds").getAsInt() : null;
                 loadedUseToolCall = root.has("useToolCall") ? root.get("useToolCall").getAsBoolean() : null;
                 loadedUseStreaming = root.has("useStreaming") ? root.get("useStreaming").getAsBoolean() : null;
+                protocolSettings = root.has("llm") && root.get("llm").isJsonObject()
+                        ? root.getAsJsonObject("llm").deepCopy() : new JsonObject();
+                loadedTemperature = optionalDouble(root, "temperature");
+                loadedMaxTokens = optionalInt(root, "maxTokens");
                 loadedAutoApplyPatch = root.has("autoApplyPatch") ? root.get("autoApplyPatch").getAsBoolean() : null;
                 loadedToolset = root.has("toolset") ? root.get("toolset").getAsString() : null;
                 hasExtraInstructions = root.has("extraInstructions");
@@ -476,7 +519,7 @@ public final class P2SClientConfig {
         }
         apiKey = normalizeNonBlank(loadedApiKey);
         if (apiKey == null) {
-            apiKey = DEFAULT_API_KEY;
+            apiKey = loadedApiKey == null ? DEFAULT_API_KEY : "";
         }
         model = normalizeNonBlank(loadedModel);
         if (model == null) {
@@ -486,6 +529,8 @@ public final class P2SClientConfig {
         httpTimeoutSeconds = timeout == null ? DEFAULT_TIMEOUT_SECONDS : timeout;
         useToolCall = loadedUseToolCall == null ? DEFAULT_USE_TOOL_CALL : loadedUseToolCall;
         useStreaming = loadedUseStreaming == null ? DEFAULT_USE_STREAMING : loadedUseStreaming;
+        temperature = loadedTemperature;
+        maxTokens = normalizePositiveInt(loadedMaxTokens);
         autoApplyPatch = loadedAutoApplyPatch == null ? DEFAULT_AUTO_APPLY_PATCH : loadedAutoApplyPatch;
         toolset = "legacy".equalsIgnoreCase(loadedToolset == null ? "" : loadedToolset.trim()) ? "legacy" : "v2";
         String prompt = loadedSystemPrompt == null ? "" : loadedSystemPrompt.trim();
@@ -529,6 +574,13 @@ public final class P2SClientConfig {
             root.addProperty("httpTimeoutSeconds", httpTimeoutSeconds);
             root.addProperty("useToolCall", useToolCall);
             root.addProperty("useStreaming", useStreaming);
+            if (!protocolSettings.isEmpty()) root.add("llm", protocolSettings.deepCopy());
+            if (temperature != null) {
+                root.addProperty("temperature", temperature);
+            }
+            if (maxTokens != null) {
+                root.addProperty("maxTokens", maxTokens);
+            }
             root.addProperty("autoApplyPatch", autoApplyPatch);
             root.addProperty("toolset", toolset);
             root.addProperty("extraInstructions", extraInstructions);
@@ -580,6 +632,22 @@ public final class P2SClientConfig {
             return null;
         }
         return id.toString();
+    }
+
+    private static Double optionalDouble(JsonObject root, String key) {
+        try {
+            return root.has(key) && !root.get(key).isJsonNull() ? root.get(key).getAsDouble() : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
+
+    private static Integer optionalInt(JsonObject root, String key) {
+        try {
+            return root.has(key) && !root.get(key).isJsonNull() ? root.get(key).getAsInt() : null;
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private static String normalizeNonBlank(String value) {
