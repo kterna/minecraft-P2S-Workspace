@@ -1,5 +1,10 @@
 package com.p2s.screen;
 
+import com.p2s.screen.widget.P2SFlatButton;
+import com.p2s.screen.widget.ThemePaint;
+
+import static com.p2s.screen.widget.ThemePaint.color;
+
 import com.p2s.ClientAgentManager;
 import com.p2s.ClientSessionState;
 import com.p2s.P2SI18n;
@@ -28,7 +33,7 @@ public class P2SSessionListScreen extends Screen {
     private final List<Button> deleteButtons = new ArrayList<>();
     private int scroll = 0;
     private Component statusText = Component.empty();
-    private int statusColor = 0xAAAAAA;
+    private String statusColor = "muted";
     private String projectId = "";
     private String projectName = "";
 
@@ -46,7 +51,7 @@ public class P2SSessionListScreen extends Screen {
                 ? new ArrayList<>()
                 : SessionPersistence.listSessions(projectId);
         statusText = projectId == null || projectId.isBlank() ? P2SI18n.tr("screen.p2s.sessions.status.open_project_first") : Component.empty();
-        statusColor = projectId == null || projectId.isBlank() ? 0xFFAA55 : 0xAAAAAA;
+        statusColor = projectId == null || projectId.isBlank() ? "warning" : "muted";
 
         clearWidgets();
         rowButtons.clear();
@@ -62,20 +67,20 @@ public class P2SSessionListScreen extends Screen {
             int rowY = top + i * (ROW_HEIGHT + 2);
             final int row = i;
 
-            Button rowBtn = Button.builder(Component.empty(), btn -> {})
+            Button rowBtn = P2SFlatButton.themed(Component.empty(), btn -> {})
                     .bounds(left, rowY, listWidth, ROW_HEIGHT)
                     .build();
             rowBtn.active = false;
             rowButtons.add(rowBtn);
             addRenderableWidget(rowBtn);
 
-            Button loadBtn = Button.builder(P2SI18n.tr("screen.p2s.common.open"), btn -> loadSession(row))
+            Button loadBtn = P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.open"), btn -> loadSession(row))
                     .bounds(left + listWidth + 4, rowY, BUTTON_WIDTH, ROW_HEIGHT)
                     .build();
             loadButtons.add(loadBtn);
             addRenderableWidget(loadBtn);
 
-            Button deleteBtn = Button.builder(P2SI18n.tr("screen.p2s.workspace.delete_short"), btn -> deleteSession(row))
+            Button deleteBtn = P2SFlatButton.themed(P2SI18n.tr("screen.p2s.workspace.delete_short"), btn -> deleteSession(row))
                     .bounds(left + listWidth + 4 + BUTTON_WIDTH + 4, rowY, BUTTON_WIDTH, ROW_HEIGHT)
                     .build();
             deleteButtons.add(deleteBtn);
@@ -83,14 +88,14 @@ public class P2SSessionListScreen extends Screen {
         }
 
         int bottomY = top + VISIBLE_ROWS * (ROW_HEIGHT + 2) + 4;
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.up"), btn -> {
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.up"), btn -> {
             if (scroll > 0) {
                 scroll--;
                 refreshRows();
             }
         }).bounds(left, bottomY, 50, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.down"), btn -> {
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.down"), btn -> {
             int maxScroll = Math.max(0, sessions.size() - VISIBLE_ROWS);
             if (scroll < maxScroll) {
                 scroll++;
@@ -98,17 +103,17 @@ public class P2SSessionListScreen extends Screen {
             }
         }).bounds(left + 56, bottomY, 60, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.sessions.new_session"), btn -> {
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.sessions.new_session"), btn -> {
             ClientAgentManager.newSession();
             onClose();
         }).bounds(left + 124, bottomY, 90, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.close"), btn -> {
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.close"), btn -> {
             ClientAgentManager.closeCurrentSession();
             onClose();
         }).bounds(left + 220, bottomY, 60, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.back"), btn -> onClose())
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.back"), btn -> onClose())
                 .bounds(left + panelWidth - 60, bottomY, 60, 20).build());
 
         refreshRows();
@@ -123,6 +128,7 @@ public class P2SSessionListScreen extends Screen {
 
             if (idx >= 0 && idx < sessions.size()) {
                 SessionPersistence.SessionIndexEntry entry = sessions.get(idx);
+                P2SFlatButton.setSelected(rowBtn, entry.id().equals(ClientSessionState.getSessionId()));
                 String title = entry.title();
                 if (title.length() > 40) {
                     title = title.substring(0, 37) + "...";
@@ -153,7 +159,7 @@ public class P2SSessionListScreen extends Screen {
         SessionPersistence.SessionIndexEntry entry = sessions.get(idx);
         ClientAgentManager.restoreSession(entry.id());
         statusText = P2SI18n.tr("screen.p2s.sessions.status.loaded", entry.title());
-        statusColor = 0x55FF55;
+        statusColor = "success";
         onClose();
     }
 
@@ -169,10 +175,10 @@ public class P2SSessionListScreen extends Screen {
                     ? new ArrayList<>()
                     : SessionPersistence.listSessions(projectId);
             statusText = P2SI18n.tr("screen.p2s.sessions.status.deleted");
-            statusColor = 0x55FF55;
+            statusColor = "success";
         } else {
             statusText = P2SI18n.tr("screen.p2s.sessions.status.delete_failed");
-            statusColor = 0xFF5555;
+            statusColor = "danger";
         }
         refreshRows();
     }
@@ -189,17 +195,21 @@ public class P2SSessionListScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        gfx.fill(0, 0, this.width, this.height, color("backdrop"));
+    }
+
+    @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(gfx, mouseX, mouseY, delta);
         super.render(gfx, mouseX, mouseY, delta);
 
         int panelWidth = Math.min(640, this.width - 40);
         int left = (this.width - panelWidth) / 2;
         String headerProject = projectName == null || projectName.isBlank() ? P2SI18n.tr("screen.p2s.sessions.no_project").getString() : projectName;
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.sessions.header", headerProject, sessions.size()), left, 24, 0xFFFFFF, true);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.sessions.header", headerProject, sessions.size()), left, 24, color("text"), true);
 
         if (statusText != null && !statusText.getString().isBlank()) {
-            gfx.drawString(this.font, statusText, left, this.height - 20, statusColor, false);
+            ThemePaint.text(gfx, this.font, statusText, left, this.height - 20, color(statusColor), false);
         }
     }
 

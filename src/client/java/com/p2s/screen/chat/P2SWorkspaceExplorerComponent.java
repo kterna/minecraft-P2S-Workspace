@@ -3,6 +3,7 @@ package com.p2s.screen.chat;
 import com.p2s.ClientSessionState;
 import com.p2s.P2SI18n;
 import com.p2s.screen.widget.P2SFlatButton;
+import com.p2s.screen.widget.P2SThemedEditBox;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -84,7 +85,7 @@ public final class P2SWorkspaceExplorerComponent {
         if (config.createMode()) {
             int inputWidth = config.explorerWidth() - 2 * 22 - EXPLORER_ACTION_GAP * 2;
             int actionWidth = 22;
-            createInput = host.addEditBox(new EditBox(
+            createInput = host.addEditBox(new P2SThemedEditBox(
                     host.font(),
                     config.leftX(),
                     config.row2Y(),
@@ -121,7 +122,7 @@ public final class P2SWorkspaceExplorerComponent {
         } else if (config.renameMode()) {
             int inputWidth = config.explorerWidth() - 2 * 22 - EXPLORER_ACTION_GAP * 2;
             int actionWidth = 22;
-            renameInput = host.addEditBox(new EditBox(
+            renameInput = host.addEditBox(new P2SThemedEditBox(
                     host.font(),
                     config.leftX(),
                     config.row2Y(),
