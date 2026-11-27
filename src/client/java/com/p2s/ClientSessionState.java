@@ -130,10 +130,11 @@ public final class ClientSessionState {
         }
 
         if (!sessionActiveFlag) {
+            // Messages, plan and pending choice belong to the local agent session and are cleared
+            // by ClientAgentManager when it closes one. A late "ended" reply for the previous
+            // server session can arrive after a restore has already filled them in.
             status = "";
             clearPreview();
-            clearPlan();
-            clearPendingChoice();
             checkpoints.clear();
             selectedCheckpointIndex = -1;
             currentWorkspaceToml = "";
@@ -151,7 +152,6 @@ public final class ClientSessionState {
             selectedWorkspacePath = hasProjectFlag && !workspaceFiles.isEmpty() && workspaceFiles.get(0) != null
                     ? normalizeWorkspacePath(workspaceFiles.get(0).path())
                     : "";
-            messages.clear();
         }
 
         if (!hasProjectFlag) {

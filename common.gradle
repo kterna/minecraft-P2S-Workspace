@@ -79,6 +79,10 @@ dependencies {
 	modImplementation include("com.squareup.okhttp3:okhttp:4.12.0")
 	modImplementation include("com.google.code.gson:gson:2.11.0")
 	modImplementation include("com.squareup.okio:okio:3.9.1")
+	// OkHttp 4 and Okio 3 are written in Kotlin. include() nests only the listed artifact, so the
+	// standard library must be listed too, or the release JAR fails with NoClassDefFoundError
+	// kotlin/jvm/internal/Intrinsics on the first request (the dev classpath hides this).
+	modImplementation include("org.jetbrains.kotlin:kotlin-stdlib:1.9.25")
 	// JavaScript engine for the v2 `script` tool (sandboxed, interpreted mode, no Java access).
 	modImplementation include("org.mozilla:rhino:1.9.2")
 

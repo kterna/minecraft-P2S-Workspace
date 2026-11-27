@@ -61,6 +61,27 @@ class ClientSessionSnapshotTest {
         assertEquals(1, saved.pendingChoice().options().size());
     }
 
+    @Test
+    void lateEndReplyForThePreviousServerSessionKeepsTheRestoredConversation() {
+        // Order seen in game: restore fills the view, then the old session's "ended" sync arrives,
+        // then the restored session's "started" sync.
+        openProject("project-a", "a.toml");
+        ClientSessionState.addUserMessage("Restored request");
+        ClientSessionState.setPlan("Restored plan", List.of(new ClientSessionState.PlanItem("Step", "in_progress")));
+        ClientSessionState.setPendingChoice("choice", "Question",
+                List.of(new ClientSessionState.ChoiceOption("a", "Option", "")));
+
+        ClientSessionState.onSessionSync(true, false, "", "project-a", "Project", "",
+                0, 0, 0, false, 0, 0, 0, "", 0, 0, "", "", "", "",
+                false, "", "", "", 0, "[]", "", "[]");
+        openProject("project-a", "a.toml");
+
+        assertEquals("Restored request", ClientSessionState.getMessages().getFirst().text());
+        assertEquals("Restored plan", ClientSessionState.getPlanExplanation());
+        assertEquals(1, ClientSessionState.getPlanItems().size());
+        assertEquals("choice", ClientSessionState.getPendingChoice().requestId());
+    }
+
     private static void openProject(String projectId, String path) {
         JsonObject workspace = new JsonObject();
         workspace.addProperty("path", path);
