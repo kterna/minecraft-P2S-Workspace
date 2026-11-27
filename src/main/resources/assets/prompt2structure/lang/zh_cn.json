@@ -447,5 +447,12 @@
   "screen.p2s.wb.menu.compact": "压缩上下文",
   "screen.p2s.wb.menu.export": "导出诊断",
   "screen.p2s.wb.menu.settings": "设置",
-  "screen.p2s.wb.menu.classic": "经典界面"
+  "screen.p2s.wb.menu.classic": "经典界面",
+  "screen.p2s.wb.welcome.title": "想建点什么？",
+  "screen.p2s.wb.welcome.body": "用一句话说出你想要的建筑或修改。Agent 会读取选区和地形，写出工作区文件，改动会先以虚影出现在世界里，由你逐份决定是否应用。",
+  "screen.p2s.wb.welcome.no_project": "先用选区工具框出一块地方并创建项目（⋯ → 项目），再告诉 Agent 你想建什么。",
+  "screen.p2s.wb.welcome.try": "试试：",
+  "screen.p2s.wb.example.1": "在选区里建一座两层木屋，深色橡木屋顶，正面开门",
+  "screen.p2s.wb.example.2": "给现在的建筑加一圈石砖围墙，四角各放一盏灯笼",
+  "screen.p2s.wb.example.3": "把屋顶改成歇山顶，檐口向外多出一格"
 }

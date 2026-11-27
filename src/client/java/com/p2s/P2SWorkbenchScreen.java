@@ -77,6 +77,8 @@ public class P2SWorkbenchScreen extends Screen {
 
     private EditBox input;
     private EditBox reason;
+    /** Vanilla hideGui before this screen hid the hotbar, crosshair and hand; null when untouched. */
+    private Boolean previousHideGui;
 
     private record Hit(int x1, int y1, int x2, int y2, Runnable action) {
         boolean contains(double x, double y) {
@@ -120,6 +122,10 @@ public class P2SWorkbenchScreen extends Screen {
 
     @Override
     protected void init() {
+        if (previousHideGui == null && minecraft != null) {
+            previousHideGui = minecraft.options.hideGui;
+            minecraft.options.hideGui = true;
+        }
         input = new EditBox(font, 0, 0, 10, 12, P2SI18n.tr("screen.p2s.wb.input"));
         input.setMaxLength(8000);
         input.setBordered(false);
@@ -159,6 +165,10 @@ public class P2SWorkbenchScreen extends Screen {
         lastTab = tab;
         lastCollapsed = collapsed;
         OrbitCamera.stop();
+        if (previousHideGui != null && minecraft != null) {
+            minecraft.options.hideGui = previousHideGui;
+            previousHideGui = null;
+        }
         super.removed();
     }
 
@@ -234,7 +244,10 @@ public class P2SWorkbenchScreen extends Screen {
         gfx.fill(0, 0, pw - 1, TOP, c("inset"));
         gfx.fill(0, TOP - 1, pw - 1, TOP, c("line"));
         int x = PAD;
-        gfx.drawString(font, "P2S", x, 6, c("accent"), false);
+        gfx.fill(x, 6, x + 6, 12, c("accent"));
+        gfx.fill(x + 2, 8, x + 4, 10, c("inset"));
+        x += 9;
+        gfx.drawString(font, "P2S", x, 6, c("text"), false);
         x += font.width("P2S") + 4;
         String project = ClientSessionState.hasProject() ? ClientSessionState.getProjectName()
                 : P2SI18n.tr("screen.p2s.wb.no_project").getString();
@@ -320,6 +333,9 @@ public class P2SWorkbenchScreen extends Screen {
 
         y = renderPlan(gfx, y, w);
         List<ClientSessionState.ChatMessage> messages = ClientSessionState.getMessages();
+        if (messages.isEmpty() && !ClientAgentManager.isAgentRunning() && pendingFiles().isEmpty()) {
+            y = renderWelcome(gfx, y, w, mouseX, mouseY, top, bottom);
+        }
         int i = 0;
         while (i < messages.size()) {
             ClientSessionState.ChatMessage message = messages.get(i);
@@ -350,6 +366,46 @@ public class P2SWorkbenchScreen extends Screen {
         chatContentHeight = y - start + PAD;
         gfx.disableScissor();
         renderScrollbar(gfx, pw - 4, top, bottom, chatScroll, chatContentHeight);
+    }
+
+    private static final String[] EXAMPLES = {
+            "screen.p2s.wb.example.1", "screen.p2s.wb.example.2", "screen.p2s.wb.example.3"};
+
+    /** Empty conversation: what the panel is for, and a few prompts that fill the input. */
+    private int renderWelcome(GuiGraphics gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
+        y += 8;
+        gfx.drawString(font, P2SI18n.tr("screen.p2s.wb.welcome.title").getString(), PAD, y, c("text"), false);
+        y += LINE + 4;
+        for (FormattedCharSequence line : wrap(P2SI18n.tr(ClientSessionState.hasProject()
+                ? "screen.p2s.wb.welcome.body" : "screen.p2s.wb.welcome.no_project").getString(), w)) {
+            gfx.drawString(font, line, PAD, y, c("muted"), false);
+            y += LINE;
+        }
+        y += 8;
+        gfx.drawString(font, P2SI18n.tr("screen.p2s.wb.welcome.try").getString(), PAD, y, c("faint"), false);
+        y += LINE + 2;
+        for (String key : EXAMPLES) {
+            String text = P2SI18n.tr(key).getString();
+            List<FormattedCharSequence> lines = wrap(text, w - 16);
+            int h = lines.size() * LINE + 6;
+            float hv = hoverAmount("ex-" + key, mouseX, mouseY, PAD, y, PAD + w, y + h);
+            gfx.fill(PAD, y, PAD + w, y + h, WbPalette.mix(c("inset"), c("hover"), hv));
+            outline(gfx, PAD, y, PAD + w, y + h, c("line"));
+            int ly = y + 3;
+            for (FormattedCharSequence line : lines) {
+                gfx.drawString(font, line, PAD + 8, ly, c("text"), false);
+                ly += LINE;
+            }
+            if (y >= clipTop && y + h <= clipBottom) {
+                hits.add(new Hit(PAD, y, PAD + w, y + h, () -> {
+                    input.setValue(text);
+                    draft = text;
+                    setFocused(input);
+                }));
+            }
+            y += h + 4;
+        }
+        return y + 4;
     }
 
     private static boolean isTool(ClientSessionState.ChatMessage message) {

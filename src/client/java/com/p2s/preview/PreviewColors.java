@@ -1,31 +1,26 @@
 package com.p2s.preview;
 
-/**
- * Preview colours as RGB triples. Defaults are the {@code preview-*} fields of the default
- * "余烬" theme in docs/mockups/gpt/themes.json; once the theme system is merged these read
- * {@code P2STheme.current().color(...)} instead.
- */
-final class PreviewColors {
-    private static final int[] ADD = rgb(0xAAC4A3);
-    private static final int[] REMOVE = rgb(0xDBABA1);
-    private static final int[] FILE = rgb(0xD4AD84);
+import com.p2s.theme.P2STheme;
 
+/** Preview colours as RGB triples, read from the current theme's {@code preview-*} fields. */
+final class PreviewColors {
     private PreviewColors() {
     }
 
     static int[] add() {
-        return ADD;
+        return rgb("preview-add");
     }
 
     static int[] remove() {
-        return REMOVE;
+        return rgb("preview-remove");
     }
 
     static int[] file() {
-        return FILE;
+        return rgb("preview-file");
     }
 
-    private static int[] rgb(int color) {
+    private static int[] rgb(String field) {
+        int color = P2STheme.current().color(field);
         return new int[]{(color >> 16) & 0xFF, (color >> 8) & 0xFF, color & 0xFF};
     }
 }
