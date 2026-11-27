@@ -1,19 +1,26 @@
 package com.p2s.screen.widget;
 
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
+
+import static com.p2s.screen.widget.ThemePaint.color;
 
 public class P2SFlatButton extends Button {
-    public enum Variant {
-        NORMAL,
-        PRIMARY,
-        DANGER,
-        MUTED
-    }
+    public enum Variant { NORMAL, PRIMARY, DANGER, MUTED }
 
     private final Variant variant;
+    private final ThemePaint.Transition hover = new ThemePaint.Transition();
+    private final ThemePaint.Transition press = new ThemePaint.Transition();
+    private final ThemePaint.Transition selection = new ThemePaint.Transition();
+    private boolean selected;
+    private boolean mouseDown;
+    private long pressedUntil;
 
     public P2SFlatButton(int x, int y, int width, int height, Component message, OnPress onPress) {
         this(x, y, width, height, message, onPress, Variant.NORMAL);
@@ -24,65 +31,97 @@ public class P2SFlatButton extends Button {
         this.variant = variant == null ? Variant.NORMAL : variant;
     }
 
+    public static Factory themed(Component label, OnPress action) {
+        return new Factory(label, action);
+    }
+
+    public static final class Factory {
+        private final Component label;
+        private final OnPress action;
+        private int x, y, width = 150, height = 20;
+        private Tooltip tooltip;
+        private Variant variant = Variant.NORMAL;
+
+        private Factory(Component label, OnPress action) {
+            this.label = label;
+            this.action = action;
+        }
+
+        public Factory bounds(int x, int y, int width, int height) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            return this;
+        }
+
+        public Factory tooltip(Tooltip tooltip) {
+            this.tooltip = tooltip;
+            return this;
+        }
+
+        public Factory variant(Variant variant) {
+            this.variant = variant;
+            return this;
+        }
+
+        public P2SFlatButton build() {
+            P2SFlatButton button = new P2SFlatButton(x, y, width, height, label, action, variant);
+            if (tooltip != null) button.setTooltip(tooltip);
+            return button;
+        }
+    }
+
+    public static void setSelected(Button button, boolean selected) {
+        if (button instanceof P2SFlatButton flat) flat.selected = selected;
+    }
+
+    @Override
+    public void onClick(double mouseX, double mouseY) {
+        mouseDown = true;
+        super.onClick(mouseX, mouseY);
+    }
+
+    @Override
+    public void onPress() {
+        pressedUntil = Util.getMillis() + 100;
+        super.onPress();
+    }
+
     @Override
     protected void renderWidget(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
-        int left = getX();
-        int top = getY();
-        int right = left + width;
-        int bottom = top + height;
-        boolean hovered = isHoveredOrFocused();
-
-        int background = backgroundColor(hovered);
-        int border = borderColor(hovered);
-        int textColor = active ? 0xEAF2FF : 0x7B8CA6;
-        if (!active) {
-            hovered = false;
+        Minecraft client = Minecraft.getInstance();
+        if (mouseDown && GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) != GLFW.GLFW_PRESS) {
+            mouseDown = false;
         }
+        int x = getX(), y = getY(), right = x + width, bottom = y + height;
+        boolean primary = variant == Variant.PRIMARY && active;
+        int bg = color(primary ? "accent" : variant == Variant.MUTED ? "inset" : "raised");
+        int ink = color(selected ? "accent" : !active ? "faint" : primary ? "on-accent" : variant == Variant.DANGER ? "danger" : "text");
+        gfx.fill(x, y, right, bottom, bg);
+        gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("selected"), selection.value(selected)));
+        gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("hover"), hover.value(active && isHovered())));
+        gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("pressed"), press.value(active && (mouseDown || Util.getMillis() < pressedUntil))));
+        ThemePaint.border(gfx, x, y, width, height, color(isFocused() ? "focus" : primary ? "accent" : "line"));
+        if (selected) gfx.fill(x, y + 1, x + 1, bottom - 1, color("accent"));
+        drawLabel(gfx, client.font, ink);
+    }
 
-        gfx.fill(left, top, right, bottom, background);
-        gfx.fill(left, top, right, top + 1, border);
-        gfx.fill(left, bottom - 1, right, bottom, border);
-        gfx.fill(left, top, left + 1, bottom, border);
-        gfx.fill(right - 1, top, right, bottom, border);
-
-        if (hovered) {
-            gfx.fill(left + 1, top + 1, right - 1, top + 2, 0x33FFFFFF);
-        }
-
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft == null || minecraft.font == null) {
+    private void drawLabel(GuiGraphics gfx, Font font, int ink) {
+        int left = getX() + 2, right = getX() + width - 2;
+        if (left >= right) return;
+        int textWidth = font.width(getMessage());
+        int overflow = textWidth - (right - left);
+        int y = getY() + (height - 8) / 2;
+        if (overflow <= 0) {
+            ThemePaint.text(gfx, font, getMessage(), getX() + (width - textWidth) / 2, y, ink, true);
             return;
         }
-        int textY = top + (height - 8) / 2;
-        gfx.drawCenteredString(minecraft.font, getMessage(), left + width / 2, textY, textColor);
-    }
-
-    private int backgroundColor(boolean hovered) {
-        if (!active) {
-            return switch (variant) {
-                case PRIMARY -> 0x55233B59;
-                case DANGER -> 0x553C2022;
-                case MUTED -> 0x55101620;
-                case NORMAL -> 0x55161F2C;
-            };
-        }
-        return switch (variant) {
-            case PRIMARY -> hovered ? 0xCC35507A : 0xB02B405F;
-            case DANGER -> hovered ? 0xCC6D3235 : 0xB055282A;
-            case MUTED -> hovered ? 0xCC263446 : 0xAA1C2736;
-            case NORMAL -> hovered ? 0xCC2E425D : 0xAA243447;
-        };
-    }
-
-    private int borderColor(boolean hovered) {
-        if (!active) {
-            return 0x553B4A60;
-        }
-        return switch (variant) {
-            case PRIMARY -> hovered ? 0xFF88A6D9 : 0xFF6F8FBE;
-            case DANGER -> hovered ? 0xFFDB8D90 : 0xFFC16B6D;
-            case MUTED -> hovered ? 0xFF88A2C4 : 0xFF6C86A4;
-            case NORMAL -> hovered ? 0xFF86A2CC : 0xFF6E89AE;
-        };
+        // Vanilla buttons reveal long translated labels by scrolling them inside the button.
+        double period = Math.max(overflow * 0.5, 3.0);
+        double phase = Math.sin(Math.PI / 2 * Math.cos(2 * Math.PI * Util.getMillis() / 1000 / period)) / 2 + 0.5;
+        gfx.enableScissor(left, getY(), right, getY() + height);
+        ThemePaint.text(gfx, font, getMessage(), left - (int) (overflow * phase), y, ink, true);
+        gfx.disableScissor();
     }
 }

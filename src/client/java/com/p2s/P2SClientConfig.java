@@ -9,6 +9,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -70,6 +71,7 @@ public final class P2SClientConfig {
     private static boolean autoApplyPatch = DEFAULT_AUTO_APPLY_PATCH;
     /** "v2" (default) or "legacy": which agent tool set the client uses. */
     private static String toolset = "v2";
+    private static String themeId = "";
     private static String extraInstructions = "";
     private static boolean autoCompactEnabled = DEFAULT_AUTO_COMPACT_ENABLED;
     private static int contextWindowTokens = DEFAULT_CONTEXT_WINDOW_TOKENS;
@@ -87,6 +89,17 @@ public final class P2SClientConfig {
 
     public static synchronized void reload() {
         load();
+    }
+
+    public static synchronized String getThemeId() {
+        return themeId;
+    }
+
+    public static synchronized void setThemeId(String id) {
+        if (!id.equals(themeId)) {
+            themeId = id;
+            save();
+        }
     }
 
     public static synchronized String getSelectionItemId() {
@@ -432,6 +445,7 @@ public final class P2SClientConfig {
         Integer loadedMaxTokens = null;
         Boolean loadedAutoApplyPatch = null;
         String loadedToolset = null;
+        String loadedTheme = "";
         Boolean loadedAutoCompactEnabled = null;
         Integer loadedContextWindowTokens = null;
         Integer loadedCompactKeepRecentTokens = null;
@@ -447,6 +461,9 @@ public final class P2SClientConfig {
         try {
             if (Files.exists(CONFIG_PATH)) {
                 JsonObject root = JsonParser.parseString(Files.readString(CONFIG_PATH)).getAsJsonObject();
+                if (root.get("theme") instanceof JsonPrimitive value && value.isString()) {
+                    loadedTheme = value.getAsString();
+                }
                 loaded = root.has("selectionItem") ? root.get("selectionItem").getAsString() : null;
                 loadedApiUrl = root.has("apiUrl") ? root.get("apiUrl").getAsString() : null;
                 loadedApiKey = root.has("apiKey") ? root.get("apiKey").getAsString() : null;
@@ -513,6 +530,7 @@ public final class P2SClientConfig {
             normalized = DEFAULT_SELECTION_ITEM_ID;
         }
         selectionItemId = normalized;
+        themeId = loadedTheme;
         apiUrl = normalizeNonBlank(loadedApiUrl);
         if (apiUrl == null) {
             apiUrl = DEFAULT_API_URL;
@@ -583,6 +601,7 @@ public final class P2SClientConfig {
             }
             root.addProperty("autoApplyPatch", autoApplyPatch);
             root.addProperty("toolset", toolset);
+            if (!themeId.isBlank()) root.addProperty("theme", themeId);
             root.addProperty("extraInstructions", extraInstructions);
             root.addProperty("autoCompactEnabled", autoCompactEnabled);
             root.addProperty("contextWindowTokens", contextWindowTokens);

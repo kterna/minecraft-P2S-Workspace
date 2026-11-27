@@ -6,6 +6,8 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import org.lwjgl.glfw.GLFW;
 
+import static com.p2s.screen.widget.ThemePaint.color;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -115,12 +117,13 @@ public class P2SMultiLineTextEditor {
         int top = y;
         int right = x + width;
         int bottom = y + height;
-        int bg = focused ? 0xAA0B111A : 0xAA080E16;
+        int bg = color("input-bg");
+        int border = color(focused ? "focus" : "input-border");
         gfx.fill(left, top, right, bottom, bg);
-        gfx.fill(left, top, right, top + 1, 0xFF2F3A4D);
-        gfx.fill(left, bottom - 1, right, bottom, 0xFF2F3A4D);
-        gfx.fill(left, top, left + 1, bottom, 0xFF2F3A4D);
-        gfx.fill(right - 1, top, right, bottom, 0xFF2F3A4D);
+        gfx.fill(left, top, right, top + 1, border);
+        gfx.fill(left, bottom - 1, right, bottom, border);
+        gfx.fill(left, top, left + 1, bottom, border);
+        gfx.fill(right - 1, top, right, bottom, border);
 
         int rowStep = ROW_HEIGHT + ROW_GAP;
         int baseY = top + PADDING;
@@ -155,15 +158,15 @@ public class P2SMultiLineTextEditor {
                         drawSelX2 = Math.min(maxTextX, drawSelX1 + 1);
                     }
                     if (drawSelX2 > drawSelX1) {
-                        gfx.fill(drawSelX1, rowY + 2, drawSelX2, rowBottom - 2, 0x665A8BFF);
+                        gfx.fill(drawSelX1, rowY + 2, drawSelX2, rowBottom - 2, color("selected"));
                     }
                 }
             }
 
             if (showLineNumbers) {
-                gfx.drawString(font, Integer.toString(lineIndex + 1), left + 4, rowY + 5, 0x8A99B8, false);
+                ThemePaint.text(gfx, font, Integer.toString(lineIndex + 1), left + 4, rowY + 5, color("faint"), false);
             }
-            gfx.drawString(font, clipTextToWidth(fullLine, textWidth), textX, rowY + 5, 0xD6E0F5, false);
+            ThemePaint.text(gfx, font, clipTextToWidth(fullLine, textWidth), textX, rowY + 5, color("text"), false);
         }
 
         if (focused && (System.currentTimeMillis() / 500L) % 2L == 0L) {
@@ -175,7 +178,7 @@ public class P2SMultiLineTextEditor {
                 int cursor = Math.min(cursorColumn, line.length());
                 int caretX = textX + font.width(line.substring(0, cursor));
                 caretX = Math.max(textX, Math.min(caretX, maxTextX));
-                gfx.fill(caretX, caretY, caretX + 1, caretY + caretHeight, 0xFFE8F0FF);
+                gfx.fill(caretX, caretY, caretX + 1, caretY + caretHeight, color("focus"));
             }
         }
     }

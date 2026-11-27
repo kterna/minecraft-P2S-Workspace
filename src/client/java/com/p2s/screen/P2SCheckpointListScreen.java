@@ -1,5 +1,11 @@
 package com.p2s.screen;
 
+import com.p2s.screen.widget.P2SFlatButton;
+import com.p2s.screen.widget.P2SThemedEditBox;
+import com.p2s.screen.widget.ThemePaint;
+
+import static com.p2s.screen.widget.ThemePaint.color;
+
 import com.p2s.ClientServerBridge;
 import com.google.gson.JsonObject;
 import com.p2s.ClientSessionState;
@@ -38,7 +44,7 @@ public class P2SCheckpointListScreen extends Screen {
     private Button rollbackButton;
     private Button modeButton;
     private Component statusText = Component.empty();
-    private int statusColor = 0xAAAAAA;
+    private String statusColor = "muted";
     private String lastSignature = "";
 
     public P2SCheckpointListScreen(Screen parent) {
@@ -70,7 +76,7 @@ public class P2SCheckpointListScreen extends Screen {
         listRight = left + panelWidth;
         listBottom = listTop + listHeight;
 
-        checkpointNameInput = new EditBox(this.font, left, top, panelWidth, 20, P2SI18n.tr("screen.p2s.chat.checkpoint.name_hint"));
+        checkpointNameInput = new P2SThemedEditBox(this.font, left, top, panelWidth, 20, P2SI18n.tr("screen.p2s.chat.checkpoint.name_hint"));
         checkpointNameInput.setMaxLength(120);
         checkpointNameInput.setValue(nameDraft == null ? "" : nameDraft);
         checkpointNameInput.setHint(P2SI18n.tr("screen.p2s.chat.checkpoint.name_hint"));
@@ -79,36 +85,36 @@ public class P2SCheckpointListScreen extends Screen {
         for (int i = 0; i < visibleRows; i++) {
             int rowY = listTop + i * rowStep;
             final int row = i;
-            Button rowBtn = Button.builder(Component.empty(), btn -> selectCheckpoint(row))
+            Button rowBtn = P2SFlatButton.themed(Component.empty(), btn -> selectCheckpoint(row))
                     .bounds(left, rowY, panelWidth, ROW_HEIGHT)
                     .build();
             rowButtons.add(rowBtn);
             addRenderableWidget(rowBtn);
         }
 
-        scrollUpButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.up"), btn -> scrollBy(-1))
+        scrollUpButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.up"), btn -> scrollBy(-1))
                 .bounds(left, bottomY, 50, BUTTON_HEIGHT).build());
 
-        scrollDownButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.down"), btn -> scrollBy(1))
+        scrollDownButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.down"), btn -> scrollBy(1))
                 .bounds(left + 56, bottomY, 60, BUTTON_HEIGHT).build());
 
-        createButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.chat.checkpoint.create_short"), btn -> createCheckpoint())
+        createButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.chat.checkpoint.create_short"), btn -> createCheckpoint())
                 .bounds(left + 124, bottomY, 60, BUTTON_HEIGHT).build());
 
-        renameButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.chat.checkpoint.rename_short"), btn -> renameCheckpoint())
+        renameButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.chat.checkpoint.rename_short"), btn -> renameCheckpoint())
                 .bounds(left + 190, bottomY, 70, BUTTON_HEIGHT).build());
 
-        rollbackButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.chat.checkpoint.rollback_short"), btn -> rollbackCheckpoint())
+        rollbackButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.chat.checkpoint.rollback_short"), btn -> rollbackCheckpoint())
                 .bounds(left + 266, bottomY, 70, BUTTON_HEIGHT).build());
 
-        modeButton = addRenderableWidget(Button.builder(modeLabel(), btn -> {
+        modeButton = addRenderableWidget(P2SFlatButton.themed(modeLabel(), btn -> {
             ClientSessionState.toggleRollbackMode();
             btn.setMessage(modeLabel());
             refreshRows();
             refreshControls();
         }).bounds(left + 342, bottomY, 120, BUTTON_HEIGHT).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.back"), btn -> onClose())
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.back"), btn -> onClose())
                 .bounds(left + panelWidth - 60, bottomY, 60, BUTTON_HEIGHT).build());
 
         refreshRows();
@@ -143,6 +149,7 @@ public class P2SCheckpointListScreen extends Screen {
                 String label = checkpoint.label() == null || checkpoint.label().isBlank() ? checkpoint.id() : checkpoint.label();
                 String revision = checkpoint.revision() == null || checkpoint.revision().isBlank() ? "-" : shortRevision(checkpoint.revision());
                 boolean isSelected = checkpoint.id() != null && checkpoint.id().equals(selectedId);
+                P2SFlatButton.setSelected(rowBtn, isSelected);
                 String prefix = isSelected ? "› " : "  ";
                 rowBtn.setMessage(Component.literal(prefix + label + "  [" + revision + "]"));
                 rowBtn.visible = true;
@@ -260,7 +267,7 @@ public class P2SCheckpointListScreen extends Screen {
             return;
         }
         statusText = P2SI18n.tr("screen.p2s.checkpoints.status.creating");
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
     }
 
     private void renameCheckpoint() {
@@ -279,7 +286,7 @@ public class P2SCheckpointListScreen extends Screen {
             return;
         }
         statusText = P2SI18n.tr("screen.p2s.checkpoints.status.renaming", label);
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
     }
 
     private void rollbackCheckpoint() {
@@ -294,7 +301,7 @@ public class P2SCheckpointListScreen extends Screen {
             return;
         }
         statusText = P2SI18n.tr("screen.p2s.checkpoints.status.rolling_back", checkpoint.label() == null ? checkpoint.id() : checkpoint.label());
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
     }
 
     private boolean sendSessionAction(String action, String payload) {
@@ -332,32 +339,37 @@ public class P2SCheckpointListScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        refreshFromStateIfNeeded();
-        super.renderBackground(gfx, mouseX, mouseY, delta);
-
+    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        gfx.fill(0, 0, this.width, this.height, color("backdrop"));
         int panelWidth = Math.min(760, this.width - 40);
         int left = (this.width - panelWidth) / 2;
         int panelLeft = left - 8;
         int panelTop = 18;
         int panelRight = left + panelWidth + 8;
         int panelBottom = Math.min(this.height - 18, listBottom + 38);
-        gfx.fill(panelLeft, panelTop, panelRight, panelBottom, 0xC0141A26);
-        gfx.fill(panelLeft, panelTop, panelRight, panelTop + 1, 0xFF2F3A4D);
-        gfx.fill(panelLeft, panelBottom - 1, panelRight, panelBottom, 0xFF2F3A4D);
-        gfx.fill(panelLeft, panelTop, panelLeft + 1, panelBottom, 0xFF2F3A4D);
-        gfx.fill(panelRight - 1, panelTop, panelRight, panelBottom, 0xFF2F3A4D);
+        gfx.fill(panelLeft, panelTop, panelRight, panelBottom, color("panel"));
+        gfx.fill(panelLeft, panelTop, panelRight, panelTop + 1, color("line"));
+        gfx.fill(panelLeft, panelBottom - 1, panelRight, panelBottom, color("line"));
+        gfx.fill(panelLeft, panelTop, panelLeft + 1, panelBottom, color("line"));
+        gfx.fill(panelRight - 1, panelTop, panelRight, panelBottom, color("line"));
+
+    }
+
+    @Override
+    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        refreshFromStateIfNeeded();
 
         super.render(gfx, mouseX, mouseY, delta);
+        int left = (this.width - Math.min(760, this.width - 40)) / 2;
 
         String fileName = ClientSessionState.getSelectedWorkspaceLabel();
         if (fileName == null || fileName.isBlank()) {
             fileName = P2SI18n.tr("screen.p2s.workspace.unnamed").getString();
         }
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.checkpoints.header", fileName, ClientSessionState.getCheckpoints().size()), left, 24, 0xFFFFFF, true);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.checkpoints.header", fileName, ClientSessionState.getCheckpoints().size()), left, 24, color("text"), true);
 
         if (statusText != null && !statusText.getString().isBlank()) {
-            gfx.drawString(this.font, statusText, left, this.height - 20, statusColor, false);
+            ThemePaint.text(gfx, this.font, statusText, left, this.height - 20, color(statusColor), false);
         }
     }
 

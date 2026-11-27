@@ -1,5 +1,11 @@
 package com.p2s.screen;
 
+import com.p2s.screen.widget.P2SFlatButton;
+import com.p2s.screen.widget.P2SThemedEditBox;
+import com.p2s.screen.widget.ThemePaint;
+
+import static com.p2s.screen.widget.ThemePaint.color;
+
 import com.p2s.P2SI18n;
 import com.p2s.screen.widget.P2SMultiLineTextEditor;
 import com.p2s.store.SkillStore;
@@ -28,7 +34,7 @@ public class P2SSkillEditorScreen extends Screen {
 
     private String originalBody = "";
     private Component statusText = Component.empty();
-    private int statusColor = 0xAAAAAA;
+    private String statusColor = "muted";
 
     public P2SSkillEditorScreen(Screen parent, Mode mode, String skillId) {
         super(switch (mode == null ? Mode.CREATE : mode) {
@@ -50,11 +56,11 @@ public class P2SSkillEditorScreen extends Screen {
         int left = (this.width - panelWidth) / 2;
         int top = Math.max(14, this.height / 10);
 
-        nameInput = new EditBox(this.font, left + 10, top + 26, panelWidth - 20, 20, P2SI18n.tr("screen.p2s.skill_editor.name"));
+        nameInput = new P2SThemedEditBox(this.font, left + 10, top + 26, panelWidth - 20, 20, P2SI18n.tr("screen.p2s.skill_editor.name"));
         nameInput.setMaxLength(128);
         addRenderableWidget(nameInput);
 
-        descInput = new EditBox(this.font, left + 10, top + 56, panelWidth - 20, 20, P2SI18n.tr("screen.p2s.skill_editor.description"));
+        descInput = new P2SThemedEditBox(this.font, left + 10, top + 56, panelWidth - 20, 20, P2SI18n.tr("screen.p2s.skill_editor.description"));
         descInput.setMaxLength(256);
         addRenderableWidget(descInput);
 
@@ -76,9 +82,9 @@ public class P2SSkillEditorScreen extends Screen {
             buttonY = top + 104;
         }
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.save"), btn -> saveSkill())
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.save"), btn -> saveSkill())
                 .bounds(left + 10, buttonY, 80, 20).build());
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.cancel"), btn -> onClose())
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.cancel"), btn -> onClose())
                 .bounds(left + 98, buttonY, 90, 20).build());
     }
 
@@ -135,7 +141,7 @@ public class P2SSkillEditorScreen extends Screen {
         String desc = descInput == null ? "" : descInput.getValue();
         if (name == null || name.isBlank()) {
             statusText = P2SI18n.tr("screen.p2s.skill_editor.status.name_required");
-            statusColor = 0xFF5555;
+            statusColor = "danger";
             return;
         }
 
@@ -157,7 +163,7 @@ public class P2SSkillEditorScreen extends Screen {
             }
             if (saved == null) {
                 statusText = P2SI18n.tr("screen.p2s.skill_editor.status.save_failed");
-                statusColor = 0xFF5555;
+                statusColor = "danger";
                 return;
             }
             if (parent instanceof P2SConfigScreen cfg) {
@@ -168,7 +174,7 @@ public class P2SSkillEditorScreen extends Screen {
             }
         } catch (Exception e) {
             statusText = P2SI18n.tr("screen.p2s.skill_editor.status.save_failed_with_reason", e.getMessage());
-            statusColor = 0xFF5555;
+            statusColor = "danger";
         }
     }
 
@@ -242,27 +248,31 @@ public class P2SSkillEditorScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        gfx.fill(0, 0, this.width, this.height, color("backdrop"));
+    }
+
+    @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(gfx, mouseX, mouseY, delta);
         super.render(gfx, mouseX, mouseY, delta);
 
         int panelWidth = Math.min(860, this.width - 24);
         int left = (this.width - panelWidth) / 2;
         int top = Math.max(14, this.height / 10);
 
-        gfx.drawString(this.font, this.title, left + 10, top + 8, 0xFFFFFF, true);
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.skill_editor.name"), left + 10, top + 16, 0xCCCCCC, false);
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.skill_editor.description"), left + 10, top + 46, 0xCCCCCC, false);
+        ThemePaint.text(gfx, this.font, this.title, left + 10, top + 8, color("text"), true);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.skill_editor.name"), left + 10, top + 16, color("muted"), false);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.skill_editor.description"), left + 10, top + 46, color("muted"), false);
         if (mode != Mode.RENAME) {
             if (bodyEditor != null) {
                 bodyEditor.render(gfx);
             }
-            gfx.drawString(this.font, P2SI18n.tr("screen.p2s.skill_editor.body"), left + 10, top + 84, 0xCCCCCC, false);
+            ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.skill_editor.body"), left + 10, top + 84, color("muted"), false);
         } else {
-            gfx.drawString(this.font, P2SI18n.tr("screen.p2s.skill_editor.rename_only"), left + 10, top + 84, 0xAAAAAA, false);
+            ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.skill_editor.rename_only"), left + 10, top + 84, color("muted"), false);
         }
         if (statusText != null && !statusText.getString().isBlank()) {
-            gfx.drawString(this.font, statusText, left + 10, top + this.height / 2, statusColor, false);
+            ThemePaint.text(gfx, this.font, statusText, left + 10, top + this.height / 2, color(statusColor), false);
         }
     }
 

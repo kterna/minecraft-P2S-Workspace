@@ -88,6 +88,20 @@ Google Gemini、Vertex、Bedrock 等连接的地址、鉴权和各协议支持�
 
 当前已经没有单独的服务端配置文件；用户可编辑的配置项都归到客户端配置中。
 
+### 界面主题
+
+在设置页点击右上角的「外观」切换到下一套主题，按住 Shift 点击可切回上一套。也可以输入 `/p2s theme glacier` 直接选冰川，输入 `/p2s theme ` 后按 Tab 查看可用 ID。切换立即生效，所选 ID 保存在 `config/p2s_client.json` 的 `theme` 字段。
+
+内置余烬、冰川、靛夜、陶笺、苔庭、暮藤、砂纸和石墨。可在 `config/p2s_themes/` 添加 JSON 文件，再运行 `/p2s theme reload`。相同 ID 会覆盖已有主题；多个文件按文件名排序读取，后面的定义优先。每个颜色支持 `#RRGGBB` 或 `#RRGGBBAA`，缺少的颜色使用默认主题的对应值。以下文件增加一套只调整强调色的主题：
+
+```json
+{"version": 2, "default": "ember", "themes": [
+  {"id": "my-ember", "name": "自定义余烬", "colors": {"accent": "#E8B684"}}
+]}
+```
+
+重载失败时，聊天和日志会指出文件名与字段，原先有效的颜色仍可使用。完整字段和内置配色见[八套主题的 JSON](docs/mockups/gpt/themes.json)。
+
 ## 数据与备份
 
 如果你想迁移环境、做备份或排查问题，优先关注这些路径。除 `config/p2s_client.json` 外，其余都是项目/会话数据目录，不是服务端配置项：

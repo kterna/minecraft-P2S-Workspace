@@ -1,5 +1,11 @@
 package com.p2s.screen;
 
+import com.p2s.screen.widget.P2SFlatButton;
+import com.p2s.screen.widget.P2SThemedEditBox;
+import com.p2s.screen.widget.ThemePaint;
+
+import static com.p2s.screen.widget.ThemePaint.color;
+
 import com.p2s.ClientAgentManager;
 import com.p2s.ClientSelectionManager;
 import com.p2s.ClientToolBridge;
@@ -42,7 +48,7 @@ public class P2SProjectListScreen extends Screen {
     private int visibleRows = MAX_VISIBLE_ROWS;
     private boolean loading = false;
     private Component statusText = Component.empty();
-    private int statusColor = 0xAAAAAA;
+    private String statusColor = "muted";
 
     public P2SProjectListScreen(Screen parent) {
         super(P2SI18n.tr("screen.p2s.projects.title"));
@@ -68,13 +74,13 @@ public class P2SProjectListScreen extends Screen {
         visibleRows = Math.max(4, Math.min(MAX_VISIBLE_ROWS, (this.height - listTop - 56) / (ROW_HEIGHT + 2)));
         int listWidth = panelWidth - BUTTON_WIDTH - 12;
 
-        nameInput = new EditBox(this.font, left, inputY, inputWidth, INPUT_HEIGHT, P2SI18n.tr("screen.p2s.projects.name"));
+        nameInput = new P2SThemedEditBox(this.font, left, inputY, inputWidth, INPUT_HEIGHT, P2SI18n.tr("screen.p2s.projects.name"));
         nameInput.setMaxLength(120);
         nameInput.setValue(nameDraft);
         nameInput.setHint(P2SI18n.tr("screen.p2s.projects.name_hint"));
         addRenderableWidget(nameInput);
 
-        descriptionInput = new EditBox(this.font, left + inputWidth + INPUT_GAP, inputY, panelWidth - inputWidth - INPUT_GAP, INPUT_HEIGHT, P2SI18n.tr("screen.p2s.projects.remark"));
+        descriptionInput = new P2SThemedEditBox(this.font, left + inputWidth + INPUT_GAP, inputY, panelWidth - inputWidth - INPUT_GAP, INPUT_HEIGHT, P2SI18n.tr("screen.p2s.projects.remark"));
         descriptionInput.setMaxLength(240);
         descriptionInput.setValue(descriptionDraft);
         descriptionInput.setHint(P2SI18n.tr("screen.p2s.projects.remark_hint"));
@@ -84,13 +90,13 @@ public class P2SProjectListScreen extends Screen {
             int rowY = listTop + i * (ROW_HEIGHT + 2);
             final int row = i;
 
-            Button rowBtn = Button.builder(Component.empty(), btn -> selectProject(row))
+            Button rowBtn = P2SFlatButton.themed(Component.empty(), btn -> selectProject(row))
                     .bounds(left, rowY, listWidth, ROW_HEIGHT)
                     .build();
             rowButtons.add(rowBtn);
             addRenderableWidget(rowBtn);
 
-            Button openBtn = Button.builder(P2SI18n.tr("screen.p2s.common.open"), btn -> openProject(row))
+            Button openBtn = P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.open"), btn -> openProject(row))
                     .bounds(left + listWidth + 4, rowY, BUTTON_WIDTH, ROW_HEIGHT)
                     .build();
             openButtons.add(openBtn);
@@ -98,14 +104,14 @@ public class P2SProjectListScreen extends Screen {
         }
 
         int bottomY = listTop + visibleRows * (ROW_HEIGHT + 2) + 4;
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.up"), btn -> {
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.up"), btn -> {
             if (scroll > 0) {
                 scroll--;
                 refreshRows();
             }
         }).bounds(left, bottomY, 50, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.down"), btn -> {
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.down"), btn -> {
             int maxScroll = maxScroll();
             if (scroll < maxScroll) {
                 scroll++;
@@ -113,16 +119,16 @@ public class P2SProjectListScreen extends Screen {
             }
         }).bounds(left + 56, bottomY, 60, 20).build());
 
-        createButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.projects.create"), btn -> createProject())
+        createButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.projects.create"), btn -> createProject())
                 .bounds(left + 124, bottomY, 100, 20).build());
 
-        renameButton = addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.rename"), btn -> renameProject())
+        renameButton = addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.rename"), btn -> renameProject())
                 .bounds(left + 230, bottomY, 80, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.refresh"), btn -> loadProjects())
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.refresh"), btn -> loadProjects())
                 .bounds(left + 316, bottomY, 60, 20).build());
 
-        addRenderableWidget(Button.builder(P2SI18n.tr("screen.p2s.common.back"), btn -> onClose())
+        addRenderableWidget(P2SFlatButton.themed(P2SI18n.tr("screen.p2s.common.back"), btn -> onClose())
                 .bounds(left + panelWidth - 60, bottomY, 60, 20).build());
 
         refreshRows();
@@ -145,7 +151,7 @@ public class P2SProjectListScreen extends Screen {
     private void loadProjects() {
         loading = true;
         statusText = P2SI18n.tr("screen.p2s.projects.status.loading");
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
         refreshRows();
         ClientToolBridge.call("list_projects", new JsonObject())
                 .thenAccept(result -> {
@@ -198,7 +204,7 @@ public class P2SProjectListScreen extends Screen {
                             statusText = result.has("warning_key") || result.has("warning")
                                     ? P2SI18n.resolvePayload(result, "warning_key", "warning_args", "warning")
                                     : Component.empty();
-                            statusColor = result.has("warning_key") || result.has("warning") ? 0xFFAA55 : 0xAAAAAA;
+                            statusColor = result.has("warning_key") || result.has("warning") ? "warning" : "muted";
                             refreshRows();
                         });
                     }
@@ -209,7 +215,7 @@ public class P2SProjectListScreen extends Screen {
                         mc.execute(() -> {
                             loading = false;
                             statusText = P2SI18n.tr("screen.p2s.projects.status.load_failed", shortError(ex.getMessage()));
-                            statusColor = 0xFF5555;
+                            statusColor = "danger";
                             refreshRows();
                         });
                     }
@@ -246,7 +252,7 @@ public class P2SProjectListScreen extends Screen {
 
         loading = true;
         statusText = P2SI18n.tr("screen.p2s.projects.status.renaming", entry.name());
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
         refreshRows();
 
         ClientToolBridge.call("rename_project", args)
@@ -257,7 +263,7 @@ public class P2SProjectListScreen extends Screen {
                             loading = false;
                             if (!isToolOk(result)) {
                                 statusText = resolveToolError(result, "screen.p2s.projects.status.rename_failed");
-                                statusColor = 0xFF5555;
+                                statusColor = "danger";
                                 refreshRows();
                                 return;
                             }
@@ -291,7 +297,7 @@ public class P2SProjectListScreen extends Screen {
                             }
                             projects = updated;
                             statusText = P2SI18n.tr("screen.p2s.projects.status.renamed", updatedName);
-                            statusColor = 0x55FF55;
+                            statusColor = "success";
                             refreshRows();
                         });
                     }
@@ -302,7 +308,7 @@ public class P2SProjectListScreen extends Screen {
                         mc.execute(() -> {
                             loading = false;
                             statusText = P2SI18n.tr("screen.p2s.projects.status.rename_failed", shortError(ex.getMessage()));
-                            statusColor = 0xFF5555;
+                            statusColor = "danger";
                             refreshRows();
                         });
                     }
@@ -326,7 +332,7 @@ public class P2SProjectListScreen extends Screen {
         SelectionSnapshot selection = currentSelection();
         if (!selection.complete()) {
             statusText = P2SI18n.tr("screen.p2s.projects.status.selection_required");
-            statusColor = 0xFFAA55;
+            statusColor = "warning";
             return;
         }
 
@@ -342,7 +348,7 @@ public class P2SProjectListScreen extends Screen {
 
         loading = true;
         statusText = P2SI18n.tr("screen.p2s.projects.status.creating");
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
         refreshRows();
 
         ClientToolBridge.call("create_project", args)
@@ -353,13 +359,13 @@ public class P2SProjectListScreen extends Screen {
                             loading = false;
                             if (!isToolOk(result)) {
                                 statusText = resolveToolError(result, "screen.p2s.projects.status.create_failed");
-                                statusColor = 0xFF5555;
+                                statusColor = "danger";
                                 refreshRows();
                                 return;
                             }
                             ClientAgentManager.onProjectChanged();
                             statusText = P2SI18n.tr("screen.p2s.projects.status.created", getString(result, "name"));
-                            statusColor = 0x55FF55;
+                            statusColor = "success";
                             onClose();
                         });
                     }
@@ -370,7 +376,7 @@ public class P2SProjectListScreen extends Screen {
                         mc.execute(() -> {
                             loading = false;
                             statusText = P2SI18n.tr("screen.p2s.projects.status.create_failed", shortError(ex.getMessage()));
-                            statusColor = 0xFF5555;
+                            statusColor = "danger";
                             refreshRows();
                         });
                     }
@@ -388,7 +394,7 @@ public class P2SProjectListScreen extends Screen {
         args.addProperty("id", entry.id());
         loading = true;
         statusText = P2SI18n.tr("screen.p2s.projects.status.opening", entry.name());
-        statusColor = 0xAAAAAA;
+        statusColor = "muted";
         refreshRows();
         ClientToolBridge.call("open_project", args)
                 .thenAccept(result -> {
@@ -398,13 +404,13 @@ public class P2SProjectListScreen extends Screen {
                             loading = false;
                             if (!isToolOk(result)) {
                                 statusText = resolveToolError(result, "screen.p2s.projects.status.open_failed");
-                                statusColor = 0xFF5555;
+                                statusColor = "danger";
                                 refreshRows();
                                 return;
                             }
                             ClientAgentManager.onProjectChanged();
                             statusText = P2SI18n.tr("screen.p2s.projects.status.opened", entry.name());
-                            statusColor = 0x55FF55;
+                            statusColor = "success";
                             onClose();
                         });
                     }
@@ -415,7 +421,7 @@ public class P2SProjectListScreen extends Screen {
                         mc.execute(() -> {
                             loading = false;
                             statusText = P2SI18n.tr("screen.p2s.projects.status.open_failed", shortError(ex.getMessage()));
-                            statusColor = 0xFF5555;
+                            statusColor = "danger";
                             refreshRows();
                         });
                     }
@@ -440,6 +446,7 @@ public class P2SProjectListScreen extends Screen {
                 if (title.length() > 28) {
                     title = title.substring(0, 25) + "...";
                 }
+                P2SFlatButton.setSelected(rowBtn, entry.id().equals(selectedProjectId));
                 if (entry.id().equals(selectedProjectId)) {
                     title = "▶ " + title;
                 }
@@ -569,8 +576,12 @@ public class P2SProjectListScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+        gfx.fill(0, 0, this.width, this.height, color("backdrop"));
+    }
+
+    @Override
     public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        super.renderBackground(gfx, mouseX, mouseY, delta);
         super.render(gfx, mouseX, mouseY, delta);
 
         int panelWidth = getPanelWidth();
@@ -579,42 +590,42 @@ public class P2SProjectListScreen extends Screen {
         int labelY = 72;
         SelectionSnapshot selection = currentSelection();
 
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.projects.header", projects.size()), left, 24, 0xFFFFFF, true);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.projects.header", projects.size()), left, 24, color("text"), true);
         if (selection.complete()) {
-            gfx.drawString(this.font,
+            ThemePaint.text(gfx, this.font,
                     P2SI18n.tr("screen.p2s.projects.selection", formatPos(selection.pos1()), formatPos(selection.pos2())),
                     left,
                     44,
-                    0xCFE1FF,
+                    color("info"),
                     false);
-            gfx.drawString(this.font,
+            ThemePaint.text(gfx, this.font,
                     P2SI18n.tr("screen.p2s.projects.bounds", formatPos(selection.min()), selection.sizeX(), selection.sizeY(), selection.sizeZ()),
                     left,
                     56,
-                    0xAAAAAA,
+                    color("muted"),
                     false);
         } else {
-            gfx.drawString(this.font,
+            ThemePaint.text(gfx, this.font,
                     P2SI18n.tr("screen.p2s.projects.selection_incomplete"),
                     left,
                     44,
-                    0xFFCC66,
+                    color("warning"),
                     false);
-            gfx.drawString(this.font,
+            ThemePaint.text(gfx, this.font,
                     P2SI18n.tr("screen.p2s.projects.selection_points", formatPos(selection.pos1()), formatPos(selection.pos2())),
                     left,
                     56,
-                    0x888888,
+                    color("faint"),
                     false);
         }
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.projects.name"), left, labelY, 0xCCCCCC, false);
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.projects.remark"), left + inputWidth + INPUT_GAP, labelY, 0xCCCCCC, false);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.projects.name"), left, labelY, color("muted"), false);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.projects.remark"), left + inputWidth + INPUT_GAP, labelY, color("muted"), false);
         if (createButton != null) {
             createButton.active = !loading && selection.complete();
         }
 
         if (statusText != null && !statusText.getString().isBlank()) {
-            gfx.drawString(this.font, statusText, left, this.height - 20, statusColor, false);
+            ThemePaint.text(gfx, this.font, statusText, left, this.height - 20, color(statusColor), false);
         }
     }
 

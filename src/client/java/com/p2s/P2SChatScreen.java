@@ -9,6 +9,9 @@ import com.p2s.screen.chat.P2SChatContextWidgets;
 import com.p2s.screen.chat.P2SChatSessionWidgets;
 import com.p2s.screen.chat.P2SWorkspaceExplorerComponent;
 import com.p2s.screen.widget.P2SFlatButton;
+import com.p2s.screen.widget.ThemePaint;
+
+import static com.p2s.screen.widget.ThemePaint.color;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -25,8 +28,10 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class P2SChatScreen extends Screen {
@@ -137,6 +142,8 @@ public class P2SChatScreen extends Screen {
     private Button workspaceDocCreateButton;
     private final List<Button> workspaceDocButtons = new ArrayList<>();
     private final List<P2SWorkspaceExplorerComponent.ExplorerRow> explorerRows = new ArrayList<>();
+    private final Map<String, ExplorerHighlight> explorerHighlights = new HashMap<>();
+    private final ThemePaint.Transition scrollHover = new ThemePaint.Transition();
     private final List<ExplorerHitArea> explorerHitAreas = new ArrayList<>();
     private int explorerListX = 0;
     private int explorerListY = 0;
@@ -193,7 +200,7 @@ public class P2SChatScreen extends Screen {
     private final List<Integer> contextDiffChangeRows = new ArrayList<>();
     private int contextDiffNavIndex = -1;
     private Component contextStatus = Component.empty();
-    private int contextStatusColor = 0xAAAAAA;
+    private String contextStatusColor = "muted";
     private String inputDraft = "";
     private String discardReasonDraft = "";
     private String checkpointNameDraft = "";
@@ -822,6 +829,11 @@ public class P2SChatScreen extends Screen {
         explorerRowGap = contextWidgets.explorerRowGap();
         explorerRows.clear();
         explorerRows.addAll(contextWidgets.explorerRows());
+        Set<String> pathsInTree = new LinkedHashSet<>();
+        for (P2SWorkspaceExplorerComponent.ExplorerRow row : explorerRows) {
+            pathsInTree.add(row.path());
+        }
+        explorerHighlights.keySet().retainAll(pathsInTree);
         clampExplorerScroll();
         contextLoadButton = contextWidgets.contextLoadButton();
         contextSaveButton = contextWidgets.contextSaveButton();
@@ -875,7 +887,7 @@ public class P2SChatScreen extends Screen {
         if (!contextEditorCollapsed && input != null) {
             input.setFocused(false);
         }
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.create_workspace_file"), 0xAAD5FF);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.create_workspace_file"), "info");
     }
 
     private void enterWorkspaceCreateFolderMode() {
@@ -891,7 +903,7 @@ public class P2SChatScreen extends Screen {
         if (!contextEditorCollapsed && input != null) {
             input.setFocused(false);
         }
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.create_workspace_folder"), 0xAAD5FF);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.create_workspace_folder"), "info");
     }
 
     private void exitWorkspaceCreateMode() {
@@ -908,12 +920,12 @@ public class P2SChatScreen extends Screen {
         String rawValue = workspaceCreateInput != null ? workspaceCreateInput.getValue() : workspaceCreateDraft;
         String normalized = normalizeWorkspaceFolderPath(rawValue);
         if (normalized.isBlank()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_name_empty"), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_name_empty"), "danger");
             return;
         }
         if (workspaceCreateFolderMode) {
             if (workspaceFolderExists(normalized) || workspaceFileExists(normalized)) {
-                setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", normalized), 0xFF5555);
+                setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", normalized), "danger");
                 return;
             }
             rememberWorkspaceFolder(normalized);
@@ -921,16 +933,16 @@ public class P2SChatScreen extends Screen {
             collapsedWorkspaceFolders.remove(normalized);
             workspaceExpandedSelectionPath = "";
             exitWorkspaceCreateMode();
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.folder_created", normalized), 0x55FF55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.folder_created", normalized), "success");
             return;
         }
         String rawPath = rawValue == null ? "" : rawValue.trim().replace('\\', '/');
         if (rawPath.endsWith("/")) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", rawPath), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", rawPath), "danger");
             return;
         }
         if (workspaceFileExists(normalized) || workspaceFolderExists(normalized)) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", normalized), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", normalized), "danger");
             return;
         }
         submitCreateWorkspaceDoc(normalized);
@@ -954,7 +966,7 @@ public class P2SChatScreen extends Screen {
         clearContextDiffView();
         setContextStatus(P2SI18n.tr(hasSelection
                 ? "screen.p2s.chat.context.status.creating_from_selection"
-                : "screen.p2s.chat.context.status.creating_empty"), 0xAAAAAA);
+                : "screen.p2s.chat.context.status.creating_empty"), "muted");
         createWidgets();
         ClientToolBridge.call("create_workspace_file", payload)
                 .thenAccept(result -> {
@@ -962,7 +974,7 @@ public class P2SChatScreen extends Screen {
                     if (mc != null) {
                         mc.execute(() -> {
                             if (!isToolOk(result)) {
-                                setContextStatus(resolveToolError(result, "screen.p2s.chat.context.status.workspace_create_failed"), 0xFF5555);
+                                setContextStatus(resolveToolError(result, "screen.p2s.chat.context.status.workspace_create_failed"), "danger");
                                 return;
                             }
                             String createdPath = P2SI18n.getString(result, "path");
@@ -974,7 +986,7 @@ public class P2SChatScreen extends Screen {
                             ClientSessionState.setWorkspaceFileToml(createdPath, workspaceToml);
                             setContextEditorText(workspaceToml);
                             contextLoadedDocId = createdPath == null ? "" : createdPath;
-                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_created", createdPath), 0x55FF55);
+                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_created", createdPath), "success");
                             createWidgets();
                         });
                     }
@@ -982,7 +994,7 @@ public class P2SChatScreen extends Screen {
                 .exceptionally(ex -> {
                     Minecraft mc = this.minecraft;
                     if (mc != null) {
-                        mc.execute(() -> setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", shortError(ex.getMessage())), 0xFF5555));
+                        mc.execute(() -> setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_create_failed", shortError(ex.getMessage())), "danger"));
                     }
                     return null;
                 });
@@ -990,38 +1002,38 @@ public class P2SChatScreen extends Screen {
 
     private void saveWorkspaceDoc() {
         if (contextDiffMode) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_read_only"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_read_only"), "warning");
             return;
         }
         String selectedWorkspacePath = ClientSessionState.getSelectedWorkspacePath();
         if (selectedWorkspacePath == null || selectedWorkspacePath.isBlank()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.no_workspace_selected"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.no_workspace_selected"), "warning");
             return;
         }
         JsonObject args = new JsonObject();
         args.addProperty("path", selectedWorkspacePath);
         args.addProperty("workspace_toml", contextLinesToText());
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.saving_workspace"), 0xAAAAAA);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.saving_workspace"), "muted");
         ClientToolBridge.call("save_workspace_file", args)
                 .thenAccept(result -> {
                     Minecraft mc = this.minecraft;
                     if (mc != null) {
                         mc.execute(() -> {
                             if (!isToolOk(result)) {
-                                setContextStatus(resolveToolError(result, "screen.p2s.chat.context.status.workspace_save_failed"), 0xFF5555);
+                                setContextStatus(resolveToolError(result, "screen.p2s.chat.context.status.workspace_save_failed"), "danger");
                                 return;
                             }
                             String workspaceToml = contextLinesToText();
                             ClientSessionState.setWorkspaceFileToml(selectedWorkspacePath, workspaceToml);
                             contextLoadedDocId = selectedWorkspacePath;
-                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_saved", selectedWorkspacePath), 0x55FF55);
+                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_saved", selectedWorkspacePath), "success");
                         });
                     }
                 })
                 .exceptionally(ex -> {
                     Minecraft mc = this.minecraft;
                     if (mc != null) {
-                        mc.execute(() -> setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_save_failed", shortError(ex.getMessage())), 0xFF5555));
+                        mc.execute(() -> setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_save_failed", shortError(ex.getMessage())), "danger"));
                     }
                     return null;
                 });
@@ -1057,7 +1069,7 @@ public class P2SChatScreen extends Screen {
         activeContextTab = ContextTab.SCRIPT;
         contextLoadedDocId = "";
         clearContextDiffView();
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.switched_file"), 0x55FF55);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.switched_file"), "success");
         createWidgets();
     }
 
@@ -1537,11 +1549,11 @@ public class P2SChatScreen extends Screen {
 
     private void fetchWorkspaceScript() {
         if (scriptLoading) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.already_fetching"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.already_fetching"), "warning");
             return;
         }
         scriptLoading = true;
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.fetching_script"), 0xAAAAAA);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.fetching_script"), "muted");
 
         String selectedWorkspacePath = ClientSessionState.getSelectedWorkspacePath();
         ClientToolBridge.call("read_workspace_file", workspaceReadArgs(true))
@@ -1553,9 +1565,9 @@ public class P2SChatScreen extends Screen {
                             String scriptText = extractWorkspaceTomlText(result);
                             if (scriptText.isBlank()) {
                                 scriptText = defaultWorkspaceToml(selectedWorkspacePath);
-                                setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.no_script_data"), 0xFFAA55);
+                                setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.no_script_data"), "warning");
                             } else {
-                                setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.script_loaded"), 0x55FF55);
+                                setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.script_loaded"), "success");
                             }
                             if (selectedWorkspacePath != null && !selectedWorkspacePath.isBlank()) {
                                 ClientSessionState.setWorkspaceFileToml(selectedWorkspacePath, scriptText);
@@ -1586,7 +1598,7 @@ public class P2SChatScreen extends Screen {
                     if (mc != null) {
                         mc.execute(() -> {
                             scriptLoading = false;
-                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.script_fetch_failed", shortError(ex.getMessage())), 0xFF5555);
+                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.script_fetch_failed", shortError(ex.getMessage())), "danger");
                         });
                     }
                     return null;
@@ -1605,7 +1617,7 @@ public class P2SChatScreen extends Screen {
         String diffSignature = selectedWorkspacePendingSignature();
         contextDiffLoading = true;
         contextDiffLoadedPath = selectedWorkspacePath;
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.loading_diff"), 0xAAAAAA);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.loading_diff"), "muted");
 
         JsonObject committedArgs = workspaceReadArgs(true);
         JsonObject stagedArgs = workspaceReadArgs(false);
@@ -1643,7 +1655,7 @@ public class P2SChatScreen extends Screen {
                                 contextDiffLoadedPath = "";
                                 contextDiffLoadedSignature = "";
                             }
-                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_failed", shortError(ex.getMessage())), 0xFF5555);
+                            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_failed", shortError(ex.getMessage())), "danger");
                         });
                     }
                     return null;
@@ -1813,7 +1825,7 @@ public class P2SChatScreen extends Screen {
 
     private void applyContextDiffView(DiffBuildResult diff) {
         if (diff == null) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_failed_empty"), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_failed_empty"), "danger");
             return;
         }
         contextDiffMode = true;
@@ -1842,16 +1854,16 @@ public class P2SChatScreen extends Screen {
         setContextStatus(P2SI18n.tr(diff.truncated()
                 ? "screen.p2s.chat.context.status.diff_loaded_truncated"
                 : "screen.p2s.chat.context.status.diff_loaded",
-                diff.committedLineCount(), diff.stagedLineCount(), diff.changeRows().size()), 0x55FF55);
+                diff.committedLineCount(), diff.stagedLineCount(), diff.changeRows().size()), "success");
     }
 
     private void navigateContextDiffChange(int direction) {
         if (!contextDiffMode) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_not_active"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_not_active"), "warning");
             return;
         }
         if (contextDiffChangeRows.isEmpty()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_no_changes"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_no_changes"), "warning");
             return;
         }
         int size = contextDiffChangeRows.size();
@@ -1863,7 +1875,7 @@ public class P2SChatScreen extends Screen {
         int row = contextDiffChangeRows.get(contextDiffNavIndex);
         contextScroll = Math.max(0, row - Math.max(1, contextVisibleRows) / 2);
         clampContextScroll();
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_change", contextDiffNavIndex + 1, size), 0xAAD5FF);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_change", contextDiffNavIndex + 1, size), "info");
     }
 
     private void focusNearestDiffChange(int rowIndex) {
@@ -1887,31 +1899,31 @@ public class P2SChatScreen extends Screen {
 
     private void formatContextToml() {
         if (contextDiffMode) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_read_only"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.diff_read_only"), "warning");
             return;
         }
         String raw = contextLinesToText();
         if (raw.isBlank()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.nothing_to_format"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.nothing_to_format"), "warning");
             return;
         }
         try {
             String formatted = WorkspaceTomlCodec.format(raw);
             setContextEditorText(formatted);
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_toml_formatted"), 0x55FF55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_toml_formatted"), "success");
         } catch (Exception e) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.invalid_workspace_toml", shortError(e.getMessage())), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.invalid_workspace_toml", shortError(e.getMessage())), "danger");
         }
     }
 
     private void clearContextEditorText() {
         setContextEditorText(defaultWorkspaceToml(ClientSessionState.getSelectedWorkspacePath()));
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_cleared"), 0x55FF55);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_cleared"), "success");
     }
 
     private void clearContextQueue() {
         queuedContexts.clear();
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.queue_cleared"), 0x55FF55);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.queue_cleared"), "success");
     }
 
     private void setContextEditorText(String text) {
@@ -2325,15 +2337,15 @@ public class P2SChatScreen extends Screen {
 
     private boolean queueContextRange(int start, int end) {
         if (contextDiffMode) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.range_disabled_in_diff"), 0xFFAA55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.range_disabled_in_diff"), "warning");
             return false;
         }
         if (queuedContexts.size() >= CONTEXT_MAX_SNIPPETS) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.too_many_snippets", CONTEXT_MAX_SNIPPETS), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.too_many_snippets", CONTEXT_MAX_SNIPPETS), "danger");
             return false;
         }
         if (contextEditorLines.isEmpty()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.no_context_lines"), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.no_context_lines"), "danger");
             return false;
         }
 
@@ -2348,22 +2360,22 @@ public class P2SChatScreen extends Screen {
 
         String snippetText = buildContextRangeText(start, end);
         if (snippetText.isBlank()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.empty_range"), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.empty_range"), "danger");
             return false;
         }
         if (snippetText.length() > CONTEXT_MAX_SNIPPET_CHARS) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.selection_too_large", snippetText.length()), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.selection_too_large", snippetText.length()), "danger");
             return false;
         }
         if (totalQueuedContextChars() + snippetText.length() > CONTEXT_MAX_TOTAL_CHARS) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.queue_too_large", CONTEXT_MAX_TOTAL_CHARS), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.queue_too_large", CONTEXT_MAX_TOTAL_CHARS), "danger");
             return false;
         }
 
         String fileName = activeContextFileName();
         String label = fileName + ":" + start + "-" + end;
         queuedContexts.add(new ContextSnippet(label, snippetText));
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.added_context", label), 0x55FF55);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.added_context", label), "success");
         return true;
     }
 
@@ -2530,7 +2542,7 @@ public class P2SChatScreen extends Screen {
         }
     }
 
-    private void setContextStatus(Component text, int color) {
+    private void setContextStatus(Component text, String color) {
         contextStatus = text == null ? Component.empty() : text;
         contextStatusColor = color;
     }
@@ -3310,7 +3322,7 @@ public class P2SChatScreen extends Screen {
             int panelRight = this.width;
             int panelTop = 0;
             int panelBottom = this.height;
-            gfx.fill(panelLeft, panelTop, panelRight, panelBottom, 0xAA000000);
+            gfx.fill(panelLeft, panelTop, panelRight, panelBottom, color("panel"));
 
             drawHeader(gfx, panelX, panelWidth);
             if (!infoOverlayVisible) {
@@ -3327,6 +3339,7 @@ public class P2SChatScreen extends Screen {
 
         // Update info button label
         if (infoButton != null) {
+            P2SFlatButton.setSelected(infoButton, infoOverlayVisible);
             int infoCount = countInfoSections(panelWidth - PADDING * 2);
             if (infoCount > 0) {
                 infoButton.setMessage(Component.literal("[i " + infoCount + "]"));
@@ -3352,8 +3365,8 @@ public class P2SChatScreen extends Screen {
         if (contextPanelRight <= 0) {
             return;
         }
-        gfx.fill(0, 0, contextPanelRight, this.height, 0xC0141A26);
-        gfx.fill(contextPanelRight - 1, 0, contextPanelRight, this.height, 0xFF2F3A4D);
+        gfx.fill(0, 0, contextPanelRight, this.height, color("panel"));
+        gfx.fill(contextPanelRight - 1, 0, contextPanelRight, this.height, color("line"));
         explorerHitAreas.clear();
         if (explorerPanelCollapsed) {
             drawCollapsedExplorerRail(gfx);
@@ -3365,7 +3378,7 @@ public class P2SChatScreen extends Screen {
         if (contextEditorCollapsed) {
             if (contextStatus != null && !contextStatus.getString().isBlank()) {
                 String status = trimEndToWidth(contextStatus.getString(), Math.max(40, contextPanelRight - PADDING * 2));
-                gfx.drawString(this.font, status, PADDING, this.height - CONTEXT_COLLAPSED_FOOTER_HEIGHT + 6, contextStatusColor, false);
+                ThemePaint.text(gfx, this.font, status, PADDING, this.height - CONTEXT_COLLAPSED_FOOTER_HEIGHT + 6, color(contextStatusColor), false);
             }
             return;
         }
@@ -3374,11 +3387,11 @@ public class P2SChatScreen extends Screen {
         drawContextEditor(gfx);
 
         int infoY = contextQueueTopY;
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.chat.context.next_message", queuedContexts.size(), CONTEXT_MAX_SNIPPETS), x, infoY, 0xE8F0FF, true);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.chat.context.next_message", queuedContexts.size(), CONTEXT_MAX_SNIPPETS), x, infoY, color("text"), true);
         infoY += this.font.lineHeight + 2;
 
         if (queuedContexts.isEmpty()) {
-            gfx.drawString(this.font, "-", x, infoY, 0x8A99B8, false);
+            ThemePaint.text(gfx, this.font, "-", x, infoY, color("faint"), false);
             infoY += this.font.lineHeight + 2;
         } else {
             int maxRows = 6;
@@ -3387,7 +3400,7 @@ public class P2SChatScreen extends Screen {
                 String line = P2SI18n.tr("screen.p2s.chat.context.snippet", i + 1, snippet.label(), snippet.content().length()).getString();
                 List<FormattedCharSequence> wrapped = this.font.split(Component.literal(line), Math.max(100, panelX - PADDING * 3));
                 for (FormattedCharSequence text : wrapped) {
-                    gfx.drawString(this.font, text, x, infoY, 0xC9D4EB, false);
+                    ThemePaint.text(gfx, this.font, text, x, infoY, color("muted"), false);
                     infoY += this.font.lineHeight + 1;
                 }
                 if (infoY > this.height - 48) {
@@ -3395,16 +3408,22 @@ public class P2SChatScreen extends Screen {
                 }
             }
             if (queuedContexts.size() > maxRows) {
-                gfx.drawString(this.font, P2SI18n.tr("screen.p2s.common.more", queuedContexts.size() - maxRows), x, infoY, 0x8A99B8, false);
+                ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.common.more", queuedContexts.size() - maxRows), x, infoY, color("faint"), false);
                 infoY += this.font.lineHeight + 1;
             }
         }
 
         if (contextStatus != null && !contextStatus.getString().isBlank()) {
-            gfx.drawString(this.font, contextStatus, x, this.height - 14, contextStatusColor, false);
+            ThemePaint.text(gfx, this.font, contextStatus, x, this.height - 14, color(contextStatusColor), false);
         }
 
         drawContextSelectionConfirm(gfx);
+    }
+
+    private static final class ExplorerHighlight {
+        private final ThemePaint.Transition selected = new ThemePaint.Transition();
+        private final ThemePaint.Transition hover = new ThemePaint.Transition();
+        private final ThemePaint.Transition press = new ThemePaint.Transition();
     }
 
     private void drawWorkspaceExplorer(GuiGraphics gfx, int mouseX, int mouseY) {
@@ -3423,13 +3442,14 @@ public class P2SChatScreen extends Screen {
         int rowLeft = left + 2;
         int rowRight = right - 2 - scrollbarReserved;
 
-        gfx.fill(left, top, right, bottom, 0x7A0A1018);
-        gfx.fill(left, top, right, top + 1, 0xAA324153);
-        gfx.fill(left, bottom - 1, right, bottom, 0xAA324153);
-        gfx.fill(left, top, left + 1, bottom, 0xAA324153);
-        gfx.fill(right - 1, top, right, bottom, 0xAA324153);
+        gfx.fill(left, top, right, bottom, color("inset"));
+        gfx.fill(left, top, right, top + 1, color("line"));
+        gfx.fill(left, bottom - 1, right, bottom, color("line"));
+        gfx.fill(left, top, left + 1, bottom, color("line"));
+        gfx.fill(right - 1, top, right, bottom, color("line"));
 
         int rowStep = getExplorerRowStep();
+        boolean mouseDown = GLFW.glfwGetMouseButton(minecraft.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
         gfx.enableScissor(left + 1, top + 1, right - 1, bottom - 1);
         try {
             for (int index = 0; index < explorerRows.size(); index++) {
@@ -3446,20 +3466,28 @@ public class P2SChatScreen extends Screen {
                 boolean hovered = mouseX >= rowLeft && mouseX <= rowRight && mouseY >= rowTop && mouseY <= rowBottom;
                 if (row.placeholder()) {
                     int textY = rowTop + Math.max(0, (explorerRowHeight - this.font.lineHeight) / 2);
-                    gfx.drawString(this.font, trimEndToWidth(row.name(), Math.max(20, rowRight - rowLeft - 8)), rowLeft + 6, textY, 0x8797B1, false);
+                    ThemePaint.text(gfx, this.font, trimEndToWidth(row.name(), Math.max(20, rowRight - rowLeft - 8)), rowLeft + 6, textY, color("faint"), false);
                     continue;
                 }
 
-                if (row.selected()) {
-                    gfx.fill(rowLeft, rowTop, rowRight, rowBottom, 0xAA263B57);
-                    gfx.fill(rowLeft, rowTop, rowLeft + 2, rowBottom, 0xFF7FA3D5);
-                } else if (hovered) {
-                    gfx.fill(rowLeft, rowTop, rowRight, rowBottom, 0x66324053);
+                ExplorerHighlight highlight = explorerHighlights.computeIfAbsent(row.path(), path -> new ExplorerHighlight());
+                float selection = highlight.selected.value(row.selected());
+                if (selection > 0) {
+                    gfx.fill(rowLeft, rowTop, rowRight, rowBottom, ThemePaint.alpha(color("selected"), selection));
+                    gfx.fill(rowLeft, rowTop, rowLeft + 2, rowBottom, ThemePaint.alpha(color("accent"), selection));
+                }
+                float hover = highlight.hover.value(hovered);
+                if (hover > 0) {
+                    gfx.fill(rowLeft, rowTop, rowRight, rowBottom, ThemePaint.alpha(color("hover"), hover));
+                }
+                float press = highlight.press.value(hovered && mouseDown);
+                if (press > 0) {
+                    gfx.fill(rowLeft, rowTop, rowRight, rowBottom, ThemePaint.alpha(color("pressed"), press));
                 }
 
                 for (int depth = 0; depth < row.depth(); depth++) {
                     int guideX = rowLeft + 11 + depth * 12;
-                    gfx.fill(guideX, rowTop + 4, guideX + 1, rowBottom - 4, 0x223B4D66);
+                    gfx.fill(guideX, rowTop + 4, guideX + 1, rowBottom - 4, color("line"));
                 }
 
                 int textY = rowTop + Math.max(0, (explorerRowHeight - this.font.lineHeight) / 2);
@@ -3468,7 +3496,7 @@ public class P2SChatScreen extends Screen {
                 if (row.folder()) {
                     explorerHitAreas.add(new ExplorerHitArea(row.path(), true, false, rowLeft, rowTop, rowRight, rowBottom));
                     int arrowX = baseX;
-                    gfx.drawString(this.font, row.collapsed() ? Component.literal("▸") : Component.literal("▾"), arrowX, textY, hovered ? 0xEAF2FF : 0xB9CCE7, false);
+                    ThemePaint.text(gfx, this.font, row.collapsed() ? Component.literal("▸") : Component.literal("▾"), arrowX, textY, color("muted"), false);
                     explorerHitAreas.add(new ExplorerHitArea(row.path(), true, true, arrowX - 2, rowTop, arrowX + 10, rowBottom));
 
                     String meta = explorerFolderMeta(row);
@@ -3476,31 +3504,31 @@ public class P2SChatScreen extends Screen {
                     int labelX = arrowX + 12;
                     int maxLabelWidth = Math.max(20, rowRight - labelX - (metaWidth > 0 ? metaWidth + 10 : 0));
                     String label = trimEndToWidth(row.name(), maxLabelWidth);
-                    int labelColor = row.selected() ? 0xF2F7FF : hovered ? 0xDFE9F8 : 0xC7D5EA;
-                    gfx.drawString(this.font, label, labelX, textY, labelColor, false);
+                    int labelColor = color(row.selected() ? "accent" : "text");
+                    ThemePaint.text(gfx, this.font, label, labelX, textY, labelColor, false);
                     if (!meta.isBlank()) {
-                        gfx.drawString(this.font, meta, rowRight - metaWidth - 4, textY, 0x7F94AF, false);
+                        ThemePaint.text(gfx, this.font, meta, rowRight - metaWidth - 4, textY, color("faint"), false);
                     }
                     continue;
                 }
 
                 explorerHitAreas.add(new ExplorerHitArea(row.path(), false, false, rowLeft, rowTop, rowRight, rowBottom));
-                gfx.drawString(this.font, Component.literal("•"), baseX + 1, textY, row.pending() ? 0xFFD39C : 0x6E86A4, false);
+                ThemePaint.text(gfx, this.font, Component.literal("•"), baseX + 1, textY, color(row.pending() ? "warning" : "faint"), false);
                 String badge = explorerFileBadge(row);
                 int badgeWidth = badge.isBlank() ? 0 : this.font.width(badge) + 10;
                 int labelX = baseX + 12;
                 int maxLabelWidth = Math.max(20, rowRight - labelX - (badgeWidth > 0 ? badgeWidth + 8 : 0));
                 String label = trimEndToWidth(row.name(), maxLabelWidth);
-                int labelColor = row.selected() ? 0xF2F7FF : hovered ? 0xDCE8F8 : 0xBCCBDD;
-                gfx.drawString(this.font, label, labelX, textY, labelColor, false);
+                int labelColor = color(row.selected() ? "accent" : "text");
+                ThemePaint.text(gfx, this.font, label, labelX, textY, labelColor, false);
                 if (!badge.isBlank()) {
                     int badgeLeft = rowRight - badgeWidth - 4;
                     int badgeTop = rowTop + 3;
                     int badgeBottom = rowBottom - 3;
-                    gfx.fill(badgeLeft, badgeTop, badgeLeft + badgeWidth, badgeBottom, 0xAA4B3520);
-                    gfx.fill(badgeLeft, badgeTop, badgeLeft + badgeWidth, badgeTop + 1, 0xFFCF9A69);
-                    gfx.fill(badgeLeft, badgeBottom - 1, badgeLeft + badgeWidth, badgeBottom, 0xFFCF9A69);
-                    gfx.drawString(this.font, badge, badgeLeft + 5, textY, 0xFFF1D6, false);
+                    gfx.fill(badgeLeft, badgeTop, badgeLeft + badgeWidth, badgeBottom, color("raised"));
+                    gfx.fill(badgeLeft, badgeTop, badgeLeft + badgeWidth, badgeTop + 1, color("warning"));
+                    gfx.fill(badgeLeft, badgeBottom - 1, badgeLeft + badgeWidth, badgeBottom, color("warning"));
+                    ThemePaint.text(gfx, this.font, badge, badgeLeft + 5, textY, color("warning"), false);
                 }
             }
         } finally {
@@ -3512,13 +3540,13 @@ public class P2SChatScreen extends Screen {
             int trackLeft = right - 5;
             int trackTop = top + 3;
             int trackBottom = bottom - 3;
-            gfx.fill(trackLeft, trackTop, trackLeft + 3, trackBottom, scrollbarHovered ? 0x66486687 : 0x4435475C);
+            gfx.fill(trackLeft, trackTop, trackLeft + 3, trackBottom, color("backdrop"));
             int trackHeight = Math.max(1, trackBottom - trackTop);
             int thumbHeight = Math.max(18, (int) ((explorerListHeight / (double) contentHeight) * trackHeight));
             int thumbTravel = Math.max(0, trackHeight - thumbHeight);
             int maxScroll = Math.max(1, getExplorerMaxScroll());
             int thumbTop = trackTop + (int) ((explorerScrollOffset / maxScroll) * thumbTravel);
-            gfx.fill(trackLeft, thumbTop, trackLeft + 3, thumbTop + thumbHeight, scrollbarHovered ? 0xFF9BB3D7 : 0xCC7E96B8);
+            gfx.fill(trackLeft, thumbTop, trackLeft + 3, thumbTop + thumbHeight, ThemePaint.alpha(color("scrollbar"), 0.75f + 0.25f * scrollHover.value(scrollbarHovered)));
         }
     }
 
@@ -3526,15 +3554,15 @@ public class P2SChatScreen extends Screen {
         int left = PADDING + 2;
         int right = Math.max(left + 24, currentExplorerSplitterX - DOCK_SPLITTER_WIDTH - 4);
         int titleY = 6;
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.workspace.section"), left, titleY, 0x93A9C9, false);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.workspace.section"), left, titleY, color("muted"), false);
 
         String breadcrumb = buildExplorerBreadcrumb();
         if (!breadcrumb.isBlank()) {
-            gfx.drawString(this.font, trimMiddleToWidth(breadcrumb, Math.max(40, right - left)), left, titleY + this.font.lineHeight + 2, 0xE8F0FF, false);
+            ThemePaint.text(gfx, this.font, trimMiddleToWidth(breadcrumb, Math.max(40, right - left)), left, titleY + this.font.lineHeight + 2, color("text"), false);
         }
 
         int dividerY = titleY + this.font.lineHeight * 2 + 5;
-        gfx.fill(left, dividerY, right, dividerY + 1, 0x6637465E);
+        gfx.fill(left, dividerY, right, dividerY + 1, color("line"));
     }
 
     private String buildExplorerBreadcrumb() {
@@ -3596,20 +3624,20 @@ public class P2SChatScreen extends Screen {
 
     private void drawCollapsedExplorerRail(GuiGraphics gfx) {
         int right = Math.max(DOCK_COLLAPSED_WIDTH, currentExplorerSplitterX);
-        gfx.fill(0, 0, right, this.height, 0xA60E141E);
-        gfx.fill(right - 1, 0, right, this.height, 0xFF4C5D78);
+        gfx.fill(0, 0, right, this.height, color("inset"));
+        gfx.fill(right - 1, 0, right, this.height, color("line"));
     }
 
     private void drawCollapsedSessionRail(GuiGraphics gfx, int panelX, int panelWidth) {
         int left = panelX;
         int right = panelX + panelWidth;
-        gfx.fill(left, 0, right, this.height, 0xB0121822);
-        gfx.fill(left, 0, left + 1, this.height, 0xFF4C5D78);
+        gfx.fill(left, 0, right, this.height, color("inset"));
+        gfx.fill(left, 0, left + 1, this.height, color("line"));
     }
 
     private void drawDockChrome(GuiGraphics gfx, int panelX) {
-        int splitterColor = 0xFF2F3A4D;
-        int activeColor = 0xFF5A6E91;
+        int splitterColor = color("line");
+        int activeColor = color("focus");
         int explorerColor = (explorerPanelCollapsed || draggingExplorerSplitter) ? activeColor : splitterColor;
         int sessionColor = (sessionPanelCollapsed || draggingSessionSplitter) ? activeColor : splitterColor;
         gfx.fill(currentExplorerSplitterX - 1, 0, currentExplorerSplitterX + 1, this.height, explorerColor);
@@ -3638,12 +3666,12 @@ public class P2SChatScreen extends Screen {
         int top = contextEditorY;
         int right = contextEditorX + contextEditorWidth;
         int bottom = contextEditorY + contextEditorHeight;
-        int bg = contextEditorFocused ? 0xAA0B111A : 0xAA080E16;
-        gfx.fill(left, top, right, bottom, bg);
-        gfx.fill(left, top, right, top + 1, 0xFF2F3A4D);
-        gfx.fill(left, bottom - 1, right, bottom, 0xFF2F3A4D);
-        gfx.fill(left, top, left + 1, bottom, 0xFF2F3A4D);
-        gfx.fill(right - 1, top, right, bottom, 0xFF2F3A4D);
+        int border = color(contextEditorFocused ? "focus" : "input-border");
+        gfx.fill(left, top, right, bottom, color("input-bg"));
+        gfx.fill(left, top, right, top + 1, border);
+        gfx.fill(left, bottom - 1, right, bottom, border);
+        gfx.fill(left, top, left + 1, bottom, border);
+        gfx.fill(right - 1, top, right, bottom, border);
 
         int rowStep = CONTEXT_ROW_HEIGHT + CONTEXT_ROW_GAP;
         int baseY = top + CONTEXT_EDITOR_PADDING;
@@ -3679,13 +3707,13 @@ public class P2SChatScreen extends Screen {
                         drawSelX2 = Math.min(maxTextX, drawSelX1 + 1);
                     }
                     if (drawSelX2 > drawSelX1) {
-                        gfx.fill(drawSelX1, rowY + 2, drawSelX2, rowBottom - 2, 0x665A8BFF);
+                        gfx.fill(drawSelX1, rowY + 2, drawSelX2, rowBottom - 2, color("selected"));
                     }
                 }
             }
-            gfx.drawString(this.font, Integer.toString(lineNo), left + 4, rowY + 5, 0x8A99B8, false);
+            ThemePaint.text(gfx, this.font, Integer.toString(lineNo), left + 4, rowY + 5, color("faint"), false);
             String lineText = clipTextToWidth(fullLine, textWidth);
-            gfx.drawString(this.font, lineText, textX, rowY + 5, 0xD6E0F5, false);
+            ThemePaint.text(gfx, this.font, lineText, textX, rowY + 5, color("text"), false);
         }
 
         if (contextEditorFocused && (System.currentTimeMillis() / 500L) % 2L == 0L) {
@@ -3699,7 +3727,7 @@ public class P2SChatScreen extends Screen {
                 int minCaretX = textX;
                 int maxCaretX = maxTextX;
                 caretX = Math.max(minCaretX, Math.min(caretX, maxCaretX));
-                gfx.fill(caretX, caretY, caretX + 1, caretY + caretHeight, 0xFFE8F0FF);
+                gfx.fill(caretX, caretY, caretX + 1, caretY + caretHeight, color("focus"));
             }
         }
     }
@@ -3712,25 +3740,27 @@ public class P2SChatScreen extends Screen {
         int top = contextSelectionConfirmY;
         int right = left + CONTEXT_SELECTION_CONFIRM_WIDTH;
         int bottom = top + CONTEXT_SELECTION_CONFIRM_HEIGHT;
-        gfx.fill(left, top, right, bottom, 0xE6111720);
-        gfx.fill(left, top, right, top + 1, 0xFF5A6E91);
-        gfx.fill(left, bottom - 1, right, bottom, 0xFF5A6E91);
-        gfx.fill(left, top, left + 1, bottom, 0xFF5A6E91);
-        gfx.fill(right - 1, top, right, bottom, 0xFF5A6E91);
+        gfx.fill(left, top, right, bottom, color("overlay"));
+        gfx.fill(left, top, right, top + 1, color("focus"));
+        gfx.fill(left, bottom - 1, right, bottom, color("focus"));
+        gfx.fill(left, top, left + 1, bottom, color("focus"));
+        gfx.fill(right - 1, top, right, bottom, color("focus"));
 
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.chat.context.confirm_add_selection"), left + 6, top + 6, 0xFFFFFF, false);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.chat.context.confirm_add_selection"), left + 6, top + 6, color("on-overlay"), false);
         String label = activeContextFileName() + ":" + contextSelectionConfirmStartLine + "-" + contextSelectionConfirmEndLine;
         int chars = buildContextRangeText(contextSelectionConfirmStartLine, contextSelectionConfirmEndLine).length();
         String preview = P2SI18n.tr("screen.p2s.chat.context.confirm_selection_preview", label, chars).getString();
-        gfx.drawString(this.font, clipTextToWidth(preview, CONTEXT_SELECTION_CONFIRM_WIDTH - 12), left + 6, top + 18, 0xC9D4EB, false);
+        ThemePaint.text(gfx, this.font, clipTextToWidth(preview, CONTEXT_SELECTION_CONFIRM_WIDTH - 12), left + 6, top + 18, color("muted"), false);
 
         int buttonY = bottom - CONTEXT_SELECTION_CONFIRM_BUTTON_HEIGHT - 6;
         int okX = right - CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH * 2 - 10;
         int cancelX = right - CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH - 6;
-        gfx.fill(okX, buttonY, okX + CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH, buttonY + CONTEXT_SELECTION_CONFIRM_BUTTON_HEIGHT, 0xFF365C3B);
-        gfx.fill(cancelX, buttonY, cancelX + CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH, buttonY + CONTEXT_SELECTION_CONFIRM_BUTTON_HEIGHT, 0xFF4C3940);
-        gfx.drawCenteredString(this.font, P2SI18n.tr("screen.p2s.common.ok").getString(), okX + CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH / 2, buttonY + 5, 0xFFFFFF);
-        gfx.drawCenteredString(this.font, P2SI18n.tr("screen.p2s.common.cancel").getString(), cancelX + CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH / 2, buttonY + 5, 0xFFFFFF);
+        gfx.fill(okX, buttonY, okX + CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH, buttonY + CONTEXT_SELECTION_CONFIRM_BUTTON_HEIGHT, color("accent"));
+        gfx.fill(cancelX, buttonY, cancelX + CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH, buttonY + CONTEXT_SELECTION_CONFIRM_BUTTON_HEIGHT, color("raised"));
+        Component okLabel = P2SI18n.tr("screen.p2s.common.ok");
+        ThemePaint.text(gfx, this.font, okLabel, okX + (CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH - this.font.width(okLabel)) / 2, buttonY + 5, color("on-accent"), true);
+        Component cancelLabel = P2SI18n.tr("screen.p2s.common.cancel");
+        ThemePaint.text(gfx, this.font, cancelLabel, cancelX + (CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH - this.font.width(cancelLabel)) / 2, buttonY + 5, color("text"), true);
     }
 
     private void drawContextDiffEditor(GuiGraphics gfx) {
@@ -3738,12 +3768,12 @@ public class P2SChatScreen extends Screen {
         int top = contextEditorY;
         int right = contextEditorX + contextEditorWidth;
         int bottom = contextEditorY + contextEditorHeight;
-        int bg = contextEditorFocused ? 0xAA0B111A : 0xAA080E16;
-        gfx.fill(left, top, right, bottom, bg);
-        gfx.fill(left, top, right, top + 1, 0xFF2F3A4D);
-        gfx.fill(left, bottom - 1, right, bottom, 0xFF2F3A4D);
-        gfx.fill(left, top, left + 1, bottom, 0xFF2F3A4D);
-        gfx.fill(right - 1, top, right, bottom, 0xFF2F3A4D);
+        int border = color(contextEditorFocused ? "focus" : "input-border");
+        gfx.fill(left, top, right, bottom, color("input-bg"));
+        gfx.fill(left, top, right, top + 1, border);
+        gfx.fill(left, bottom - 1, right, bottom, border);
+        gfx.fill(left, top, left + 1, bottom, border);
+        gfx.fill(right - 1, top, right, bottom, border);
 
         int rowStep = CONTEXT_ROW_HEIGHT + CONTEXT_ROW_GAP;
         int baseY = top + CONTEXT_EDITOR_PADDING;
@@ -3763,23 +3793,23 @@ public class P2SChatScreen extends Screen {
             int rowBottom = rowY + CONTEXT_ROW_HEIGHT;
             DiffViewLine diffLine = contextDiffLines.get(lineIndex);
 
-            int textColor = 0xD6E0F5;
-            int markerColor = 0x7A8CAA;
+            int textColor = color("text");
+            int markerColor = color("faint");
             switch (diffLine.type()) {
                 case ADDED -> {
-                    gfx.fill(left + 1, rowY, right - 1, rowBottom, 0x22306A2A);
-                    textColor = 0xBFFFC9;
-                    markerColor = 0x66DD88;
+                    gfx.fill(left + 1, rowY, right - 1, rowBottom, color("diff-add-bg"));
+                    textColor = color("diff-add-text");
+                    markerColor = color("diff-add-text");
                 }
                 case REMOVED -> {
-                    gfx.fill(left + 1, rowY, right - 1, rowBottom, 0x224D2323);
-                    textColor = 0xFFBFC0;
-                    markerColor = 0xFF7C7C;
+                    gfx.fill(left + 1, rowY, right - 1, rowBottom, color("diff-remove-bg"));
+                    textColor = color("diff-remove-text");
+                    markerColor = color("diff-remove-text");
                 }
                 case SKIP -> {
-                    gfx.fill(left + 1, rowY, right - 1, rowBottom, 0x22262C36);
-                    textColor = 0x8FA2C4;
-                    markerColor = 0x8FA2C4;
+                    gfx.fill(left + 1, rowY, right - 1, rowBottom, color("inset"));
+                    textColor = color("faint");
+                    markerColor = color("faint");
                 }
                 case SAME -> {
                 }
@@ -3788,15 +3818,15 @@ public class P2SChatScreen extends Screen {
             if (contextDiffNavIndex >= 0
                     && contextDiffNavIndex < contextDiffChangeRows.size()
                     && contextDiffChangeRows.get(contextDiffNavIndex) == lineIndex) {
-                gfx.fill(left + 1, rowY, right - 1, rowY + 1, 0xFFD3A65E);
-                gfx.fill(left + 1, rowBottom - 1, right - 1, rowBottom, 0xFFD3A65E);
+                gfx.fill(left + 1, rowY, right - 1, rowY + 1, color("focus"));
+                gfx.fill(left + 1, rowBottom - 1, right - 1, rowBottom, color("focus"));
             }
 
             if (diffLine.oldLineNo() > 0) {
-                gfx.drawString(this.font, Integer.toString(diffLine.oldLineNo()), oldNoX, rowY + 5, 0x8A99B8, false);
+                ThemePaint.text(gfx, this.font, Integer.toString(diffLine.oldLineNo()), oldNoX, rowY + 5, color("faint"), false);
             }
             if (diffLine.newLineNo() > 0) {
-                gfx.drawString(this.font, Integer.toString(diffLine.newLineNo()), newNoX, rowY + 5, 0x8A99B8, false);
+                ThemePaint.text(gfx, this.font, Integer.toString(diffLine.newLineNo()), newNoX, rowY + 5, color("faint"), false);
             }
             String marker = switch (diffLine.type()) {
                 case ADDED -> "+";
@@ -3804,8 +3834,8 @@ public class P2SChatScreen extends Screen {
                 case SKIP -> "~";
                 default -> " ";
             };
-            gfx.drawString(this.font, marker, markerX, rowY + 5, markerColor, false);
-            gfx.drawString(this.font, clipTextToWidth(diffLine.text(), textWidth), textX, rowY + 5, textColor, false);
+            ThemePaint.text(gfx, this.font, marker, markerX, rowY + 5, markerColor, false);
+            ThemePaint.text(gfx, this.font, clipTextToWidth(diffLine.text(), textWidth), textX, rowY + 5, textColor, false);
         }
     }
 
@@ -3861,8 +3891,8 @@ public class P2SChatScreen extends Screen {
         int dividerY = metaTop - 2;
         int left = panelX + PADDING;
         int right = panelX + panelWidth - PADDING;
-        gfx.fill(left, dividerY, right, dividerY + 1, 0x6637465E);
-        gfx.drawString(this.font, trimMiddleToWidth(meta, Math.max(40, right - left)), left, metaTop + 1, 0xAFC2DE, false);
+        gfx.fill(left, dividerY, right, dividerY + 1, color("line"));
+        ThemePaint.text(gfx, this.font, trimMiddleToWidth(meta, Math.max(40, right - left)), left, metaTop + 1, color("muted"), false);
     }
 
     private int countInfoSections(int contentWidth) {
@@ -3887,12 +3917,12 @@ public class P2SChatScreen extends Screen {
         if (overlayHeight <= 0) return;
 
         // Semi-transparent background
-        gfx.fill(overlayLeft, overlayTop, overlayRight, overlayBottom, 0xDD000000);
+        gfx.fill(overlayLeft, overlayTop, overlayRight, overlayBottom, color("overlay"));
 
         // Close button [X] in top-right
         int closeBtnX = overlayRight - PADDING - this.font.width("[X]");
         int closeBtnY = overlayTop + 4;
-        gfx.drawString(this.font, "[X]", closeBtnX, closeBtnY, 0xFF6666, true);
+        ThemePaint.text(gfx, this.font, "[X]", closeBtnX, closeBtnY, color("danger"), true);
 
         // Build all overlay content lines
         List<OverlayLine> allLines = new ArrayList<>();
@@ -3900,58 +3930,56 @@ public class P2SChatScreen extends Screen {
 
         List<FormattedCharSequence> choicePromptLines = getChoicePromptLines(cw);
         if (!choicePromptLines.isEmpty()) {
-            allLines.add(new OverlayLine(null, 0xFFCC66, true, P2SI18n.tr("screen.p2s.chat.overlay.action_required").getString()));
+            allLines.add(new OverlayLine(null, color("warning"), true, P2SI18n.tr("screen.p2s.chat.overlay.action_required").getString()));
             for (FormattedCharSequence line : choicePromptLines) {
-                allLines.add(new OverlayLine(line, 0xFFE6AA, false, null));
+                allLines.add(new OverlayLine(line, color("on-overlay"), false, null));
             }
             allLines.add(new OverlayLine(null, 0, false, null)); // spacer
         }
 
         List<FormattedCharSequence> previewLines = getPreviewLines(cw);
         if (!previewLines.isEmpty()) {
-            int color = 0xFFDD88;
+            int color = color("warning");
             String risk = ClientSessionState.getPreviewRisk();
             if (risk == null || risk.isBlank()) risk = ClientSessionState.getPendingRisk();
             if (risk == null || risk.isBlank()) risk = "low";
-            if ("high".equalsIgnoreCase(risk)) color = 0xFF6666;
-            else if ("medium".equalsIgnoreCase(risk)) color = 0xFFAA55;
+            if ("high".equalsIgnoreCase(risk)) color = color("danger");
+            else if ("medium".equalsIgnoreCase(risk)) color = color("warning");
             int changed = ClientSessionState.getPreviewChangedBlocks();
             if (changed <= 0) changed = ClientSessionState.getPendingChangedBlocks();
             allLines.add(new OverlayLine(null, color, true, P2SI18n.tr("screen.p2s.chat.overlay.pending_patch", changed, P2SI18n.riskComponent(risk)).getString()));
             for (FormattedCharSequence line : previewLines) {
-                allLines.add(new OverlayLine(line, 0xE0E0E0, false, null));
+                allLines.add(new OverlayLine(line, color("on-overlay"), false, null));
             }
             allLines.add(new OverlayLine(null, 0, false, null));
         }
 
         List<FormattedCharSequence> summaryLines = getSummaryLines(cw);
         if (!summaryLines.isEmpty()) {
-            allLines.add(new OverlayLine(null, 0xAAAAAA, true, P2SI18n.tr("screen.p2s.chat.overlay.current_structure").getString()));
+            allLines.add(new OverlayLine(null, color("on-overlay"), true, P2SI18n.tr("screen.p2s.chat.overlay.current_structure").getString()));
             for (FormattedCharSequence line : summaryLines) {
-                allLines.add(new OverlayLine(line, 0xCCCCCC, false, null));
+                allLines.add(new OverlayLine(line, color("on-overlay"), false, null));
             }
             allLines.add(new OverlayLine(null, 0, false, null));
         }
 
-        List<FormattedCharSequence> planLines = getPlanLines(cw);
+        List<OverlayLine> planLines = getPlanLines(cw);
         if (!planLines.isEmpty()) {
-            allLines.add(new OverlayLine(null, 0x99CCFF, true, P2SI18n.tr("screen.p2s.chat.overlay.plan").getString()));
-            for (FormattedCharSequence line : planLines) {
-                allLines.add(new OverlayLine(line, 0xCCDDEE, false, null));
-            }
+            allLines.add(new OverlayLine(null, color("tool-running"), true, P2SI18n.tr("screen.p2s.chat.overlay.plan").getString()));
+            allLines.addAll(planLines);
             allLines.add(new OverlayLine(null, 0, false, null));
         }
 
         List<FormattedCharSequence> checkpointLines = getCheckpointLines(cw);
         if (!checkpointLines.isEmpty()) {
-            allLines.add(new OverlayLine(null, 0x99FFCC, true, P2SI18n.tr("screen.p2s.chat.overlay.checkpoints", modeLabel()).getString()));
+            allLines.add(new OverlayLine(null, color("tool-done"), true, P2SI18n.tr("screen.p2s.chat.overlay.checkpoints", modeLabel()).getString()));
             for (FormattedCharSequence line : checkpointLines) {
-                allLines.add(new OverlayLine(line, 0xCCFFEE, false, null));
+                allLines.add(new OverlayLine(line, color("on-overlay"), false, null));
             }
         }
 
         if (allLines.isEmpty()) {
-            gfx.drawString(this.font, P2SI18n.tr("screen.p2s.chat.overlay.no_info"), overlayLeft + PADDING, overlayTop + PADDING + this.font.lineHeight, 0x888888, true);
+            ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.chat.overlay.no_info"), overlayLeft + PADDING, overlayTop + PADDING + this.font.lineHeight, color("faint"), true);
             return;
         }
 
@@ -3967,9 +3995,9 @@ public class P2SChatScreen extends Screen {
         int drawY = overlayTop + PADDING - (int) infoOverlayScroll;
         for (OverlayLine ol : allLines) {
             if (ol.title != null) {
-                gfx.drawString(this.font, ol.title, overlayLeft + PADDING, drawY, ol.color, true);
+                ThemePaint.text(gfx, this.font, ol.title, overlayLeft + PADDING, drawY, ol.color, true);
             } else if (ol.formatted != null) {
-                gfx.drawString(this.font, ol.formatted, overlayLeft + PADDING, drawY, ol.color, true);
+                ThemePaint.text(gfx, this.font, ol.formatted, overlayLeft + PADDING, drawY, ol.color, true);
             }
             drawY += lineH;
         }
@@ -3981,7 +4009,7 @@ public class P2SChatScreen extends Screen {
             int barHeight = Math.max(10, (overlayHeight * overlayHeight) / totalContentHeight);
             int barTrack = overlayHeight - barHeight;
             int barY = overlayTop + (maxScroll > 0 ? (int) (infoOverlayScroll / maxScroll * barTrack) : 0);
-            gfx.fill(overlayRight - 3, barY, overlayRight - 1, barY + barHeight, 0x88FFFFFF);
+            gfx.fill(overlayRight - 3, barY, overlayRight - 1, barY + barHeight, color("scrollbar"));
         }
     }
 
@@ -4015,7 +4043,14 @@ public class P2SChatScreen extends Screen {
         if (status == null || status.isBlank()) {
             return;
         }
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.chat.status", P2SI18n.statusComponent(status)), panelX + PADDING, getStatusY(), 0xAAAAAA, true);
+        String statusField = switch (status) {
+            case "planning", "thinking", "in_progress", "applying", "compacting" -> "tool-running";
+            case "awaiting_confirm", "awaiting_choice", "pending", "stopping" -> "tool-waiting";
+            case "done", "completed", "committed" -> "tool-done";
+            case "error", "blocked" -> "tool-failed";
+            default -> "muted";
+        };
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.chat.status", P2SI18n.statusComponent(status)), panelX + PADDING, getStatusY(), color(statusField), true);
     }
 
 
@@ -4044,7 +4079,7 @@ public class P2SChatScreen extends Screen {
                 return;
             }
             if (y <= messageBottom - this.font.lineHeight) {
-                gfx.drawString(this.font, streamLines.get(li), panelX + PADDING, y, 0x55FF55, true);
+                ThemePaint.text(gfx, this.font, streamLines.get(li), panelX + PADDING, y, color("text"), true);
             }
         }
         y -= LINE_SPACING;
@@ -4142,7 +4177,7 @@ public class P2SChatScreen extends Screen {
         if (lineY < messageTop || lineY > messageBottom - this.font.lineHeight) {
             continue;
         }
-        gfx.drawString(this.font, entry.headerLines().get(lineIndex), textX, lineY, color, true);
+        ThemePaint.text(gfx, this.font, entry.headerLines().get(lineIndex), textX, lineY, color, true);
     }
 }
 
@@ -4162,8 +4197,8 @@ public class P2SChatScreen extends Screen {
     int fillTop = Math.max(messageTop, visualTop);
     int fillBottom = Math.min(messageBottom, visualBottom);
     if (fillBottom > fillTop) {
-        int background = entry.error() ? 0xD0452A22 : 0xD0222C38;
-        int border = entry.error() ? 0xCCB77960 : 0xCC7489A6;
+        int background = color(entry.error() ? "diff-remove-bg" : "raised");
+        int border = color(entry.error() ? "tool-failed" : "line");
         gfx.fill(boxLeft, fillTop, boxRight, fillBottom, background);
         gfx.fill(boxLeft, fillTop, boxRight, fillTop + 1, border);
         gfx.fill(boxLeft, fillBottom - 1, boxRight, fillBottom, border);
@@ -4176,13 +4211,13 @@ public class P2SChatScreen extends Screen {
     int lineStep = this.font.lineHeight + LINE_SPACING;
     int textX = boxLeft + TOOL_LOG_PADDING_X;
     int headerY = visualTop + TOOL_LOG_PADDING_Y;
-    int summaryColor = entry.error() ? 0xFFD0A2 : 0xDCE8FF;
+    int summaryColor = color(entry.error() ? "tool-failed" : "tool-done");
     for (int lineIndex = 0; lineIndex < entry.headerLines().size(); lineIndex++) {
         int lineY = headerY + lineIndex * lineStep;
         if (lineY < messageTop || lineY > messageBottom - this.font.lineHeight) {
             continue;
         }
-        gfx.drawString(this.font, entry.headerLines().get(lineIndex), textX, lineY, summaryColor, true);
+        ThemePaint.text(gfx, this.font, entry.headerLines().get(lineIndex), textX, lineY, summaryColor, true);
     }
 
     if (!entry.expanded() || entry.detailLines().isEmpty()) {
@@ -4191,17 +4226,17 @@ public class P2SChatScreen extends Screen {
 
     int dividerY = headerY + entry.headerLines().size() * lineStep + 1;
     if (dividerY >= messageTop && dividerY < messageBottom) {
-        gfx.fill(boxLeft + TOOL_LOG_PADDING_X, dividerY, boxRight - TOOL_LOG_PADDING_X, dividerY + 1, 0x66FFFFFF);
+        gfx.fill(boxLeft + TOOL_LOG_PADDING_X, dividerY, boxRight - TOOL_LOG_PADDING_X, dividerY + 1, color("line"));
     }
 
     int detailY = headerY + entry.headerLines().size() * lineStep + TOOL_LOG_DETAIL_GAP;
-    int detailColor = entry.error() ? 0xFFE7D2 : 0xFFBEC9D9;
+    int detailColor = color(entry.error() ? "diff-remove-text" : "muted");
     for (int lineIndex = 0; lineIndex < entry.detailLines().size(); lineIndex++) {
         int lineY = detailY + lineIndex * lineStep;
         if (lineY < messageTop || lineY > messageBottom - this.font.lineHeight) {
             continue;
         }
-        gfx.drawString(this.font, entry.detailLines().get(lineIndex), textX, lineY, detailColor, false);
+        ThemePaint.text(gfx, this.font, entry.detailLines().get(lineIndex), textX, lineY, detailColor, false);
     }
 }
 
@@ -4392,15 +4427,15 @@ public class P2SChatScreen extends Screen {
         return this.font.split(Component.literal(choice.prompt().trim()), contentWidth);
     }
 
-    private List<FormattedCharSequence> getPlanLines(int contentWidth) {
+    private List<OverlayLine> getPlanLines(int contentWidth) {
         List<ClientSessionState.PlanItem> items = ClientSessionState.getPlanItems();
         String explanation = ClientSessionState.getPlanExplanation();
         if (items.isEmpty() && (explanation == null || explanation.isBlank())) {
             return List.of();
         }
-        List<FormattedCharSequence> lines = new ArrayList<>();
+        List<OverlayLine> lines = new ArrayList<>();
         if (explanation != null && !explanation.isBlank()) {
-            lines.addAll(this.font.split(Component.literal(explanation.trim()).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), contentWidth));
+            addPlanLine(lines, Component.literal(explanation.trim()).withStyle(ChatFormatting.ITALIC), contentWidth, "muted");
         }
         if (items.isEmpty()) {
             return lines;
@@ -4410,24 +4445,33 @@ public class P2SChatScreen extends Screen {
             ClientSessionState.PlanItem item = items.get(i);
             String status = item.status() == null ? "pending" : item.status();
             MutableComponent body = Component.literal(item.step());
+            String field;
             if ("completed".equals(status)) {
-                body = body.withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.STRIKETHROUGH);
+                body = body.withStyle(ChatFormatting.STRIKETHROUGH);
+                field = "tool-done";
             } else if ("in_progress".equals(status)) {
-                body = body.withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD);
+                body = body.withStyle(ChatFormatting.BOLD);
+                field = "tool-running";
             } else {
-                body = body.withStyle(ChatFormatting.GRAY);
+                field = "tool-waiting";
             }
             String marker = "completed".equals(status) ? "✔ " : "□ ";
             MutableComponent line = Component.literal(marker).append(body);
-            lines.addAll(this.font.split(line, contentWidth));
+            addPlanLine(lines, line, contentWidth, field);
         }
         int more = items.size() - limit;
         if (more > 0) {
-            lines.add(P2SI18n.tr("screen.p2s.common.more", more).getVisualOrderText());
+            lines.add(new OverlayLine(P2SI18n.tr("screen.p2s.common.more", more).getVisualOrderText(), color("muted"), false, null));
         }
         return lines;
     }
 
+
+    private void addPlanLine(List<OverlayLine> lines, Component text, int width, String field) {
+        for (FormattedCharSequence wrapped : this.font.split(text, width)) {
+            lines.add(new OverlayLine(wrapped, color(field), false, null));
+        }
+    }
 
     private List<FormattedCharSequence> getCheckpointLines(int contentWidth) {
         List<ClientSessionState.CheckpointInfo> checkpoints = ClientSessionState.getCheckpoints();
@@ -4506,7 +4550,7 @@ public class P2SChatScreen extends Screen {
         if (!contextEditorCollapsed && input != null) {
             input.setFocused(false);
         }
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.rename_workspace"), 0xAAD5FF);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.rename_workspace"), "info");
     }
 
     private void exitWorkspaceRenameMode() {
@@ -4526,7 +4570,7 @@ public class P2SChatScreen extends Screen {
         }
         String value = workspaceRenameInput != null ? workspaceRenameInput.getValue() : workspaceRenameDraft;
         if (value == null || value.trim().isEmpty()) {
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_name_empty"), 0xFF5555);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.workspace_name_empty"), "danger");
             return;
         }
         JsonObject payload = new JsonObject();
@@ -4539,7 +4583,7 @@ public class P2SChatScreen extends Screen {
         selectedExplorerFolderPath = parentFolderOfWorkspacePath(value.trim());
         workspaceExpandedSelectionPath = "";
         exitWorkspaceRenameMode();
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.renaming_workspace"), 0xAAAAAA);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.renaming_workspace"), "muted");
     }
 
     private void deleteSelectedWorkspaceDoc() {
@@ -4556,7 +4600,7 @@ public class P2SChatScreen extends Screen {
         workspaceRenameDraft = "";
         contextLoadedDocId = "";
         clearContextDiffView();
-        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.deleting_workspace"), 0xAAAAAA);
+        setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.deleting_workspace"), "muted");
         createWidgets();
     }
 
@@ -4683,27 +4727,27 @@ public class P2SChatScreen extends Screen {
         int top = choicePopupY;
         int right = left + choicePopupWidth;
         int bottom = top + choicePopupHeight;
-        gfx.fill(panelLeft, Math.max(0, top - 6), panelRight, Math.min(this.height, bottom + 6), 0xFF0B1118);
-        gfx.fill(left - 1, top - 1, right + 1, bottom + 1, 0xFF5C7390);
-        gfx.fill(left, top, right, bottom, 0xFF111722);
-        gfx.fill(left + 1, top + 1, right - 1, bottom - 1, 0xFF161D2A);
-        gfx.fill(left, top, right, top + 22, 0xFF1C2635);
-        gfx.fill(left, top, right, top + 1, 0xFF8AA6C9);
-        gfx.fill(left, bottom - 1, right, bottom, 0xFF4C627F);
-        gfx.fill(left, top, left + 1, bottom, 0xFF4C627F);
-        gfx.fill(right - 1, top, right, bottom, 0xFF4C627F);
+        gfx.fill(panelLeft, Math.max(0, top - 6), panelRight, Math.min(this.height, bottom + 6), color("panel"));
+        gfx.fill(left - 1, top - 1, right + 1, bottom + 1, color("line"));
+        gfx.fill(left, top, right, bottom, color("inset"));
+        gfx.fill(left + 1, top + 1, right - 1, bottom - 1, color("overlay"));
+        gfx.fill(left, top, right, top + 22, color("raised"));
+        gfx.fill(left, top, right, top + 1, color("accent"));
+        gfx.fill(left, bottom - 1, right, bottom, color("line"));
+        gfx.fill(left, top, left + 1, bottom, color("line"));
+        gfx.fill(right - 1, top, right, bottom, color("line"));
 
         int titleX = left + 6;
         int titleY = top + 6;
-        gfx.drawString(this.font, P2SI18n.tr("screen.p2s.chat.overlay.action_required"), titleX, titleY, 0xFFCC66, false);
+        ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.chat.overlay.action_required"), titleX, titleY, color("warning"), false);
         int dividerY = titleY + this.font.lineHeight + 4;
-        gfx.fill(left + 6, dividerY, right - 6, dividerY + 1, 0x884C627F);
+        gfx.fill(left + 6, dividerY, right - 6, dividerY + 1, color("line"));
 
         int promptY = dividerY + 6;
         List<FormattedCharSequence> promptLines = getChoicePopupPromptLines(choicePopupWidth - 16);
         int lineStep = this.font.lineHeight + 1;
         for (int i = 0; i < promptLines.size(); i++) {
-            gfx.drawString(this.font, promptLines.get(i), left + 6, promptY + i * lineStep, 0xE6EEF9, false);
+            ThemePaint.text(gfx, this.font, promptLines.get(i), left + 6, promptY + i * lineStep, color("on-overlay"), false);
         }
     }
 
@@ -4773,15 +4817,15 @@ public class P2SChatScreen extends Screen {
 
     private static int roleColor(String role) {
         if (role == null) {
-            return 0xFFFFFF;
+            return color("text");
         }
         if (P2SI18n.isUserRole(role)) {
-            return 0xFFFFFF;
+            return color("accent");
         }
         if (P2SI18n.isAssistantRole(role)) {
-            return 0x55FF55;
+            return color("text");
         }
-        return 0xAAAAAA;
+        return color("muted");
     }
 
     private static String rolePrefix(String role) {
@@ -4873,7 +4917,7 @@ public class P2SChatScreen extends Screen {
 
         if (!queuedContexts.isEmpty()) {
             queuedContexts.clear();
-            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.sent_with_message"), 0x55FF55);
+            setContextStatus(P2SI18n.tr("screen.p2s.chat.context.status.sent_with_message"), "success");
         }
 
         input.setValue("");
