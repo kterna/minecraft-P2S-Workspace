@@ -18,11 +18,16 @@ public class P2SModClient implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> client.execute(() -> {
             ClientServerBridge.onDisconnect();
             ClientAgentManager.onClientDisconnect();
+            com.p2s.preview.OrbitCamera.stop();
+            com.p2s.preview.ClientPreviewStore.clear();
         }));
         ClientDiagnostics.registerCommand();
         ModKeyBindings.registerTickHandler();
         SelectionInputHandler.register();
         SelectionRenderer.register();
+        com.p2s.preview.GhostBlockRenderer.register();
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(
+                client -> com.p2s.preview.ClientPreviewStore.tick());
         HudOverlay.register();
     }
 }
