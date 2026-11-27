@@ -819,6 +819,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             workspace.path = path;
             workspace.current = new StructureBuilder.VbsScriptV2();
             workspace.revision = nextRevision();
+            workspace.createdByStage = true;
         } else {
             if (workspace == null) {
                 JsonObject missing = buildToolErrorKey("stage_workspace_file", "message.p2s.workspace.unknown_path", path);
@@ -1140,6 +1141,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         ProjectPersistence.CommitRecord commit = new ProjectPersistence.CommitRecord();
         commit.revisionBefore = workspace.pendingPatch.revisionBefore;
         commit.revisionAfter = workspace.pendingPatch.revisionAfter;
+        workspace.createdByStage = false;
         commit.beforeScript = before;
         commit.afterScript = after;
         JsonObject receipt = buildToolSuccess("session_apply_patch");
@@ -1196,6 +1198,15 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         }
         String discardedSummary = workspace.pendingPatch.preview == null ? "" : workspace.pendingPatch.preview.summary;
         workspace.pendingPatch = null;
+        // A file the agent created and the player rejected before it was ever applied would
+        // otherwise stay behind empty.
+        boolean removedNewFile = workspace.createdByStage && workspace.undoStack.isEmpty();
+        if (removedNewFile) {
+            project.workspaceFiles.remove(workspace.path);
+            if (workspace.path != null && workspace.path.equals(session.selectedWorkspacePath)) {
+                session.selectedWorkspacePath = chooseSelectedWorkspacePath(project, "");
+            }
+        }
         session.runtimeState = RuntimeState.IDLE;
         saveProject(project);
         sendPatchPreview(player, null);
@@ -1206,6 +1217,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             sendChatResponseLocalized(player, "message.p2s.patch.discarded_with_reason", false, "cancelled", reason);
         }
         receipt.addProperty("discarded", true);
+        receipt.addProperty("removed_new_file", removedNewFile);
         receipt.addProperty("path", workspace.path == null ? "" : workspace.path);
         receipt.addProperty("summary", discardedSummary == null ? "" : discardedSummary);
         receipt.addProperty("revision", workspace.revision == null ? "" : workspace.revision);

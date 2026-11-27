@@ -565,6 +565,8 @@ public final class ProjectPersistence {
         public List<String> dependsOn = new ArrayList<>();
         public String generatedFrom = "";
         public JsonObject metadata = new JsonObject();
+        /** Created by staging and never applied: discarding the pending patch removes the file. */
+        public boolean createdByStage;
     }
 
     public static final class PendingPatchRecord {

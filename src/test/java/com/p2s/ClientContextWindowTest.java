@@ -70,6 +70,9 @@ class ClientContextWindowTest {
     void tokenWindowCompactsBetweenToolTurnsBeforeTheNextRequest() {
         assertEquals(111616, ClientHistoryCompactor.threshold(128000));
         assertEquals(3000, ClientHistoryCompactor.threshold(4000));
+        // ASCII: four characters per token; Chinese: one token per character.
+        assertEquals(4 + 4, ClientHistoryCompactor.textTokens("build a tower"));
+        assertEquals(4 + 6, ClientHistoryCompactor.textTokens("建一座瞭望塔"));
         List<AgentMessage> raw = conversation(80);
         var summaries = new AtomicInteger();
         var window = new ClientContextWindow((ctx, signal, sink) -> {
