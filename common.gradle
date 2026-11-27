@@ -52,6 +52,7 @@ def compatSpecs = [
 	[facet: 'networking', tier: (findProperty('compat_networking') ?: 'modern').toString()],
 	[facet: 'render', tier: (findProperty('compat_render') ?: 'v1_21').toString()],
 	[facet: 'hud', tier: (findProperty('compat_hud') ?: 'v1_21').toString()],
+	[facet: 'gfx', tier: (findProperty('compat_gfx') ?: 'v1_21').toString()],
 	[facet: 'gui', tier: (findProperty('compat_gui') ?: 'v1_21').toString()],
 	[facet: 'mixins', tier: (findProperty('compat_mixins') ?: 'v1_21').toString()]
 ]

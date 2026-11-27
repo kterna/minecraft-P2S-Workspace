@@ -1137,7 +1137,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         StructureBuilder.VbsScriptV2 before = copyScript(workspace.current);
         StructureBuilder.VbsScriptV2 after = copyScript(workspace.pendingPatch.nextScript);
         StructurePatchEngine.DiffResult diff = StructurePatchEngine.diff(before, after);
-        StructurePatchEngine.applyBlockOps(player.serverLevel(), workspaceOrigin(project, workspace), diff.forwardOps);
+        StructurePatchEngine.applyBlockOps(P2SGameCompat.serverLevel(player), workspaceOrigin(project, workspace), diff.forwardOps);
 
         ProjectPersistence.CommitRecord commit = new ProjectPersistence.CommitRecord();
         commit.revisionBefore = workspace.pendingPatch.revisionBefore;
@@ -1243,7 +1243,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             return;
         }
         StructurePatchEngine.DiffResult diff = StructurePatchEngine.diff(copyScript(workspace.current), copyScript(commit.beforeScript));
-        StructurePatchEngine.applyBlockOps(player.serverLevel(), workspaceOrigin(project, workspace), diff.forwardOps);
+        StructurePatchEngine.applyBlockOps(P2SGameCompat.serverLevel(player), workspaceOrigin(project, workspace), diff.forwardOps);
         workspace.current = copyScript(commit.beforeScript);
         workspace.revision = commit.revisionBefore;
         pushCommit(workspace.redoStack, commit);
@@ -1274,7 +1274,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             return;
         }
         StructurePatchEngine.DiffResult diff = StructurePatchEngine.diff(copyScript(workspace.current), copyScript(commit.afterScript));
-        StructurePatchEngine.applyBlockOps(player.serverLevel(), workspaceOrigin(project, workspace), diff.forwardOps);
+        StructurePatchEngine.applyBlockOps(P2SGameCompat.serverLevel(player), workspaceOrigin(project, workspace), diff.forwardOps);
         workspace.current = copyScript(commit.afterScript);
         workspace.revision = commit.revisionAfter;
         pushCommit(workspace.undoStack, commit);
@@ -1362,7 +1362,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         StructureBuilder.VbsScriptV2 before = copyScript(workspace.current);
         StructureBuilder.VbsScriptV2 after = copyScript(checkpoint.script);
         StructurePatchEngine.DiffResult diff = StructurePatchEngine.diff(before, after);
-        StructurePatchEngine.applyBlockOps(player.serverLevel(), workspaceOrigin(project, workspace), diff.forwardOps);
+        StructurePatchEngine.applyBlockOps(P2SGameCompat.serverLevel(player), workspaceOrigin(project, workspace), diff.forwardOps);
         ProjectPersistence.CommitRecord commit = new ProjectPersistence.CommitRecord();
         commit.revisionBefore = workspace.revision;
         commit.revisionAfter = checkpoint.revision == null || checkpoint.revision.isBlank() ? nextRevision() : checkpoint.revision;

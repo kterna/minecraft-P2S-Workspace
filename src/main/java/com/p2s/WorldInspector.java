@@ -70,7 +70,7 @@ final class WorldInspector {
             return error("Region has " + volume + " blocks; the limit is " + MAX_STATS_VOLUME + ". Inspect a smaller box");
         }
         boolean grid = volume <= MAX_GRID_VOLUME && !(args.has("stats_only") && args.get("stats_only").getAsBoolean());
-        ServerLevel level = player.serverLevel();
+        ServerLevel level = P2SGameCompat.serverLevel(player);
         Map<String, Integer> counts = new LinkedHashMap<>();
         Map<String, Character> legend = new LinkedHashMap<>();
         List<JsonObject> layers = new ArrayList<>();

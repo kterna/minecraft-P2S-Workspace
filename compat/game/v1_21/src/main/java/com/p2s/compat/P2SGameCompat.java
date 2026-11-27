@@ -120,6 +120,10 @@ public final class P2SGameCompat {
         return player == null ? null : player.getServer();
     }
 
+    public static net.minecraft.server.level.ServerLevel serverLevel(ServerPlayer player) {
+        return player == null ? null : player.serverLevel();
+    }
+
     @SuppressWarnings("unchecked")
     public static BlockState applyFacing(BlockState state, String facing) {
         if (state == null || facing == null || facing.isBlank()) {

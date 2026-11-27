@@ -137,6 +137,10 @@ public final class P2SGameCompat {
         return player == null ? null : player.getServer();
     }
 
+    public static net.minecraft.server.level.ServerLevel serverLevel(ServerPlayer player) {
+        return player == null ? null : player.serverLevel();
+    }
+
     public static Direction directionByName(String raw) {
         return Direction.byName(raw);
     }
