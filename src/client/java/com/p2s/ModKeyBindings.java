@@ -17,10 +17,11 @@ public final class ModKeyBindings {
     public static void registerTickHandler() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (OPEN_CHAT.consumeClick()) {
-                if (client.screen instanceof P2SChatScreen) {
+                if (client.screen instanceof P2SWorkbenchScreen || client.screen instanceof P2SChatScreen) {
                     client.setScreen(null);
                 } else {
-                    client.setScreen(new P2SChatScreen());
+                    // The classic three-dock screen stays reachable from the workbench's ⋯ menu.
+                    client.setScreen(new P2SWorkbenchScreen());
                 }
             }
         });
