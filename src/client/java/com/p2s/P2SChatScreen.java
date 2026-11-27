@@ -8,19 +8,19 @@ import com.p2s.screen.P2SSessionListScreen;
 import com.p2s.screen.chat.P2SChatContextWidgets;
 import com.p2s.screen.chat.P2SChatSessionWidgets;
 import com.p2s.screen.chat.P2SWorkspaceExplorerComponent;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SInputCompat;
+import com.p2s.compat.P2SScreenBase;
+import com.p2s.compat.P2SWidgetCompat;
 import com.p2s.screen.widget.P2SFlatButton;
 import com.p2s.screen.widget.ThemePaint;
 
 import static com.p2s.screen.widget.ThemePaint.color;
-import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class P2SChatScreen extends Screen {
+public class P2SChatScreen extends P2SScreenBase {
     private static DockLayoutState retainedDockLayout = new DockLayoutState(false, false, false, -1, -1, -1, -1);
     private static final int PADDING = 8;
     private static final int INPUT_HEIGHT = 20;
@@ -255,8 +255,8 @@ public class P2SChatScreen extends Screen {
     }
 
     @Override
-    public void resize(Minecraft client, int width, int height) {
-        super.resize(client, width, height);
+    public void p2sResize(Minecraft client, int width, int height) {
+        p2sSuperResize(client, width, height);
         createWidgets();
         clampExplorerScroll();
         clampScroll();
@@ -368,17 +368,17 @@ public class P2SChatScreen extends Screen {
         boolean next = shouldUseGameplayInput();
         if (this.minecraft == null || gameplayInputActive == next) {
             if (next) {
-                KeyMapping.setAll();
+                P2SInputCompat.setAllKeyStates();
             }
             gameplayInputActive = next;
             return;
         }
         if (next) {
             this.minecraft.mouseHandler.grabMouse();
-            KeyMapping.setAll();
+            P2SInputCompat.setAllKeyStates();
         } else {
             this.minecraft.mouseHandler.releaseMouse();
-            KeyMapping.releaseAll();
+            P2SInputCompat.releaseAllKeys();
         }
         gameplayInputActive = next;
     }
@@ -1380,7 +1380,7 @@ public class P2SChatScreen extends Screen {
         Component label = P2SI18n.tr("screen.p2s.chat.apply");
         if (total > 1 && index > 0) label = label.copy().append(" " + index + "/" + total);
         contextApplyButton.setMessage(label);
-        contextApplyButton.setTooltip(total > 1 ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.apply_all_hint", total)) : null);
+        P2SWidgetCompat.setTooltip(contextApplyButton, total > 1 ? P2SI18n.tr("screen.p2s.chat.apply_all_hint", total) : null);
     }
 
     private boolean canActOnSelectedPendingPatch() {
@@ -2162,7 +2162,7 @@ public class P2SChatScreen extends Screen {
         }
         String text = getContextSelectionText();
         if (!text.isEmpty()) {
-            this.minecraft.keyboardHandler.setClipboard(text);
+            P2SInputCompat.setClipboard(this.minecraft, text);
         }
     }
 
@@ -2725,7 +2725,7 @@ public class P2SChatScreen extends Screen {
                 return true;
             }
             if (keyCode == GLFW.GLFW_KEY_V) {
-                String clipboard = this.minecraft == null ? "" : this.minecraft.keyboardHandler.getClipboard();
+                String clipboard = P2SInputCompat.getClipboard(this.minecraft);
                 if (clipboard != null && !clipboard.isEmpty()) {
                     insertContextText(clipboard);
                 }
@@ -2798,7 +2798,7 @@ public class P2SChatScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (workspaceCreateMode) {
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
                 exitWorkspaceCreateMode();
@@ -2808,10 +2808,10 @@ public class P2SChatScreen extends Screen {
                 confirmWorkspaceCreate();
                 return true;
             }
-            if (workspaceCreateInput != null && workspaceCreateInput.keyPressed(keyCode, scanCode, modifiers)) {
+            if (P2SWidgetCompat.keyPressed(workspaceCreateInput, keyCode, scanCode, modifiers)) {
                 return true;
             }
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
         }
 
         if (workspaceRenameMode) {
@@ -2823,10 +2823,10 @@ public class P2SChatScreen extends Screen {
                 confirmWorkspaceRename();
                 return true;
             }
-            if (workspaceRenameInput != null && workspaceRenameInput.keyPressed(keyCode, scanCode, modifiers)) {
+            if (P2SWidgetCompat.keyPressed(workspaceRenameInput, keyCode, scanCode, modifiers)) {
                 return true;
             }
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
         }
 
         if (discardReasonMode) {
@@ -2838,10 +2838,10 @@ public class P2SChatScreen extends Screen {
                 confirmDiscard();
                 return true;
             }
-            if (discardReasonInput != null && discardReasonInput.keyPressed(keyCode, scanCode, modifiers)) {
+            if (P2SWidgetCompat.keyPressed(discardReasonInput, keyCode, scanCode, modifiers)) {
                 return true;
             }
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
         }
 
         if (choicePopupVisible) {
@@ -2854,7 +2854,7 @@ public class P2SChatScreen extends Screen {
                 submitCustomChoice();
                 return true;
             }
-            if (choiceCustomInput != null && choiceCustomInput.keyPressed(keyCode, scanCode, modifiers)) {
+            if (P2SWidgetCompat.keyPressed(choiceCustomInput, keyCode, scanCode, modifiers)) {
                 return true;
             }
         }
@@ -2902,35 +2902,35 @@ public class P2SChatScreen extends Screen {
         }
 
         for (EditBox box : collectEditableBoxes()) {
-            if (box != null && box.keyPressed(keyCode, scanCode, modifiers)) {
+            if (P2SWidgetCompat.keyPressed(box, keyCode, scanCode, modifiers)) {
                 return true;
             }
         }
 
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public boolean charTyped(char codePoint, int modifiers) {
+    public boolean p2sCharTyped(char codePoint, int modifiers) {
         if (workspaceCreateMode) {
-            if (workspaceCreateInput != null && workspaceCreateInput.charTyped(codePoint, modifiers)) {
+            if (P2SWidgetCompat.charTyped(workspaceCreateInput, codePoint, modifiers)) {
                 return true;
             }
-            return super.charTyped(codePoint, modifiers);
+            return p2sSuperCharTyped(codePoint, modifiers);
         }
         if (workspaceRenameMode) {
-            if (workspaceRenameInput != null && workspaceRenameInput.charTyped(codePoint, modifiers)) {
+            if (P2SWidgetCompat.charTyped(workspaceRenameInput, codePoint, modifiers)) {
                 return true;
             }
-            return super.charTyped(codePoint, modifiers);
+            return p2sSuperCharTyped(codePoint, modifiers);
         }
         if (discardReasonMode) {
-            if (discardReasonInput != null && discardReasonInput.charTyped(codePoint, modifiers)) {
+            if (P2SWidgetCompat.charTyped(discardReasonInput, codePoint, modifiers)) {
                 return true;
             }
-            return super.charTyped(codePoint, modifiers);
+            return p2sSuperCharTyped(codePoint, modifiers);
         }
-        if (choicePopupVisible && choiceCustomInput != null && choiceCustomInput.charTyped(codePoint, modifiers)) {
+        if (choicePopupVisible && P2SWidgetCompat.charTyped(choiceCustomInput, codePoint, modifiers)) {
             return true;
         }
         if (isGameplayInputActive()) {
@@ -2940,15 +2940,15 @@ public class P2SChatScreen extends Screen {
             return true;
         }
         for (EditBox box : collectEditableBoxes()) {
-            if (box != null && box.charTyped(codePoint, modifiers)) {
+            if (P2SWidgetCompat.charTyped(box, codePoint, modifiers)) {
                 return true;
             }
         }
-        return super.charTyped(codePoint, modifiers);
+        return p2sSuperCharTyped(codePoint, modifiers);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseClicked(double mouseX, double mouseY, int button) {
         if (isGameplayInputActive()) {
             return false;
         }
@@ -3078,7 +3078,7 @@ public class P2SChatScreen extends Screen {
         if (contextEditorFocused) {
             contextEditorFocused = false;
         }
-        boolean handled = super.mouseClicked(mouseX, mouseY, button);
+        boolean handled = p2sSuperMouseClicked(mouseX, mouseY, button);
         if (handled) {
             return true;
         }
@@ -3095,7 +3095,7 @@ public class P2SChatScreen extends Screen {
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean p2sMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (isGameplayInputActive()) {
             return false;
         }
@@ -3114,18 +3114,18 @@ public class P2SChatScreen extends Screen {
             return true;
         }
         if (contextDiffMode) {
-            return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+            return p2sSuperMouseDragged(mouseX, mouseY, button, dragX, dragY);
         }
         if (button == 0 && contextMouseSelecting && contextEditorFocused) {
             ensureSelectionAnchor();
             placeContextCursorFromMouse(mouseX, mouseY);
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return p2sSuperMouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseReleased(double mouseX, double mouseY, int button) {
         if (isGameplayInputActive()) {
             return false;
         }
@@ -3145,11 +3145,11 @@ public class P2SChatScreen extends Screen {
             }
             contextMouseSelecting = false;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return p2sSuperMouseReleased(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+    public boolean p2sMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (isGameplayInputActive()) {
             return false;
         }
@@ -3185,7 +3185,7 @@ public class P2SChatScreen extends Screen {
             return true;
         }
         if (contextEditorCollapsed && mouseX < panelX) {
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            return p2sSuperMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
         if (mouseX < panelX) {
             int delta = verticalAmount > 0 ? -3 : 3;
@@ -3196,16 +3196,16 @@ public class P2SChatScreen extends Screen {
                     return true;
                 }
             }
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            return p2sSuperMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
 
         if (sessionPanelCollapsed) {
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            return p2sSuperMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
 
         int maxScroll = getMaxScroll();
         if (maxScroll <= 0) {
-            return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+            return p2sSuperMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
         int step = (this.font.lineHeight + LINE_SPACING) * 3;
         scrollOffset = clamp(scrollOffset + verticalAmount * step, 0, maxScroll);
@@ -3213,7 +3213,7 @@ public class P2SChatScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRender(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         syncChoicePopupRequestState();
         refreshChoiceButtons();
         syncCheckpointNameDraftFromSelection();
@@ -3260,7 +3260,7 @@ public class P2SChatScreen extends Screen {
             Component label = Component.literal(stopMode ? "\u25A0" : ">");
             if (!label.getString().equals(sendButton.getMessage().getString())) {
                 sendButton.setMessage(label);
-                sendButton.setTooltip(stopMode ? Tooltip.create(P2SI18n.tr("screen.p2s.chat.stop")) : null);
+                P2SWidgetCompat.setTooltip(sendButton, stopMode ? P2SI18n.tr("screen.p2s.chat.stop") : null);
             }
         }
         boolean sessionActive = ClientSessionState.isActive();
@@ -3352,15 +3352,15 @@ public class P2SChatScreen extends Screen {
 
         applyCollapsedPanelFocusState();
 
-        super.render(gfx, mouseX, mouseY, delta);
+        p2sSuperRender(gfx, mouseX, mouseY, delta);
     }
 
     @Override
-    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRenderBackground(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         // No full-screen dimming. Panels draw their own backgrounds.
     }
 
-    private void drawContextPanel(GuiGraphics gfx, int panelX, int mouseX, int mouseY) {
+    private void drawContextPanel(P2SGfx gfx, int panelX, int mouseX, int mouseY) {
         int contextPanelRight = getContextDockRight(panelX);
         if (contextPanelRight <= 0) {
             return;
@@ -3426,7 +3426,7 @@ public class P2SChatScreen extends Screen {
         private final ThemePaint.Transition press = new ThemePaint.Transition();
     }
 
-    private void drawWorkspaceExplorer(GuiGraphics gfx, int mouseX, int mouseY) {
+    private void drawWorkspaceExplorer(P2SGfx gfx, int mouseX, int mouseY) {
         if (explorerListWidth <= 0 || explorerListHeight <= 0) {
             return;
         }
@@ -3449,7 +3449,7 @@ public class P2SChatScreen extends Screen {
         gfx.fill(right - 1, top, right, bottom, color("line"));
 
         int rowStep = getExplorerRowStep();
-        boolean mouseDown = GLFW.glfwGetMouseButton(minecraft.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) == GLFW.GLFW_PRESS;
+        boolean mouseDown = P2SInputCompat.isLeftMouseDown(minecraft);
         gfx.enableScissor(left + 1, top + 1, right - 1, bottom - 1);
         try {
             for (int index = 0; index < explorerRows.size(); index++) {
@@ -3550,7 +3550,7 @@ public class P2SChatScreen extends Screen {
         }
     }
 
-    private void drawExplorerHeader(GuiGraphics gfx) {
+    private void drawExplorerHeader(P2SGfx gfx) {
         int left = PADDING + 2;
         int right = Math.max(left + 24, currentExplorerSplitterX - DOCK_SPLITTER_WIDTH - 4);
         int titleY = 6;
@@ -3622,20 +3622,20 @@ public class P2SChatScreen extends Screen {
         return candidate;
     }
 
-    private void drawCollapsedExplorerRail(GuiGraphics gfx) {
+    private void drawCollapsedExplorerRail(P2SGfx gfx) {
         int right = Math.max(DOCK_COLLAPSED_WIDTH, currentExplorerSplitterX);
         gfx.fill(0, 0, right, this.height, color("inset"));
         gfx.fill(right - 1, 0, right, this.height, color("line"));
     }
 
-    private void drawCollapsedSessionRail(GuiGraphics gfx, int panelX, int panelWidth) {
+    private void drawCollapsedSessionRail(P2SGfx gfx, int panelX, int panelWidth) {
         int left = panelX;
         int right = panelX + panelWidth;
         gfx.fill(left, 0, right, this.height, color("inset"));
         gfx.fill(left, 0, left + 1, this.height, color("line"));
     }
 
-    private void drawDockChrome(GuiGraphics gfx, int panelX) {
+    private void drawDockChrome(P2SGfx gfx, int panelX) {
         int splitterColor = color("line");
         int activeColor = color("focus");
         int explorerColor = (explorerPanelCollapsed || draggingExplorerSplitter) ? activeColor : splitterColor;
@@ -3644,7 +3644,7 @@ public class P2SChatScreen extends Screen {
         gfx.fill(panelX - 1, 0, panelX + 1, this.height, sessionColor);
     }
 
-    private void drawContextEditor(GuiGraphics gfx) {
+    private void drawContextEditor(P2SGfx gfx) {
         if (contextEditorCollapsed) {
             return;
         }
@@ -3655,7 +3655,7 @@ public class P2SChatScreen extends Screen {
         drawContextTextEditor(gfx);
     }
 
-    private void drawContextTextEditor(GuiGraphics gfx) {
+    private void drawContextTextEditor(P2SGfx gfx) {
         if (contextEditorLines.isEmpty()) {
             contextEditorLines.add("");
         }
@@ -3732,7 +3732,7 @@ public class P2SChatScreen extends Screen {
         }
     }
 
-    private void drawContextSelectionConfirm(GuiGraphics gfx) {
+    private void drawContextSelectionConfirm(P2SGfx gfx) {
         if (!contextSelectionConfirmVisible) {
             return;
         }
@@ -3763,7 +3763,7 @@ public class P2SChatScreen extends Screen {
         ThemePaint.text(gfx, this.font, cancelLabel, cancelX + (CONTEXT_SELECTION_CONFIRM_BUTTON_WIDTH - this.font.width(cancelLabel)) / 2, buttonY + 5, color("text"), true);
     }
 
-    private void drawContextDiffEditor(GuiGraphics gfx) {
+    private void drawContextDiffEditor(P2SGfx gfx) {
         int left = contextEditorX;
         int top = contextEditorY;
         int right = contextEditorX + contextEditorWidth;
@@ -3882,7 +3882,7 @@ public class P2SChatScreen extends Screen {
         return boxes;
     }
 
-    private void drawHeader(GuiGraphics gfx, int panelX, int panelWidth) {
+    private void drawHeader(P2SGfx gfx, int panelX, int panelWidth) {
         String meta = buildSessionHeaderMeta();
         if (meta.isBlank()) {
             return;
@@ -3905,7 +3905,7 @@ public class P2SChatScreen extends Screen {
         return count;
     }
 
-    private void drawInfoOverlay(GuiGraphics gfx, int panelX, int panelWidth) {
+    private void drawInfoOverlay(P2SGfx gfx, int panelX, int panelWidth) {
         if (!infoOverlayVisible) return;
 
         int contentWidth = panelWidth - PADDING * 4;
@@ -4038,7 +4038,7 @@ public class P2SChatScreen extends Screen {
         }
     }
 
-    private void drawStatus(GuiGraphics gfx, int panelX) {
+    private void drawStatus(P2SGfx gfx, int panelX) {
         String status = ClientSessionState.getStatus();
         if (status == null || status.isBlank()) {
             return;
@@ -4054,7 +4054,7 @@ public class P2SChatScreen extends Screen {
     }
 
 
-    private void drawMessages(GuiGraphics gfx, int panelX, int panelWidth) {
+    private void drawMessages(P2SGfx gfx, int panelX, int panelWidth) {
     int contentWidth = panelWidth - PADDING * 2;
     int messageTop = getMessageTop(panelWidth);
     int messageBottom = getMessageBottom();
@@ -4162,7 +4162,7 @@ public class P2SChatScreen extends Screen {
 }
 
     private void drawPlainChatEntry(
-        GuiGraphics gfx,
+        P2SGfx gfx,
         int panelX,
         int messageTop,
         int messageBottom,
@@ -4182,7 +4182,7 @@ public class P2SChatScreen extends Screen {
 }
 
     private void drawToolLogEntry(
-        GuiGraphics gfx,
+        P2SGfx gfx,
         int panelX,
         int panelWidth,
         int messageTop,
@@ -4716,7 +4716,7 @@ public class P2SChatScreen extends Screen {
         return new ArrayList<>(lines.subList(0, maxLines));
     }
 
-    private void drawChoicePopup(GuiGraphics gfx) {
+    private void drawChoicePopup(P2SGfx gfx) {
         if (!choicePopupVisible || !ClientSessionState.hasPendingChoice() || choicePopupWidth <= 0 || choicePopupHeight <= 0) {
             return;
         }
@@ -4921,7 +4921,7 @@ public class P2SChatScreen extends Screen {
         }
 
         input.setValue("");
-        input.moveCursorToEnd(false);
+        P2SWidgetCompat.moveCursorToEnd(input, false);
         scrollOffset = 0;
     }
 

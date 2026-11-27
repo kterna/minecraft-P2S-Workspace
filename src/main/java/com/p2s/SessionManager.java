@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.p2s.compat.P2SGameCompat;
 import com.p2s.network.S2CChatResponsePayload;
 import com.p2s.network.S2CPatchPreviewPayload;
 import com.p2s.network.S2CSessionSyncPayload;
@@ -158,7 +159,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             }
             sendToolBridgeResponse(player, rid, true, payload, null);
         } catch (Exception e) {
-            P2SMod.LOGGER.error("Tool bridge failed -> player={}, tool={}", player.getGameProfile().getName(), normalizedTool, e);
+            P2SMod.LOGGER.error("Tool bridge failed -> player={}, tool={}", P2SGameCompat.playerName(player), normalizedTool, e);
             sendToolBridgeResponse(player, rid, false, null, "Tool bridge failed: " + e.getMessage());
         }
     }
@@ -721,7 +722,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                     for (PatchModels.BlockOp op : diff.forwardOps) {
                         ops.add(new com.p2s.preview.PreviewEncoder.Op(origin.getX() + op.x(), origin.getY() + op.y(),
                                 origin.getZ() + op.z(),
-                                net.minecraft.commands.arguments.blocks.BlockStateParser.serialize(op.state())));
+                                P2SGameCompat.serializeBlockState(op.state())));
                     }
                     diffs.add(new com.p2s.preview.PreviewEncoder.FileDiff(entry.getKey(), ops));
                 });

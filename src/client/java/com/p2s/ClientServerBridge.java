@@ -1,9 +1,9 @@
 package com.p2s;
 
-import com.p2s.network.C2SSetSelectionPayload;
+import com.p2s.compat.P2SClientNetworkCompat;
 import com.p2s.network.C2SSessionActionPayload;
+import com.p2s.network.C2SSetSelectionPayload;
 import com.p2s.network.C2SToolBridgePayload;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 
@@ -26,15 +26,15 @@ public final class ClientServerBridge {
     }
 
     public static boolean canSendSessionAction() {
-        return ClientPlayNetworking.canSend(C2SSessionActionPayload.TYPE);
+        return P2SClientNetworkCompat.canSend(C2SSessionActionPayload.class);
     }
 
     public static boolean canUseToolBridge() {
-        return ClientPlayNetworking.canSend(C2SToolBridgePayload.TYPE);
+        return P2SClientNetworkCompat.canSend(C2SToolBridgePayload.class);
     }
 
     public static boolean canSyncSelection() {
-        return ClientPlayNetworking.canSend(C2SSetSelectionPayload.TYPE);
+        return P2SClientNetworkCompat.canSend(C2SSetSelectionPayload.class);
     }
 
     public static boolean sendSessionAction(String action, String payload) {
@@ -42,7 +42,7 @@ public final class ClientServerBridge {
             notifyMissingServer();
             return false;
         }
-        ClientPlayNetworking.send(new C2SSessionActionPayload(action == null ? "" : action, payload == null ? "" : payload));
+        P2SClientNetworkCompat.send(new C2SSessionActionPayload(action == null ? "" : action, payload == null ? "" : payload));
         return true;
     }
 
@@ -51,7 +51,7 @@ public final class ClientServerBridge {
             notifyMissingServer();
             return false;
         }
-        ClientPlayNetworking.send(new C2SSetSelectionPayload(pointIndex, pos));
+        P2SClientNetworkCompat.send(new C2SSetSelectionPayload(pointIndex, pos));
         return true;
     }
 

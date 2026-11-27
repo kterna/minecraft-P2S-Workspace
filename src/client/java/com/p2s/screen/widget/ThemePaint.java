@@ -1,9 +1,9 @@
 package com.p2s.screen.widget;
 
+import com.p2s.compat.P2SGameCompat;
+import com.p2s.compat.P2SGfx;
 import com.p2s.theme.P2STheme;
-import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.util.FormattedCharSequence;
@@ -21,11 +21,11 @@ public final class ThemePaint {
         return a << 24 | argb & 0x00ffffff;
     }
 
-    public static void border(GuiGraphics gfx, int x, int y, int width, int height, int argb) {
+    public static void border(P2SGfx gfx, int x, int y, int width, int height, int argb) {
         gfx.renderOutline(x, y, width, height, argb);
     }
 
-    public static int text(GuiGraphics gfx, Font font, String value, int x, int y, int argb, boolean shadow) {
+    public static int text(P2SGfx gfx, Font font, String value, int x, int y, int argb, boolean shadow) {
         if ((argb >>> 24) < 4) return x + font.width(value);
         if (shadow) {
             int shade = alpha(color("text-shadow"), (argb >>> 24) / 255f);
@@ -34,11 +34,11 @@ public final class ThemePaint {
         return gfx.drawString(font, value, x, y, argb, false);
     }
 
-    public static int text(GuiGraphics gfx, Font font, Component value, int x, int y, int argb, boolean shadow) {
+    public static int text(P2SGfx gfx, Font font, Component value, int x, int y, int argb, boolean shadow) {
         return text(gfx, font, value.getVisualOrderText(), x, y, argb, shadow);
     }
 
-    public static int text(GuiGraphics gfx, Font font, FormattedCharSequence value, int x, int y,
+    public static int text(P2SGfx gfx, Font font, FormattedCharSequence value, int x, int y,
                            int argb, boolean shadow) {
         if ((argb >>> 24) < 4) return x + font.width(value);
         if (shadow) {
@@ -59,7 +59,7 @@ public final class ThemePaint {
         private long changedAt;
 
         public float value(boolean enabled) {
-            long now = Util.getMillis();
+            long now = P2SGameCompat.millis();
             float t = Math.clamp((now - changedAt) / 100f, 0f, 1f);
             float current = from + ((target ? 1f : 0f) - from) * t;
             if (target != enabled) {

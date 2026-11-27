@@ -1,17 +1,17 @@
 package com.p2s.screen.widget;
 
+import com.p2s.compat.P2SEditBoxBase;
+import com.p2s.compat.P2SGameCompat;
+import com.p2s.compat.P2SGfx;
 import com.p2s.mixin.client.P2SEditBoxAccess;
-import net.minecraft.Util;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
 import static com.p2s.screen.widget.ThemePaint.color;
 
 /** A vanilla EditBox with the current P2S palette. Rendering never changes its text, focus or scroll. */
-public class P2SThemedEditBox extends EditBox {
+public class P2SThemedEditBox extends P2SEditBoxBase {
     private final Font font;
     private final ThemePaint.Transition hover = new ThemePaint.Transition();
 
@@ -21,7 +21,7 @@ public class P2SThemedEditBox extends EditBox {
     }
 
     @Override
-    public void renderWidget(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
+    protected void p2sRenderWidget(P2SGfx gfx, int mouseX, int mouseY, float partialTick) {
         if (!isVisible()) return;
         int x = getX(), y = getY();
         int left = isBordered() ? x + 4 : x;
@@ -61,7 +61,7 @@ public class P2SThemedEditBox extends EditBox {
         if (!insert && state.p2s$suggestion() != null) {
             ThemePaint.text(gfx, font, state.p2s$suggestion(), caret, top, color("faint"), false);
         }
-        if (isFocused() && cursor >= 0 && cursor <= visibleText.length() && (Util.getMillis() - state.p2s$focusedTime()) / 300 % 2 == 0) {
+        if (isFocused() && cursor >= 0 && cursor <= visibleText.length() && (P2SGameCompat.millis() - state.p2s$focusedTime()) / 300 % 2 == 0) {
             if (insert) {
                 gfx.fill(caret, top - 1, caret + 1, top + 9, color("focus"));
             } else {

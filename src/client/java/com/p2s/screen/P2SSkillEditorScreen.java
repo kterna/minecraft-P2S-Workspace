@@ -7,17 +7,19 @@ import com.p2s.screen.widget.ThemePaint;
 import static com.p2s.screen.widget.ThemePaint.color;
 
 import com.p2s.P2SI18n;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SScreenBase;
+import com.p2s.compat.P2SWidgetCompat;
 import com.p2s.screen.widget.P2SMultiLineTextEditor;
 import com.p2s.store.SkillStore;
 
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
-public class P2SSkillEditorScreen extends Screen {
+public class P2SSkillEditorScreen extends P2SScreenBase {
     public enum Mode {
         CREATE,
         EDIT,
@@ -179,39 +181,39 @@ public class P2SSkillEditorScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             onClose();
             return true;
         }
-        if (nameInput != null && nameInput.keyPressed(keyCode, scanCode, modifiers)) {
+        if (P2SWidgetCompat.keyPressed(nameInput, keyCode, scanCode, modifiers)) {
             return true;
         }
-        if (descInput != null && descInput.keyPressed(keyCode, scanCode, modifiers)) {
+        if (P2SWidgetCompat.keyPressed(descInput, keyCode, scanCode, modifiers)) {
             return true;
         }
         if (bodyEditor != null && bodyEditor.keyPressed(keyCode, modifiers)) {
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (nameInput != null && nameInput.charTyped(codePoint, modifiers)) {
+    public boolean p2sCharTyped(char codePoint, int modifiers) {
+        if (P2SWidgetCompat.charTyped(nameInput, codePoint, modifiers)) {
             return true;
         }
-        if (descInput != null && descInput.charTyped(codePoint, modifiers)) {
+        if (P2SWidgetCompat.charTyped(descInput, codePoint, modifiers)) {
             return true;
         }
         if (bodyEditor != null && bodyEditor.charTyped(codePoint, modifiers)) {
             return true;
         }
-        return super.charTyped(codePoint, modifiers);
+        return p2sSuperCharTyped(codePoint, modifiers);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseClicked(double mouseX, double mouseY, int button) {
         if (bodyEditor != null && bodyEditor.mouseClicked(mouseX, mouseY, button)) {
             if (nameInput != null) nameInput.setFocused(false);
             if (descInput != null) descInput.setFocused(false);
@@ -220,41 +222,41 @@ public class P2SSkillEditorScreen extends Screen {
         if (button == 0 && bodyEditor != null) {
             bodyEditor.setFocused(false);
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return p2sSuperMouseClicked(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean p2sMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (bodyEditor != null && bodyEditor.mouseDragged(mouseX, mouseY, button)) {
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return p2sSuperMouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseReleased(double mouseX, double mouseY, int button) {
         if (bodyEditor != null && bodyEditor.mouseReleased(mouseX, mouseY, button)) {
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return p2sSuperMouseReleased(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+    public boolean p2sMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (bodyEditor != null && bodyEditor.mouseScrolled(mouseX, mouseY, verticalAmount)) {
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        return p2sSuperMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
     @Override
-    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRenderBackground(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         gfx.fill(0, 0, this.width, this.height, color("backdrop"));
     }
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        super.render(gfx, mouseX, mouseY, delta);
+    public void p2sRender(P2SGfx gfx, int mouseX, int mouseY, float delta) {
+        p2sSuperRender(gfx, mouseX, mouseY, delta);
 
         int panelWidth = Math.min(860, this.width - 24);
         int left = (this.width - panelWidth) / 2;

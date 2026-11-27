@@ -4,9 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.p2s.WorkspaceExport.Revision;
+import com.p2s.compat.P2SCommandCompat;
 import com.p2s.store.SessionPersistence;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -31,11 +30,7 @@ final class ClientDiagnostics {
     private ClientDiagnostics() {}
 
     static void registerCommand() {
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registries) -> dispatcher.register(
-                ClientCommandManager.literal("p2s").then(ClientCommandManager.literal("export").executes(ctx -> {
-                    start();
-                    return 1;
-                }))));
+        P2SCommandCompat.registerExportCommand(ClientDiagnostics::start);
     }
 
     static void start() {

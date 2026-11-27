@@ -2,8 +2,8 @@ package com.p2s;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.p2s.compat.P2SGameCompat;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
@@ -97,7 +97,7 @@ final class WorldInspector {
                         }
                         continue;
                     }
-                    String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+                    String id = P2SGameCompat.blockId(state);
                     counts.merge(id, 1, Integer::sum);
                     layerHasBlocks = true;
                     if (row != null) {

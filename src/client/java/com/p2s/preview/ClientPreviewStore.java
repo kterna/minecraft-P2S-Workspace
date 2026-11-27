@@ -6,10 +6,9 @@ import com.google.gson.JsonObject;
 import com.p2s.ClientSessionState;
 import com.p2s.ClientToolBridge;
 import com.p2s.P2SMod;
+import com.p2s.compat.P2SGameCompat;
 import net.minecraft.client.Minecraft;
-import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -191,12 +190,9 @@ public final class ClientPreviewStore {
     }
 
     private static BlockState parseState(String state) {
-        try {
-            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK.asLookup(), state, false).blockState();
-        } catch (Exception ex) {
-            // A block from a mod this client lacks: still show where it goes.
-            return Blocks.MAGENTA_STAINED_GLASS.defaultBlockState();
-        }
+        BlockState parsed = P2SGameCompat.parseBlockState(state);
+        // A block from a mod this client lacks: still show where it goes.
+        return parsed != null ? parsed : Blocks.MAGENTA_STAINED_GLASS.defaultBlockState();
     }
 
     private static AABB bounds(JsonObject summary) {

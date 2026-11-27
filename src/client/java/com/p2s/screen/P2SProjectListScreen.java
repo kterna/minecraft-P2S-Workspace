@@ -10,12 +10,14 @@ import com.p2s.ClientAgentManager;
 import com.p2s.ClientSelectionManager;
 import com.p2s.ClientToolBridge;
 import com.p2s.P2SI18n;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SScreenBase;
+import com.p2s.compat.P2SWidgetCompat;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -28,7 +30,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-public class P2SProjectListScreen extends Screen {
+public class P2SProjectListScreen extends P2SScreenBase {
     private static final int MAX_VISIBLE_ROWS = 10;
     private static final int ROW_HEIGHT = 22;
     private static final int BUTTON_WIDTH = 50;
@@ -77,13 +79,13 @@ public class P2SProjectListScreen extends Screen {
         nameInput = new P2SThemedEditBox(this.font, left, inputY, inputWidth, INPUT_HEIGHT, P2SI18n.tr("screen.p2s.projects.name"));
         nameInput.setMaxLength(120);
         nameInput.setValue(nameDraft);
-        nameInput.setHint(P2SI18n.tr("screen.p2s.projects.name_hint"));
+        P2SWidgetCompat.setHint(nameInput, P2SI18n.tr("screen.p2s.projects.name_hint"));
         addRenderableWidget(nameInput);
 
         descriptionInput = new P2SThemedEditBox(this.font, left + inputWidth + INPUT_GAP, inputY, panelWidth - inputWidth - INPUT_GAP, INPUT_HEIGHT, P2SI18n.tr("screen.p2s.projects.remark"));
         descriptionInput.setMaxLength(240);
         descriptionInput.setValue(descriptionDraft);
-        descriptionInput.setHint(P2SI18n.tr("screen.p2s.projects.remark_hint"));
+        P2SWidgetCompat.setHint(descriptionInput, P2SI18n.tr("screen.p2s.projects.remark_hint"));
         addRenderableWidget(descriptionInput);
 
         for (int i = 0; i < visibleRows; i++) {
@@ -576,13 +578,13 @@ public class P2SProjectListScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRenderBackground(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         gfx.fill(0, 0, this.width, this.height, color("backdrop"));
     }
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        super.render(gfx, mouseX, mouseY, delta);
+    public void p2sRender(P2SGfx gfx, int mouseX, int mouseY, float delta) {
+        p2sSuperRender(gfx, mouseX, mouseY, delta);
 
         int panelWidth = getPanelWidth();
         int left = (this.width - panelWidth) / 2;
@@ -630,7 +632,7 @@ public class P2SProjectListScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             onClose();
             return true;
@@ -644,7 +646,7 @@ public class P2SProjectListScreen extends Screen {
             }
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

@@ -1,12 +1,9 @@
 package com.p2s;
 
-import com.mojang.brigadier.arguments.StringArgumentType;
+import com.p2s.compat.P2SCommandCompat;
 import com.p2s.theme.P2STheme;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
-import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
 
 import java.nio.file.Path;
@@ -21,26 +18,12 @@ public final class ClientThemes {
 
     static void initialize() {
         reload();
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registries) -> dispatcher.register(
-                ClientCommandManager.literal("p2s").then(ClientCommandManager.literal("theme")
-                        .then(ClientCommandManager.literal("reload").executes(ctx -> {
-                            int errors = reload();
-                            ctx.getSource().sendFeedback(P2SI18n.tr("message.p2s.theme.reloaded",
-                                    P2STheme.available().size(), errors));
-                            return errors == 0 ? 1 : 0;
-                        }))
-                        .then(ClientCommandManager.argument("id", StringArgumentType.greedyString())
-                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
-                                        P2STheme.available().stream().map(P2STheme::id), builder))
-                                .executes(ctx -> {
-                                    String id = StringArgumentType.getString(ctx, "id");
-                                    if (!select(id)) {
-                                        ctx.getSource().sendError(P2SI18n.tr("message.p2s.theme.unknown", id));
-                                        return 0;
-                                    }
-                                    ctx.getSource().sendFeedback(P2SI18n.tr("message.p2s.theme.selected", P2STheme.current().name()));
-                                    return 1;
-                                })))));
+        P2SCommandCompat.registerThemeCommand(
+                ClientThemes::reload,
+                ClientThemes::select,
+                () -> P2STheme.available().stream().map(P2STheme::id).toList(),
+                () -> P2STheme.current().name()
+        );
     }
 
     public static boolean select(String id) {

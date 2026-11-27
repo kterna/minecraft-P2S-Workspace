@@ -1,21 +1,20 @@
 package com.p2s;
 
-import com.mojang.blaze3d.platform.InputConstants;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import com.p2s.compat.P2SClientLifecycleCompat;
+import com.p2s.compat.P2SInputCompat;
 import net.minecraft.client.KeyMapping;
 import org.lwjgl.glfw.GLFW;
 
 public final class ModKeyBindings {
-    public static final KeyMapping OPEN_CHAT = KeyBindingHelper.registerKeyBinding(
-            new KeyMapping("key.p2s.open_chat", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_O, "category.p2s")
+    public static final KeyMapping OPEN_CHAT = P2SInputCompat.registerKeyMapping(
+            "key.p2s.open_chat", GLFW.GLFW_KEY_O, "category.p2s"
     );
 
     private ModKeyBindings() {
     }
 
     public static void registerTickHandler() {
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+        P2SClientLifecycleCompat.registerEndClientTick(client -> {
             while (OPEN_CHAT.consumeClick()) {
                 if (client.screen instanceof P2SWorkbenchScreen || client.screen instanceof P2SChatScreen) {
                     client.setScreen(null);

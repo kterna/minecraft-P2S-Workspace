@@ -10,9 +10,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.p2s.compat.P2SGameCompat;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 
 import java.nio.file.Files;
@@ -425,12 +424,7 @@ public final class P2SClientConfig {
         synchronized (P2SClientConfig.class) {
             currentId = selectionItemId;
         }
-        ResourceLocation id = ResourceLocation.tryParse(currentId);
-        if (id == null) {
-            return false;
-        }
-        Item target = BuiltInRegistries.ITEM.getOptional(id).orElse(null);
-        return target != null && target == item;
+        return P2SGameCompat.isItemWithId(item, currentId);
     }
 
     private static void load() {
@@ -636,21 +630,7 @@ public final class P2SClientConfig {
     }
 
     private static String normalizeItemId(String rawItemId) {
-        if (rawItemId == null || rawItemId.isBlank()) {
-            return null;
-        }
-        String trimmed = rawItemId.trim().toLowerCase();
-        ResourceLocation id = ResourceLocation.tryParse(trimmed);
-        if (id == null) {
-            id = ResourceLocation.tryParse("minecraft:" + trimmed);
-        }
-        if (id == null) {
-            return null;
-        }
-        if (!BuiltInRegistries.ITEM.containsKey(id)) {
-            return null;
-        }
-        return id.toString();
+        return P2SGameCompat.normalizeItemId(rawItemId);
     }
 
     private static Double optionalDouble(JsonObject root, String key) {

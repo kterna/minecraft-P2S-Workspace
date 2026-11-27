@@ -3,9 +3,8 @@ package com.p2s;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import com.p2s.compat.P2SGameCompat;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -188,16 +187,7 @@ public final class StructureBuilder {
         if (rawId == null || rawId.isBlank()) {
             return null;
         }
-        String trimmed = rawId.trim().toLowerCase();
-        ResourceLocation id = ResourceLocation.tryParse(trimmed);
-        if (id == null && !trimmed.contains(":")) {
-            id = ResourceLocation.tryParse("minecraft:" + trimmed);
-        }
-        if (id == null) {
-            return null;
-        }
-        Block block = BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
-        return block == null ? null : block.defaultBlockState();
+        return P2SGameCompat.defaultBlockState(rawId.trim().toLowerCase());
     }
 
     public static List<String> searchBlockIds(String query, int limit) {
@@ -210,14 +200,15 @@ public final class StructureBuilder {
         String[] tokens = normalizedNoNs.split("[^a-z0-9_]+");
 
         List<BlockMatch> matches = new ArrayList<>();
-        for (ResourceLocation id : BuiltInRegistries.BLOCK.keySet()) {
-            String idStr = id.toString().toLowerCase();
-            String path = id.getPath().toLowerCase();
+        for (String idStrRaw : P2SGameCompat.allBlockIds()) {
+            String idStr = idStrRaw.toLowerCase();
+            int colon = idStr.indexOf(':');
+            String path = colon >= 0 ? idStr.substring(colon + 1) : idStr;
             int score = scoreBlockCandidate(normalized, normalizedNoNs, tokens, idStr, path);
             if (score == Integer.MAX_VALUE) {
                 continue;
             }
-            matches.add(new BlockMatch(id.toString(), score));
+            matches.add(new BlockMatch(idStrRaw, score));
         }
 
         matches.sort(Comparator.comparingInt((BlockMatch m) -> m.score).thenComparing(m -> m.id));
@@ -234,8 +225,8 @@ public final class StructureBuilder {
         if (normalized.isBlank()) {
             return "";
         }
-        ResourceLocation closest = findClosestBlock(normalized);
-        return closest == null ? "" : closest.toString();
+        String closest = findClosestBlock(normalized);
+        return closest == null ? "" : closest;
     }
 
     public static BlockState applyFacingState(BlockState state, String facing) {
@@ -544,19 +535,16 @@ public final class StructureBuilder {
     }
 
     private static BlockState resolveBlockState(String rawId, String paletteKey) {
-        ResourceLocation id = ResourceLocation.tryParse(rawId);
-        if (id == null && rawId != null && !rawId.contains(":")) {
-            id = ResourceLocation.tryParse("minecraft:" + rawId);
-        }
+        String id = P2SGameCompat.normalizeResourceId(rawId);
 
         if (id != null) {
-            Block block = BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+            Block block = P2SGameCompat.findBlock(id);
             if (block != null) {
                 return block.defaultBlockState();
             }
-            ResourceLocation similar = findClosestBlock(id.toString());
-            if (similar != null) {
-                Block similarBlock = BuiltInRegistries.BLOCK.get(similar);
+            String similar = findClosestBlock(id);
+            Block similarBlock = similar == null ? null : P2SGameCompat.findBlock(similar);
+            if (similarBlock != null) {
                 P2SMod.LOGGER.warn("Palette id {} not found, using similar {}", id, similar);
                 return similarBlock.defaultBlockState();
             }
@@ -564,9 +552,9 @@ public final class StructureBuilder {
             return Blocks.STONE.defaultBlockState();
         }
 
-        ResourceLocation similar = findClosestBlock(rawId);
-        if (similar != null) {
-            Block similarBlock = BuiltInRegistries.BLOCK.get(similar);
+        String similar = findClosestBlock(rawId);
+        Block similarBlock = similar == null ? null : P2SGameCompat.findBlock(similar);
+        if (similarBlock != null) {
             P2SMod.LOGGER.warn("Palette key {} has invalid id {}, using similar {}", paletteKey, rawId, similar);
             return similarBlock.defaultBlockState();
         }
@@ -575,16 +563,17 @@ public final class StructureBuilder {
         return Blocks.STONE.defaultBlockState();
     }
 
-    private static ResourceLocation findClosestBlock(String raw) {
+    private static String findClosestBlock(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
         }
         String target = raw.toLowerCase();
-        ResourceLocation best = null;
+        String best = null;
         int bestScore = Integer.MAX_VALUE;
-        for (ResourceLocation candidate : BuiltInRegistries.BLOCK.keySet()) {
-            String candStr = candidate.toString().toLowerCase();
-            String candPath = candidate.getPath().toLowerCase();
+        for (String candidate : P2SGameCompat.allBlockIds()) {
+            String candStr = candidate.toLowerCase();
+            int colon = candStr.indexOf(':');
+            String candPath = colon >= 0 ? candStr.substring(colon + 1) : candStr;
             int score = Math.min(levenshtein(target, candStr), levenshtein(target, candPath));
             if (candPath.contains(target) || candStr.contains(target)) {
                 score = Math.min(score, 1); // prioritize substring matches
@@ -666,7 +655,7 @@ public final class StructureBuilder {
         if (facing == null || facing.isBlank()) {
             return state;
         }
-        var dir = net.minecraft.core.Direction.byName(facing.trim().toLowerCase());
+        var dir = P2SGameCompat.directionByName(facing.trim().toLowerCase());
         if (dir == null) {
             return state;
         }

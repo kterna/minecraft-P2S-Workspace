@@ -1,8 +1,14 @@
-apply plugin: 'fabric-loom'
+def isUnobfuscated = (findProperty('unobfuscated') ?: 'false').toString().toBoolean()
+apply plugin: isUnobfuscated ? 'net.fabricmc.fabric-loom' : 'net.fabricmc.fabric-loom-remap'
 apply plugin: 'maven-publish'
 
 version = project.mod_version
 group = project.maven_group
+
+def targetJava = ((findProperty('java_version') ?: '21').toString()).toInteger()
+def mcDepends = (findProperty('mc_depends') ?: "~${project.minecraft_version}").toString()
+def mixinJavaLevel = (findProperty('mixin_java_level') ?: "JAVA_${targetJava >= 21 ? 21 : targetJava}").toString()
+def rhinoVersion = (findProperty('rhino_version') ?: '1.9.2').toString()
 
 base {
 	archivesName = "${project.archives_base_name}-mc${project.minecraft_version}"
@@ -40,27 +46,55 @@ loom {
 }
 
 def sharedSrcRoot = rootProject.file('src')
+def compatSpecs = [
+	[facet: 'game', tier: (findProperty('compat_game') ?: 'v1_21').toString()],
+	[facet: 'networking', tier: (findProperty('compat_networking') ?: 'modern').toString()],
+	[facet: 'render', tier: (findProperty('compat_render') ?: 'v1_21').toString()],
+	[facet: 'gui', tier: (findProperty('compat_gui') ?: 'v1_21').toString()],
+	[facet: 'mixins', tier: (findProperty('compat_mixins') ?: 'v1_21').toString()]
+]
+def compatCoreTier = (findProperty('compat_core') ?: '').toString().trim()
+if (compatCoreTier) {
+	compatSpecs.add([facet: 'core', tier: compatCoreTier])
+}
+
+def mainJavaDirs = [
+	new File(sharedSrcRoot, 'main/java'),
+	new File(project.projectDir, 'src/main/java')
+]
+def mainResDirs = [
+	new File(sharedSrcRoot, 'main/resources'),
+	new File(project.projectDir, 'src/main/resources')
+]
+def clientJavaDirs = [
+	new File(sharedSrcRoot, 'client/java'),
+	new File(project.projectDir, 'src/client/java')
+]
+def clientResDirs = [
+	new File(sharedSrcRoot, 'client/resources'),
+	new File(project.projectDir, 'src/client/resources')
+]
+
+compatSpecs.each { spec ->
+	def tierDir = rootProject.file("compat/${spec.facet}/${spec.tier}")
+	def mj = new File(tierDir, 'src/main/java')
+	if (mj.exists()) mainJavaDirs << mj
+	def mr = new File(tierDir, 'src/main/resources')
+	if (mr.exists()) mainResDirs << mr
+	def cj = new File(tierDir, 'src/client/java')
+	if (cj.exists()) clientJavaDirs << cj
+	def cr = new File(tierDir, 'src/client/resources')
+	if (cr.exists()) clientResDirs << cr
+}
 
 sourceSets {
 	main {
-		java.srcDirs = [
-			new File(sharedSrcRoot, 'main/java'),
-			new File(project.projectDir, 'src/main/java')
-		]
-		resources.srcDirs = [
-			new File(sharedSrcRoot, 'main/resources'),
-			new File(project.projectDir, 'src/main/resources')
-		]
+		java.srcDirs = mainJavaDirs
+		resources.srcDirs = mainResDirs
 	}
 	client {
-		java.srcDirs = [
-			new File(sharedSrcRoot, 'client/java'),
-			new File(project.projectDir, 'src/client/java')
-		]
-		resources.srcDirs = [
-			new File(sharedSrcRoot, 'client/resources'),
-			new File(project.projectDir, 'src/client/resources')
-		]
+		java.srcDirs = clientJavaDirs
+		resources.srcDirs = clientResDirs
 	}
 	test {
 		java.srcDirs = [new File(sharedSrcRoot, 'test/java')]
@@ -70,21 +104,25 @@ sourceSets {
 	}
 }
 
+def modDepConfig = isUnobfuscated ? 'implementation' : 'modImplementation'
+
 dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings loom.officialMojangMappings()
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	if (!isUnobfuscated) {
+		mappings loom.officialMojangMappings()
+	}
+	"${modDepConfig}" "net.fabricmc:fabric-loader:${project.loader_version}"
+	"${modDepConfig}" "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-	modImplementation include("com.squareup.okhttp3:okhttp:4.12.0")
-	modImplementation include("com.google.code.gson:gson:2.11.0")
-	modImplementation include("com.squareup.okio:okio:3.9.1")
+	"${modDepConfig}" include("com.squareup.okhttp3:okhttp:4.12.0")
+	"${modDepConfig}" include("com.google.code.gson:gson:2.11.0")
+	"${modDepConfig}" include("com.squareup.okio:okio:3.9.1")
 	// OkHttp 4 and Okio 3 are written in Kotlin. include() nests only the listed artifact, so the
 	// standard library must be listed too, or the release JAR fails with NoClassDefFoundError
 	// kotlin/jvm/internal/Intrinsics on the first request (the dev classpath hides this).
-	modImplementation include("org.jetbrains.kotlin:kotlin-stdlib:1.9.25")
+	"${modDepConfig}" include("org.jetbrains.kotlin:kotlin-stdlib:1.9.25")
 	// JavaScript engine for the v2 `script` tool (sandboxed, interpreted mode, no Java access).
-	modImplementation include("org.mozilla:rhino:1.9.2")
+	"${modDepConfig}" include("org.mozilla:rhino:${rhinoVersion}")
 
 	testImplementation platform('org.junit:junit-bom:5.11.4')
 	testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -95,25 +133,49 @@ tasks.withType(Test).configureEach {
 	useJUnitPlatform()
 }
 
-processResources {
+def resourceExpandInputs = { Task task ->
 	def revision = providers.gradleProperty('p2sCommit').orElse(providers.environmentVariable('GITHUB_SHA')).getOrElse('')
-	inputs.property 'p2sCommit', revision ==~ /[a-fA-F0-9]{7,64}/ ? revision : 'unknown'
-	inputs.property "version", project.version
+	task.inputs.property 'p2sCommit', revision ==~ /[a-fA-F0-9]{7,64}/ ? revision : 'unknown'
+	task.inputs.property 'version', project.version
+	task.inputs.property 'mcDepends', mcDepends
+	task.inputs.property 'javaVersion', targetJava.toString()
+	task.inputs.property 'mixinJavaLevel', mixinJavaLevel
 
-	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version, "p2sCommit": inputs.properties.p2sCommit
+	task.filesMatching(['fabric.mod.json', 'p2s.mixins.json', 'p2s.client.mixins.json']) {
+		expand(
+			'version': task.inputs.properties.version,
+			'p2sCommit': task.inputs.properties.p2sCommit,
+			'mcDepends': task.inputs.properties.mcDepends,
+			'javaVersion': task.inputs.properties.javaVersion,
+			'mixinJavaLevel': task.inputs.properties.mixinJavaLevel
+		)
 	}
 }
 
+processResources {
+	resourceExpandInputs(delegate)
+}
+
+processClientResources {
+	resourceExpandInputs(delegate)
+}
+
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = targetJava
 }
 
 java {
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	if (targetJava > 21) {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(targetJava)
+		}
+	} else {
+		def javaVer = JavaVersion.toVersion(targetJava)
+		sourceCompatibility = javaVer
+		targetCompatibility = javaVer
+	}
 }
 
 jar {

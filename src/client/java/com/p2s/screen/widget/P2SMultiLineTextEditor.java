@@ -1,9 +1,9 @@
 package com.p2s.screen.widget;
 
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SInputCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.screens.Screen;
 import org.lwjgl.glfw.GLFW;
 
 import static com.p2s.screen.widget.ThemePaint.color;
@@ -106,7 +106,7 @@ public class P2SMultiLineTextEditor {
         return String.join("\n", lines);
     }
 
-    public void render(GuiGraphics gfx) {
+    public void render(P2SGfx gfx) {
         if (lines.isEmpty()) {
             lines.add("");
         }
@@ -188,13 +188,13 @@ public class P2SMultiLineTextEditor {
             return false;
         }
         setFocused(true);
-        if (Screen.hasShiftDown()) {
+        if (P2SInputCompat.hasShiftDown()) {
             ensureSelectionAnchor();
         } else {
             clearSelection();
         }
         placeCursorFromMouse(mouseX, mouseY);
-        if (!Screen.hasShiftDown()) {
+        if (!P2SInputCompat.hasShiftDown()) {
             selectionActive = true;
             selectionAnchorLine = cursorLine;
             selectionAnchorColumn = cursorColumn;
@@ -239,7 +239,7 @@ public class P2SMultiLineTextEditor {
         if (!focused) {
             return false;
         }
-        if (Screen.hasControlDown()) {
+        if (P2SInputCompat.hasControlDown()) {
             if (keyCode == GLFW.GLFW_KEY_A) {
                 selectAllText();
                 return true;
@@ -255,7 +255,7 @@ public class P2SMultiLineTextEditor {
             }
             if (keyCode == GLFW.GLFW_KEY_V) {
                 Minecraft minecraft = Minecraft.getInstance();
-                String clipboard = minecraft == null ? "" : minecraft.keyboardHandler.getClipboard();
+                String clipboard = P2SInputCompat.getClipboard(minecraft);
                 if (clipboard != null && !clipboard.isEmpty()) {
                     insertText(clipboard);
                 }
@@ -263,7 +263,7 @@ public class P2SMultiLineTextEditor {
             }
         }
 
-        boolean selecting = Screen.hasShiftDown();
+        boolean selecting = P2SInputCompat.hasShiftDown();
         return switch (keyCode) {
             case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
                 insertText("\n");
@@ -318,7 +318,7 @@ public class P2SMultiLineTextEditor {
     }
 
     public boolean charTyped(char codePoint, int modifiers) {
-        if (!focused || Screen.hasControlDown() || Character.isISOControl(codePoint)) {
+        if (!focused || P2SInputCompat.hasControlDown() || Character.isISOControl(codePoint)) {
             return false;
         }
         insertText(Character.toString(codePoint));
@@ -525,7 +525,7 @@ public class P2SMultiLineTextEditor {
         }
         String text = getSelectionText();
         if (!text.isEmpty()) {
-            minecraft.keyboardHandler.setClipboard(text);
+            P2SInputCompat.setClipboard(minecraft, text);
         }
     }
 

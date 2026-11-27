@@ -9,13 +9,14 @@ import com.p2s.screen.widget.P2SFlatButton;
 import com.p2s.screen.widget.P2SThemedEditBox;
 import com.p2s.screen.widget.ThemePaint;
 import com.p2s.P2SI18n;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SScreenBase;
+import com.p2s.compat.P2SWidgetCompat;
 import com.p2s.screen.widget.P2SMultiLineTextEditor;
 import com.p2s.store.SkillStore;
 
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
@@ -23,7 +24,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.ArrayList;
 import java.util.List;
 
-public class P2SConfigScreen extends Screen {
+public class P2SConfigScreen extends P2SScreenBase {
     private enum Tab { GENERAL, LLM, SKILLS }
 
     private static final int VISIBLE_ROWS = 8;
@@ -146,7 +147,7 @@ public class P2SConfigScreen extends Screen {
         Component label = P2SI18n.tr("screen.p2s.config.appearance", theme.name());
         themeButton.setMessage(font.width(label) + 8 <= themeButton.getWidth()
                 ? label : Component.literal(theme.name()));
-        themeButton.setTooltip(Tooltip.create(P2SI18n.tr("screen.p2s.config.appearance_hint", theme.name(), theme.id())));
+        P2SWidgetCompat.setTooltip(themeButton, P2SI18n.tr("screen.p2s.config.appearance_hint", theme.name(), theme.id()));
     }
 
     private Component tabLabel(Tab tab) {
@@ -642,7 +643,7 @@ public class P2SConfigScreen extends Screen {
     // ──────────────────────── Input handling ────────────────────────
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             onClose();
             return true;
@@ -651,24 +652,24 @@ public class P2SConfigScreen extends Screen {
             return true;
         }
         for (EditBox box : collectEditBoxes()) {
-            if (box != null && box.keyPressed(keyCode, scanCode, modifiers)) return true;
+            if (P2SWidgetCompat.keyPressed(box, keyCode, scanCode, modifiers)) return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public boolean charTyped(char codePoint, int modifiers) {
+    public boolean p2sCharTyped(char codePoint, int modifiers) {
         if (currentTab == Tab.LLM && systemPromptEditor != null && systemPromptEditor.charTyped(codePoint, modifiers)) {
             return true;
         }
         for (EditBox box : collectEditBoxes()) {
-            if (box != null && box.charTyped(codePoint, modifiers)) return true;
+            if (P2SWidgetCompat.charTyped(box, codePoint, modifiers)) return true;
         }
-        return super.charTyped(codePoint, modifiers);
+        return p2sSuperCharTyped(codePoint, modifiers);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseClicked(double mouseX, double mouseY, int button) {
         if (currentTab == Tab.LLM && systemPromptEditor != null && systemPromptEditor.mouseClicked(mouseX, mouseY, button)) {
             if (apiUrlInput != null) apiUrlInput.setFocused(false);
             if (apiKeyInput != null) apiKeyInput.setFocused(false);
@@ -685,31 +686,31 @@ public class P2SConfigScreen extends Screen {
         if (button == 0 && systemPromptEditor != null) {
             systemPromptEditor.setFocused(false);
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return p2sSuperMouseClicked(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean p2sMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (currentTab == Tab.LLM && systemPromptEditor != null && systemPromptEditor.mouseDragged(mouseX, mouseY, button)) {
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return p2sSuperMouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseReleased(double mouseX, double mouseY, int button) {
         if (currentTab == Tab.LLM && systemPromptEditor != null && systemPromptEditor.mouseReleased(mouseX, mouseY, button)) {
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return p2sSuperMouseReleased(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+    public boolean p2sMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (currentTab == Tab.LLM && systemPromptEditor != null && systemPromptEditor.mouseScrolled(mouseX, mouseY, verticalAmount)) {
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
+        return p2sSuperMouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
     }
 
     private List<EditBox> collectEditBoxes() {
@@ -723,7 +724,7 @@ public class P2SConfigScreen extends Screen {
     // ──────────────────────── Render ────────────────────────
 
     @Override
-    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRenderBackground(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         int panelWidth = Math.min(760, this.width - 24);
         int left = (this.width - panelWidth) / 2;
         gfx.fill(0, 0, this.width, this.height, ThemePaint.color("backdrop"));
@@ -731,9 +732,9 @@ public class P2SConfigScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRender(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         updateThemeLabel();
-        super.render(gfx, mouseX, mouseY, delta);
+        p2sSuperRender(gfx, mouseX, mouseY, delta);
 
         int panelWidth = Math.min(760, this.width - 24);
         int left = (this.width - panelWidth) / 2;
@@ -759,14 +760,14 @@ public class P2SConfigScreen extends Screen {
         }
     }
 
-    private void renderGeneralTab(GuiGraphics gfx, int left, int top) {
+    private void renderGeneralTab(P2SGfx gfx, int left, int top) {
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.general.selection_item"), left + 10, top, ThemePaint.color("text"), false);
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.general.default_value", P2SClientConfig.defaultSelectionItemId()), left + 10, top + 38, ThemePaint.color("faint"), false);
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.general.skills_path"), left + 10, top + 76, ThemePaint.color("faint"), false);
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.general.llm_path"), left + 10, top + 88, ThemePaint.color("faint"), false);
     }
 
-    private void renderLlmTab(GuiGraphics gfx, int left, int top, int panelWidth) {
+    private void renderLlmTab(P2SGfx gfx, int left, int top, int panelWidth) {
         int y = top;
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.llm.api_url"), left + 10, y, ThemePaint.color("muted"), false);
         y += 50;
@@ -799,7 +800,7 @@ public class P2SConfigScreen extends Screen {
         }
     }
 
-    private void renderSkillsTab(GuiGraphics gfx, int left, int top, int panelWidth) {
+    private void renderSkillsTab(P2SGfx gfx, int left, int top, int panelWidth) {
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.skills.path"), left + 8, top + 6, ThemePaint.color("muted"), false);
         ThemePaint.text(gfx, this.font, P2SI18n.tr("screen.p2s.config.skills.total", skills.size()), left + 8, top + 18, ThemePaint.color("muted"), false);
 

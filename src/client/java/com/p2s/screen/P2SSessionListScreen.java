@@ -8,9 +8,10 @@ import static com.p2s.screen.widget.ThemePaint.color;
 import com.p2s.ClientAgentManager;
 import com.p2s.ClientSessionState;
 import com.p2s.P2SI18n;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SScreenBase;
 import com.p2s.store.SessionPersistence;
 
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -21,7 +22,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-public class P2SSessionListScreen extends Screen {
+public class P2SSessionListScreen extends P2SScreenBase {
     private static final int VISIBLE_ROWS = 10;
     private static final int ROW_HEIGHT = 22;
     private static final int BUTTON_WIDTH = 50;
@@ -195,13 +196,13 @@ public class P2SSessionListScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRenderBackground(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         gfx.fill(0, 0, this.width, this.height, color("backdrop"));
     }
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
-        super.render(gfx, mouseX, mouseY, delta);
+    public void p2sRender(P2SGfx gfx, int mouseX, int mouseY, float delta) {
+        p2sSuperRender(gfx, mouseX, mouseY, delta);
 
         int panelWidth = Math.min(640, this.width - 40);
         int left = (this.width - panelWidth) / 2;
@@ -214,12 +215,12 @@ public class P2SSessionListScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             onClose();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return p2sSuperKeyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override

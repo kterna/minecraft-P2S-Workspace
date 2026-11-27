@@ -1,19 +1,19 @@
 package com.p2s;
 
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SHudCompat;
 import com.p2s.screen.widget.ThemePaint;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.network.chat.Component;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 
 public final class HudOverlay {
     private HudOverlay() {
     }
 
     public static void register() {
-        HudRenderCallback.EVENT.register((drawContext, tickDelta) -> {
+        P2SHudCompat.register(gfx -> {
             Minecraft client = Minecraft.getInstance();
             if (client.player == null) {
                 return;
@@ -21,7 +21,6 @@ public final class HudOverlay {
 
             int x = 8;
             int y = 8;
-            GuiGraphics gfx = drawContext;
 
             boolean canSelect = ClientSelectionManager.isSelectionToolHeld(client.player);
             String selectionItem = P2SClientConfig.getSelectionItemId();
@@ -68,7 +67,7 @@ public final class HudOverlay {
         });
     }
 
-    private static void drawLine(GuiGraphics gfx, Font font, Component line, int x, int y) {
+    private static void drawLine(P2SGfx gfx, Font font, Component line, int x, int y) {
         gfx.fill(x - 2, y - 1, x + font.width(line) + 2, y + font.lineHeight, ThemePaint.color("overlay"));
         ThemePaint.text(gfx, font, line, x, y, ThemePaint.color("on-overlay"), true);
     }

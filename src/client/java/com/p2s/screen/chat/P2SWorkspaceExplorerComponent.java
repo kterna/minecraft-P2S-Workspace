@@ -2,6 +2,7 @@ package com.p2s.screen.chat;
 
 import com.p2s.ClientSessionState;
 import com.p2s.P2SI18n;
+import com.p2s.compat.P2SWidgetCompat;
 import com.p2s.screen.widget.P2SFlatButton;
 import com.p2s.screen.widget.P2SThemedEditBox;
 import net.minecraft.client.gui.Font;
@@ -95,7 +96,7 @@ public final class P2SWorkspaceExplorerComponent {
                             ? P2SI18n.tr("screen.p2s.workspace.folder_path")
                             : P2SI18n.tr("screen.p2s.workspace.path")
             ));
-            createInput.setHint(config.createFolderMode()
+            P2SWidgetCompat.setHint(createInput, config.createFolderMode()
                     ? P2SI18n.tr("screen.p2s.workspace.folder_hint")
                     : P2SI18n.tr("screen.p2s.workspace.path_hint"));
             createInput.setValue(config.createDraft() == null ? "" : config.createDraft());
@@ -130,7 +131,7 @@ public final class P2SWorkspaceExplorerComponent {
                     config.inputHeight(),
                     P2SI18n.tr("screen.p2s.workspace.path")
             ));
-            renameInput.setHint(P2SI18n.tr("screen.p2s.workspace.path_hint"));
+            P2SWidgetCompat.setHint(renameInput, P2SI18n.tr("screen.p2s.workspace.path_hint"));
             renameInput.setValue(config.renameDraft() == null ? "" : config.renameDraft());
 
             renameOkButton = host.addButton(new P2SFlatButton(

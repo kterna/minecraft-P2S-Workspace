@@ -1,17 +1,18 @@
 package com.p2s.screen.widget;
 
-import net.minecraft.Util;
+import com.p2s.compat.P2SButtonBase;
+import com.p2s.compat.P2SGameCompat;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SInputCompat;
+import com.p2s.compat.P2SWidgetCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
 
 import static com.p2s.screen.widget.ThemePaint.color;
 
-public class P2SFlatButton extends Button {
+public class P2SFlatButton extends P2SButtonBase {
     public enum Variant { NORMAL, PRIMARY, DANGER, MUTED }
 
     private final Variant variant;
@@ -27,7 +28,7 @@ public class P2SFlatButton extends Button {
     }
 
     public P2SFlatButton(int x, int y, int width, int height, Component message, OnPress onPress, Variant variant) {
-        super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+        super(x, y, width, height, message, onPress);
         this.variant = variant == null ? Variant.NORMAL : variant;
     }
 
@@ -39,7 +40,7 @@ public class P2SFlatButton extends Button {
         private final Component label;
         private final OnPress action;
         private int x, y, width = 150, height = 20;
-        private Tooltip tooltip;
+        private Component tooltip;
         private Variant variant = Variant.NORMAL;
 
         private Factory(Component label, OnPress action) {
@@ -55,7 +56,7 @@ public class P2SFlatButton extends Button {
             return this;
         }
 
-        public Factory tooltip(Tooltip tooltip) {
+        public Factory tooltip(Component tooltip) {
             this.tooltip = tooltip;
             return this;
         }
@@ -67,7 +68,7 @@ public class P2SFlatButton extends Button {
 
         public P2SFlatButton build() {
             P2SFlatButton button = new P2SFlatButton(x, y, width, height, label, action, variant);
-            if (tooltip != null) button.setTooltip(tooltip);
+            if (tooltip != null) P2SWidgetCompat.setTooltip(button, tooltip);
             return button;
         }
     }
@@ -77,21 +78,21 @@ public class P2SFlatButton extends Button {
     }
 
     @Override
-    public void onClick(double mouseX, double mouseY) {
+    protected void p2sOnClick(double mouseX, double mouseY) {
         mouseDown = true;
-        super.onClick(mouseX, mouseY);
+        p2sSuperOnClick(mouseX, mouseY);
     }
 
     @Override
     public void onPress() {
-        pressedUntil = Util.getMillis() + 100;
+        pressedUntil = P2SGameCompat.millis() + 100;
         super.onPress();
     }
 
     @Override
-    protected void renderWidget(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
+    protected void p2sRenderWidget(P2SGfx gfx, int mouseX, int mouseY, float partialTick) {
         Minecraft client = Minecraft.getInstance();
-        if (mouseDown && GLFW.glfwGetMouseButton(client.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT) != GLFW.GLFW_PRESS) {
+        if (mouseDown && !P2SInputCompat.isLeftMouseDown(client)) {
             mouseDown = false;
         }
         int x = getX(), y = getY(), right = x + width, bottom = y + height;
@@ -101,13 +102,13 @@ public class P2SFlatButton extends Button {
         gfx.fill(x, y, right, bottom, bg);
         gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("selected"), selection.value(selected)));
         gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("hover"), hover.value(active && isHovered())));
-        gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("pressed"), press.value(active && (mouseDown || Util.getMillis() < pressedUntil))));
+        gfx.fill(x, y, right, bottom, ThemePaint.alpha(color("pressed"), press.value(active && (mouseDown || P2SGameCompat.millis() < pressedUntil))));
         ThemePaint.border(gfx, x, y, width, height, color(isFocused() ? "focus" : primary ? "accent" : "line"));
         if (selected) gfx.fill(x, y + 1, x + 1, bottom - 1, color("accent"));
         drawLabel(gfx, client.font, ink);
     }
 
-    private void drawLabel(GuiGraphics gfx, Font font, int ink) {
+    private void drawLabel(P2SGfx gfx, Font font, int ink) {
         int left = getX() + 2, right = getX() + width - 2;
         if (left >= right) return;
         int textWidth = font.width(getMessage());
@@ -119,7 +120,7 @@ public class P2SFlatButton extends Button {
         }
         // Vanilla buttons reveal long translated labels by scrolling them inside the button.
         double period = Math.max(overflow * 0.5, 3.0);
-        double phase = Math.sin(Math.PI / 2 * Math.cos(2 * Math.PI * Util.getMillis() / 1000 / period)) / 2 + 0.5;
+        double phase = Math.sin(Math.PI / 2 * Math.cos(2 * Math.PI * P2SGameCompat.millis() / 1000 / period)) / 2 + 0.5;
         gfx.enableScissor(left, getY(), right, getY() + height);
         ThemePaint.text(gfx, font, getMessage(), left - (int) (overflow * phase), y, ink, true);
         gfx.disableScissor();

@@ -1,6 +1,7 @@
 package com.p2s.screen.chat;
 
 import com.p2s.P2SI18n;
+import com.p2s.compat.P2SWidgetCompat;
 import com.p2s.screen.widget.P2SFlatButton;
 import com.p2s.screen.widget.P2SThemedEditBox;
 import net.minecraft.client.gui.Font;
@@ -236,7 +237,7 @@ public final class P2SChatSessionWidgets {
         EditBox choiceCustomInput = host.addEditBox(new P2SThemedEditBox(host.font(), popupInnerX, customY, customInputWidth,
                 config.inputHeight(), Component.empty()));
         choiceCustomInput.setMaxLength(256);
-        choiceCustomInput.setHint(P2SI18n.tr("screen.p2s.chat.choice.custom_hint"));
+        P2SWidgetCompat.setHint(choiceCustomInput, P2SI18n.tr("screen.p2s.chat.choice.custom_hint"));
         choiceCustomInput.setValue(config.choiceCustomDraft() == null ? "" : config.choiceCustomDraft());
         choiceCustomInput.visible = config.choicePopupVisible();
 
@@ -251,7 +252,7 @@ public final class P2SChatSessionWidgets {
         EditBox discardReasonInput = host.addEditBox(new P2SThemedEditBox(host.font(), rowStart, discardRowY, discardInputWidth,
                 config.inputHeight(), Component.empty()));
         discardReasonInput.setMaxLength(256);
-        discardReasonInput.setHint(P2SI18n.tr("screen.p2s.chat.discard_reason_hint"));
+        P2SWidgetCompat.setHint(discardReasonInput, P2SI18n.tr("screen.p2s.chat.discard_reason_hint"));
         discardReasonInput.setValue(config.discardReasonDraft() == null ? "" : config.discardReasonDraft());
         discardReasonInput.visible = false;
 

@@ -1,6 +1,11 @@
 package com.p2s;
 
 import com.google.gson.JsonObject;
+import com.p2s.compat.P2SEditBoxBase;
+import com.p2s.compat.P2SGameCompat;
+import com.p2s.compat.P2SGfx;
+import com.p2s.compat.P2SInputCompat;
+import com.p2s.compat.P2SScreenBase;
 import com.p2s.preview.ClientPreviewStore;
 import com.p2s.preview.OrbitCamera;
 import com.p2s.screen.P2SCheckpointListScreen;
@@ -9,16 +14,11 @@ import com.p2s.screen.P2SProjectListScreen;
 import com.p2s.screen.P2SSessionListScreen;
 import com.p2s.workbench.LineDiff;
 import com.p2s.workbench.WbPalette;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -34,7 +34,7 @@ import java.util.concurrent.CompletableFuture;
  * 对话 / 文件 / 审阅, the real world on the right with ghost previews and the orbit camera.
  * Drawn immediate-mode: every frame rebuilds the click regions, so layout follows state directly.
  */
-public class P2SWorkbenchScreen extends Screen {
+public class P2SWorkbenchScreen extends P2SScreenBase {
     private enum Tab { CHAT, FILES, REVIEW }
 
     private static final int TOP = 20;
@@ -126,13 +126,13 @@ public class P2SWorkbenchScreen extends Screen {
             previousHideGui = minecraft.options.hideGui;
             minecraft.options.hideGui = true;
         }
-        input = new EditBox(font, 0, 0, 10, 12, P2SI18n.tr("screen.p2s.wb.input"));
+        input = new P2SEditBoxBase(font, 0, 0, 10, 12, P2SI18n.tr("screen.p2s.wb.input"));
         input.setMaxLength(8000);
         input.setBordered(false);
         input.setValue(draft);
         input.setResponder(value -> draft = value);
         addRenderableWidget(input);
-        reason = new EditBox(font, 0, 0, 10, 12, P2SI18n.tr("screen.p2s.wb.discard_reason"));
+        reason = new P2SEditBoxBase(font, 0, 0, 10, 12, P2SI18n.tr("screen.p2s.wb.discard_reason"));
         reason.setMaxLength(500);
         reason.setBordered(false);
         addRenderableWidget(reason);
@@ -178,14 +178,14 @@ public class P2SWorkbenchScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRenderBackground(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         // The world stays visible; panels paint their own backgrounds.
     }
 
     // ------------------------------------------------------------------ render
 
     @Override
-    public void render(GuiGraphics gfx, int mouseX, int mouseY, float delta) {
+    public void p2sRender(P2SGfx gfx, int mouseX, int mouseY, float delta) {
         hits.clear();
         layoutInputs();
         trackRun();
@@ -210,7 +210,7 @@ public class P2SWorkbenchScreen extends Screen {
             renderStatusBar(gfx, pw);
         }
         renderWorldControls(gfx, mouseX, mouseY, pw);
-        super.render(gfx, mouseX, mouseY, delta);
+        p2sSuperRender(gfx, mouseX, mouseY, delta);
         if (menuOpen) {
             renderMenu(gfx, mouseX, mouseY, pw);
         }
@@ -225,7 +225,7 @@ public class P2SWorkbenchScreen extends Screen {
         }
     }
 
-    private void renderCollapsed(GuiGraphics gfx, int mouseX, int mouseY) {
+    private void renderCollapsed(P2SGfx gfx, int mouseX, int mouseY) {
         gfx.fill(0, 0, COLLAPSED, height, c("panel"));
         gfx.fill(COLLAPSED - 1, 0, COLLAPSED, height, c("line"));
         button(gfx, "expand", 2, 4, COLLAPSED - 3, 16, "»", false, mouseX, mouseY, () -> setCollapsed(false));
@@ -240,7 +240,7 @@ public class P2SWorkbenchScreen extends Screen {
         }
     }
 
-    private void renderTopBar(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderTopBar(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         gfx.fill(0, 0, pw - 1, TOP, c("inset"));
         gfx.fill(0, TOP - 1, pw - 1, TOP, c("line"));
         int x = PAD;
@@ -261,7 +261,7 @@ public class P2SWorkbenchScreen extends Screen {
                 () -> setCollapsed(true));
     }
 
-    private void renderTabs(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderTabs(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         int y = TOP;
         gfx.fill(0, y, pw - 1, y + TABS, c("panel"));
         gfx.fill(0, y + TABS - 1, pw - 1, y + TABS, c("line"));
@@ -295,7 +295,7 @@ public class P2SWorkbenchScreen extends Screen {
         }
     }
 
-    private void renderStatusBar(GuiGraphics gfx, int pw) {
+    private void renderStatusBar(P2SGfx gfx, int pw) {
         int y = height - STATUS;
         gfx.fill(0, y, pw - 1, height, c("inset"));
         gfx.fill(0, y, pw - 1, y + 1, c("line"));
@@ -318,7 +318,7 @@ public class P2SWorkbenchScreen extends Screen {
 
     // ------------------------------------------------------------------ chat
 
-    private void renderChat(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderChat(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         int top = contentTop();
         int bottom = contentBottom();
         int maxScroll = Math.max(0, chatContentHeight - (bottom - top));
@@ -372,7 +372,7 @@ public class P2SWorkbenchScreen extends Screen {
             "screen.p2s.wb.example.1", "screen.p2s.wb.example.2", "screen.p2s.wb.example.3"};
 
     /** Empty conversation: what the panel is for, and a few prompts that fill the input. */
-    private int renderWelcome(GuiGraphics gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
+    private int renderWelcome(P2SGfx gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
         y += 8;
         gfx.drawString(font, P2SI18n.tr("screen.p2s.wb.welcome.title").getString(), PAD, y, c("text"), false);
         y += LINE + 4;
@@ -413,7 +413,7 @@ public class P2SWorkbenchScreen extends Screen {
                 || ClientSessionState.MESSAGE_KIND_TOOL_ERROR.equals(message.kind());
     }
 
-    private int renderMessage(GuiGraphics gfx, ClientSessionState.ChatMessage message, int y, int w) {
+    private int renderMessage(P2SGfx gfx, ClientSessionState.ChatMessage message, int y, int w) {
         String role = message.role();
         if (P2SI18n.ROLE_USER.equals(role)) {
             List<FormattedCharSequence> lines = wrap(message.text(), w - 10);
@@ -440,7 +440,7 @@ public class P2SWorkbenchScreen extends Screen {
         return ly + 4;
     }
 
-    private int renderAgentText(GuiGraphics gfx, String text, int y, int w) {
+    private int renderAgentText(P2SGfx gfx, String text, int y, int w) {
         gfx.drawString(font, "P2S Agent", PAD, y, c("accent"), false);
         int ly = y + LINE;
         for (FormattedCharSequence line : wrap(text, w - 4)) {
@@ -450,7 +450,7 @@ public class P2SWorkbenchScreen extends Screen {
         return ly + 5;
     }
 
-    private int renderToolCard(GuiGraphics gfx, List<ClientSessionState.ChatMessage> tools, int y, int w,
+    private int renderToolCard(P2SGfx gfx, List<ClientSessionState.ChatMessage> tools, int y, int w,
                                int mouseX, int mouseY, int clipTop, int clipBottom) {
         int x = PAD;
         int headerH = 13;
@@ -502,7 +502,7 @@ public class P2SWorkbenchScreen extends Screen {
         return y + h + 5;
     }
 
-    private int renderPlan(GuiGraphics gfx, int y, int w) {
+    private int renderPlan(P2SGfx gfx, int y, int w) {
         List<ClientSessionState.PlanItem> items = ClientSessionState.getPlanItems();
         if (items.isEmpty()) {
             return y;
@@ -530,7 +530,7 @@ public class P2SWorkbenchScreen extends Screen {
         return y + h + 6;
     }
 
-    private int renderChoice(GuiGraphics gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
+    private int renderChoice(P2SGfx gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
         ClientSessionState.ChoiceRequest choice = ClientSessionState.getPendingChoice();
         if (choice == null) {
             return y;
@@ -556,7 +556,7 @@ public class P2SWorkbenchScreen extends Screen {
         return y + h + 6;
     }
 
-    private int renderPendingCard(GuiGraphics gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
+    private int renderPendingCard(P2SGfx gfx, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
         List<ClientSessionState.WorkspaceFileInfo> pending = pendingFiles();
         if (pending.isEmpty()) {
             return y;
@@ -592,7 +592,7 @@ public class P2SWorkbenchScreen extends Screen {
         return y + h + 6;
     }
 
-    private void renderInputBar(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderInputBar(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         int y = height - STATUS - INPUT;
         gfx.fill(0, y, pw - 1, y + INPUT, c("panel"));
         int x1 = PAD;
@@ -623,7 +623,7 @@ public class P2SWorkbenchScreen extends Screen {
 
     // ------------------------------------------------------------------ review
 
-    private void renderReview(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderReview(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         int top = contentTop();
         int bottom = contentBottom() - (discardOpen ? 16 : 0);
         List<ClientSessionState.WorkspaceFileInfo> pending = pendingFiles();
@@ -678,7 +678,7 @@ public class P2SWorkbenchScreen extends Screen {
         renderScrollbar(gfx, pw - 4, top, bottom, reviewScroll, reviewContentHeight);
     }
 
-    private int renderSummary(GuiGraphics gfx, String path, int y, int w) {
+    private int renderSummary(P2SGfx gfx, String path, int y, int w) {
         gfx.drawString(font, ellipsize(path, w), PAD, y, c("text"), false);
         y += LINE + 2;
         String risk = ClientSessionState.getPendingRisk();
@@ -739,7 +739,7 @@ public class P2SWorkbenchScreen extends Screen {
         return y + 4;
     }
 
-    private int renderDiffToggle(GuiGraphics gfx, String path, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
+    private int renderDiffToggle(P2SGfx gfx, String path, int y, int w, int mouseX, int mouseY, int clipTop, int clipBottom) {
         String label = (diffOpen ? "▾ " : "▸ ") + P2SI18n.tr("screen.p2s.wb.review.diff").getString();
         if (y >= clipTop && y + 12 <= clipBottom) {
             button(gfx, "diff", PAD, y, PAD + font.width(label) + 10, y + 12, label, diffOpen, mouseX, mouseY,
@@ -783,7 +783,7 @@ public class P2SWorkbenchScreen extends Screen {
         return y + 4;
     }
 
-    private void renderReviewActions(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderReviewActions(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         int y = height - STATUS - INPUT;
         int barTop = y - (discardOpen ? 16 : 0);
         gfx.fill(0, barTop, pw - 1, y + INPUT, c("panel"));
@@ -851,7 +851,7 @@ public class P2SWorkbenchScreen extends Screen {
 
     // ------------------------------------------------------------------ files
 
-    private void renderFiles(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderFiles(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         int top = contentTop();
         int bottom = contentBottom();
         List<ClientSessionState.WorkspaceFileInfo> files = ClientSessionState.getWorkspaceFiles();
@@ -941,7 +941,7 @@ public class P2SWorkbenchScreen extends Screen {
 
     // ------------------------------------------------------------------ world and menu
 
-    private void renderWorldControls(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderWorldControls(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         if (width - pw < 120) {
             return;
         }
@@ -975,7 +975,7 @@ public class P2SWorkbenchScreen extends Screen {
         }
     }
 
-    private void renderMenu(GuiGraphics gfx, int mouseX, int mouseY, int pw) {
+    private void renderMenu(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         List<Object[]> items = new ArrayList<>();
         items.add(new Object[]{"screen.p2s.wb.menu.new_session", (Runnable) ClientAgentManager::newSession});
         items.add(new Object[]{"screen.p2s.wb.menu.sessions", (Runnable) () -> minecraft.setScreen(new P2SSessionListScreen(this))});
@@ -998,8 +998,7 @@ public class P2SWorkbenchScreen extends Screen {
         int x1 = Math.max(2, x2 - w);
         int y1 = TOP - 2;
         int h = items.size() * 13 + 4;
-        gfx.pose().pushPose();
-        gfx.pose().translate(0, 0, 400);
+        gfx.pushPopupLayer();
         gfx.fill(x1, y1, x2, y1 + h, c("raised"));
         outline(gfx, x1, y1, x2, y1 + h, c("line"));
         int y = y1 + 2;
@@ -1017,13 +1016,13 @@ public class P2SWorkbenchScreen extends Screen {
             }));
             y += 13;
         }
-        gfx.pose().popPose();
+        gfx.popPopupLayer();
     }
 
     // ------------------------------------------------------------------ input
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
             // Topmost (last drawn) region wins; the menu is drawn last.
             for (int k = hits.size() - 1; k >= 0; k--) {
@@ -1054,29 +1053,29 @@ public class P2SWorkbenchScreen extends Screen {
             setFocused(null);
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return p2sSuperMouseClicked(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    public boolean p2sMouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
         if (button == 1 && OrbitCamera.dragging()) {
             OrbitCamera.drag(dragX, dragY);
             return true;
         }
-        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+        return p2sSuperMouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+    public boolean p2sMouseReleased(double mouseX, double mouseY, int button) {
         if (button == 1 && OrbitCamera.dragging()) {
             OrbitCamera.endDrag();
             return true;
         }
-        return super.mouseReleased(mouseX, mouseY, button);
+        return p2sSuperMouseReleased(mouseX, mouseY, button);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+    public boolean p2sMouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
         if (!overPanel(mouseX, mouseY) && !collapsed || collapsed && mouseX >= COLLAPSED) {
             if (OrbitCamera.active()) {
                 OrbitCamera.zoom(vertical);
@@ -1097,7 +1096,7 @@ public class P2SWorkbenchScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int key, int scan, int modifiers) {
+    public boolean p2sKeyPressed(int key, int scan, int modifiers) {
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             return escape();
         }
@@ -1117,13 +1116,13 @@ public class P2SWorkbenchScreen extends Screen {
             }
         }
         if (input.isFocused() || reason.isFocused()) {
-            return super.keyPressed(key, scan, modifiers);
+            return p2sSuperKeyPressed(key, scan, modifiers);
         }
-        if (minecraft != null && ModKeyBindings.OPEN_CHAT.matches(key, scan)) {
+        if (minecraft != null && P2SInputCompat.matchesKey(ModKeyBindings.OPEN_CHAT, key, scan)) {
             onClose();
             return true;
         }
-        return super.keyPressed(key, scan, modifiers);
+        return p2sSuperKeyPressed(key, scan, modifiers);
     }
 
     /** One layer per press: menu → discard box → text focus → back to chat → close. */
@@ -1250,12 +1249,7 @@ public class P2SWorkbenchScreen extends Screen {
     }
 
     private static ItemStack iconFor(String blockId) {
-        ResourceLocation id = ResourceLocation.tryParse(blockId);
-        if (id == null) {
-            return ItemStack.EMPTY;
-        }
-        Block block = BuiltInRegistries.BLOCK.get(id);
-        return new ItemStack(block.asItem());
+        return P2SGameCompat.iconForBlock(blockId);
     }
 
     // ------------------------------------------------------------------ drawing helpers
@@ -1287,18 +1281,18 @@ public class P2SWorkbenchScreen extends Screen {
         return ".".repeat((int) (System.currentTimeMillis() / 400 % 4));
     }
 
-    private void centered(GuiGraphics gfx, String text, int pw, int y, int color) {
+    private void centered(P2SGfx gfx, String text, int pw, int y, int color) {
         gfx.drawString(font, text, (pw - font.width(text)) / 2, y, color, false);
     }
 
-    private static void outline(GuiGraphics gfx, int x1, int y1, int x2, int y2, int color) {
+    private static void outline(P2SGfx gfx, int x1, int y1, int x2, int y2, int color) {
         gfx.fill(x1, y1, x2, y1 + 1, color);
         gfx.fill(x1, y2 - 1, x2, y2, color);
         gfx.fill(x1, y1, x1 + 1, y2, color);
         gfx.fill(x2 - 1, y1, x2, y2, color);
     }
 
-    private void renderScrollbar(GuiGraphics gfx, int x, int top, int bottom, double scroll, int content) {
+    private void renderScrollbar(P2SGfx gfx, int x, int top, int bottom, double scroll, int content) {
         int view = bottom - top;
         if (content <= view) {
             return;
@@ -1321,7 +1315,7 @@ public class P2SWorkbenchScreen extends Screen {
         return value;
     }
 
-    private void button(GuiGraphics gfx, String id, int x1, int y1, int x2, int y2, String label, boolean active,
+    private void button(P2SGfx gfx, String id, int x1, int y1, int x2, int y2, String label, boolean active,
                         int mouseX, int mouseY, Runnable action) {
         float h = hoverAmount(id, mouseX, mouseY, x1, y1, x2, y2);
         int bg = active ? c("selected") : WbPalette.mix(c("raised"), c("hover"), h);
@@ -1331,7 +1325,7 @@ public class P2SWorkbenchScreen extends Screen {
         hits.add(new Hit(x1, y1, x2, y2, action));
     }
 
-    private void primaryButton(GuiGraphics gfx, String id, int x1, int y1, int x2, int y2, String label,
+    private void primaryButton(P2SGfx gfx, String id, int x1, int y1, int x2, int y2, String label,
                                int mouseX, int mouseY, Runnable action) {
         float h = hoverAmount(id, mouseX, mouseY, x1, y1, x2, y2);
         gfx.fill(x1, y1, x2, y2, WbPalette.mix(c("accent"), c("pressed"), h * 0.35f));
@@ -1339,7 +1333,7 @@ public class P2SWorkbenchScreen extends Screen {
         hits.add(new Hit(x1, y1, x2, y2, action));
     }
 
-    private void dangerButton(GuiGraphics gfx, String id, int x1, int y1, int x2, int y2, String label,
+    private void dangerButton(P2SGfx gfx, String id, int x1, int y1, int x2, int y2, String label,
                               int mouseX, int mouseY, Runnable action) {
         float h = hoverAmount(id, mouseX, mouseY, x1, y1, x2, y2);
         gfx.fill(x1, y1, x2, y2, WbPalette.mix(c("raised"), c("diff-remove-bg"), h));

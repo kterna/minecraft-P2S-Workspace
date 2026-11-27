@@ -3,7 +3,8 @@ package com.p2s;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import com.p2s.compat.P2SClientNetworkCompat;
+import com.p2s.network.C2SToolBridgePayload;
 import net.minecraft.client.Minecraft;
 
 import java.util.Map;
@@ -95,10 +96,10 @@ public final class ClientToolBridge {
                 }
                 // Packets on one connection arrive in order, so chunks precede the call.
                 for (String chunk : chunks) {
-                    ClientPlayNetworking.send(new com.p2s.network.C2SToolBridgePayload(
+                    P2SClientNetworkCompat.send(new C2SToolBridgePayload(
                             requestId + "-chunk", "__p2s_upload_chunk", chunk));
                 }
-                ClientPlayNetworking.send(new com.p2s.network.C2SToolBridgePayload(
+                P2SClientNetworkCompat.send(new C2SToolBridgePayload(
                         requestId, toolName == null ? "" : toolName, finalArgumentsJson));
             } catch (Exception ex) {
                 future.completeExceptionally(ex);
