@@ -79,8 +79,24 @@ final class ClientHistoryCompactor {
         return total;
     }
 
-    private static long textTokens(String text) {
-        return 4L + (text.length() + 3L) / 4;
+    /**
+     * Rough count without a tokenizer: about four ASCII characters per token, and one token per
+     * other code point. CJK text is close to one token per character on current tokenizers, so
+     * counting it as a quarter would start compaction far too late in Chinese sessions.
+     */
+    static long textTokens(String text) {
+        long ascii = 0;
+        long other = 0;
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            if (codePoint < 0x80) {
+                ascii++;
+            } else {
+                other++;
+            }
+            i += Character.charCount(codePoint);
+        }
+        return 4L + (ascii + 3L) / 4 + other;
     }
 
     private static long messageTokens(AgentMessage message) {
