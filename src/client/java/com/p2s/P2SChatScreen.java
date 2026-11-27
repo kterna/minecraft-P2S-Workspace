@@ -242,6 +242,7 @@ public class P2SChatScreen extends Screen {
 
     @Override
     public void removed() {
+        com.p2s.preview.OrbitCamera.stop();
         rememberRetainedDockLayout();
         super.removed();
     }
@@ -2939,6 +2940,15 @@ public class P2SChatScreen extends Screen {
         if (isGameplayInputActive()) {
             return false;
         }
+        // World preview: right-drag orbits the build, middle-click returns to the player's view.
+        if (button == 1) {
+            com.p2s.preview.OrbitCamera.beginDrag();
+            return true;
+        }
+        if (button == 2 && com.p2s.preview.OrbitCamera.active()) {
+            com.p2s.preview.OrbitCamera.stop();
+            return true;
+        }
 
         int panelWidth = getPanelWidth();
         int panelX = getPanelX(panelWidth);
@@ -3077,6 +3087,10 @@ public class P2SChatScreen extends Screen {
         if (isGameplayInputActive()) {
             return false;
         }
+        if (button == 1 && com.p2s.preview.OrbitCamera.dragging()) {
+            com.p2s.preview.OrbitCamera.drag(dragX, dragY);
+            return true;
+        }
         if (button == 0 && draggingSessionSplitter) {
             updateSessionWidthFromMouse(mouseX);
             createWidgets();
@@ -3103,6 +3117,10 @@ public class P2SChatScreen extends Screen {
         if (isGameplayInputActive()) {
             return false;
         }
+        if (button == 1 && com.p2s.preview.OrbitCamera.dragging()) {
+            com.p2s.preview.OrbitCamera.endDrag();
+            return true;
+        }
         if (button == 0) {
             boolean releasedSplitter = draggingSessionSplitter || draggingExplorerSplitter;
             draggingSessionSplitter = false;
@@ -3122,6 +3140,10 @@ public class P2SChatScreen extends Screen {
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (isGameplayInputActive()) {
             return false;
+        }
+        if (com.p2s.preview.OrbitCamera.dragging()) {
+            com.p2s.preview.OrbitCamera.zoom(verticalAmount);
+            return true;
         }
         if (choicePopupVisible && isInsideChoicePopup(mouseX, mouseY)) {
             return true;

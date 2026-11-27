@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class SessionManager {
     private static final Gson GSON = new Gson();
     private static final WorkspaceExport<ServerPlayer> EXPORT_PAGES = new WorkspaceExport<>();
+    private static final Map<UUID, com.p2s.preview.PreviewEncoder.Snapshot> PREVIEW_SNAPSHOTS = new ConcurrentHashMap<>();
     private static final Map<UUID, Session> sessions = new ConcurrentHashMap<>();
     private static final Map<UUID, String> currentProjectIds = new ConcurrentHashMap<>();
     private static final Map<String, ProjectPersistence.ProjectRecord> loadedProjects = new ConcurrentHashMap<>();
@@ -141,12 +142,14 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
                 // v2 tools: full workspace text, staging of whole-file edits, world inspection.
                 case "export_workspace_manifest" -> handleExportManifest(player, normalizeArgsObject(arguments));
                 case "workspace_text" -> handleWorkspaceText(player, normalizeArgsObject(arguments));
+                case "preview_blocks" -> handlePreviewBlocks(player, normalizeArgsObject(arguments));
                 case "stage_workspace_file" -> handleStageWorkspaceFile(player, normalizeArgsObject(arguments));
                 case "inspect_world" -> WorldInspector.inspect(player, currentProject(player, sessions.get(player.getUUID())),
                         normalizeArgsObject(arguments));
                 default -> buildToolErrorKey(normalizedTool, "message.p2s.tool.unknown_tool");
             };
-            if (!"workspace_text".equals(normalizedTool) && !"inspect_world".equals(normalizedTool) && !"export_workspace_manifest".equals(normalizedTool)) {
+            if (!"workspace_text".equals(normalizedTool) && !"inspect_world".equals(normalizedTool)
+                    && !"export_workspace_manifest".equals(normalizedTool) && !"preview_blocks".equals(normalizedTool)) {
                 sendSessionSync(player, sessions.get(player.getUUID()));
                 ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
                 Session session = sessions.get(player.getUUID());
@@ -659,6 +662,70 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
 
     static void clearExportPage(ServerPlayer player) {
         EXPORT_PAGES.release(player);
+        PREVIEW_SNAPSHOTS.remove(player.getUUID());
+    }
+
+    /**
+     * Block changes of every pending workspace file, for the client's ghost preview. The first
+     * page (no offset) builds a snapshot; later pages must name its version, or they get
+     * error_code "changed" and the client starts over.
+     */
+    private static JsonObject handlePreviewBlocks(ServerPlayer player, JsonObject args) {
+        ProjectPersistence.ProjectRecord project = currentProject(player, sessions.get(player.getUUID()));
+        if (project == null) {
+            PREVIEW_SNAPSHOTS.remove(player.getUUID());
+            JsonObject empty = buildToolSuccess("preview_blocks");
+            empty.add("page", com.p2s.preview.PreviewEncoder.page(
+                    com.p2s.preview.PreviewEncoder.build("", List.of()), 0));
+            return empty;
+        }
+        int offset = args.has("offset") ? Math.max(0, args.get("offset").getAsInt()) : 0;
+        String version = previewVersion(project);
+        com.p2s.preview.PreviewEncoder.Snapshot snapshot = PREVIEW_SNAPSHOTS.get(player.getUUID());
+        if (offset == 0 || snapshot == null || !snapshot.version().equals(version)) {
+            if (offset > 0) {
+                JsonObject changed = buildToolError("preview_blocks", "Pending changes moved on; request the preview again");
+                changed.addProperty("error_code", "changed");
+                return changed;
+            }
+            snapshot = buildPreviewSnapshot(project, version);
+            PREVIEW_SNAPSHOTS.put(player.getUUID(), snapshot);
+        }
+        JsonObject result = buildToolSuccess("preview_blocks");
+        result.add("page", com.p2s.preview.PreviewEncoder.page(snapshot, offset));
+        return result;
+    }
+
+    private static String previewVersion(ProjectPersistence.ProjectRecord project) {
+        StringBuilder version = new StringBuilder(project.id == null ? "" : project.id);
+        project.workspaceFiles.entrySet().stream()
+                .filter(entry -> entry.getValue().pendingPatch != null)
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> version.append('|').append(entry.getKey()).append('@')
+                        .append(entry.getValue().pendingPatch.revisionAfter));
+        return version.toString();
+    }
+
+    private static com.p2s.preview.PreviewEncoder.Snapshot buildPreviewSnapshot(
+            ProjectPersistence.ProjectRecord project, String version) {
+        List<com.p2s.preview.PreviewEncoder.FileDiff> diffs = new ArrayList<>();
+        project.workspaceFiles.entrySet().stream()
+                .filter(entry -> entry.getValue().pendingPatch != null)
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> {
+                    ProjectPersistence.WorkspaceFileRecord workspace = entry.getValue();
+                    StructurePatchEngine.DiffResult diff = StructurePatchEngine.diff(
+                            copyScript(workspace.current), copyScript(workspace.pendingPatch.nextScript));
+                    BlockPos origin = workspaceOrigin(project, workspace);
+                    List<com.p2s.preview.PreviewEncoder.Op> ops = new ArrayList<>(diff.forwardOps.size());
+                    for (PatchModels.BlockOp op : diff.forwardOps) {
+                        ops.add(new com.p2s.preview.PreviewEncoder.Op(origin.getX() + op.x(), origin.getY() + op.y(),
+                                origin.getZ() + op.z(),
+                                net.minecraft.commands.arguments.blocks.BlockStateParser.serialize(op.state())));
+                    }
+                    diffs.add(new com.p2s.preview.PreviewEncoder.FileDiff(entry.getKey(), ops));
+                });
+        return com.p2s.preview.PreviewEncoder.build(version, diffs);
     }
 
     private static JsonObject handleExportManifest(ServerPlayer player, JsonObject args) {
@@ -1380,6 +1447,8 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         item.addProperty("revision", workspace.revision == null ? "" : workspace.revision);
         boolean hasPending = workspace.pendingPatch != null;
         item.addProperty("hasPendingPatch", hasPending);
+        item.addProperty("pendingRevision", hasPending && workspace.pendingPatch.revisionAfter != null
+                ? workspace.pendingPatch.revisionAfter : "");
         item.addProperty("pendingChangedBlocks", hasPending && workspace.pendingPatch.preview != null ? workspace.pendingPatch.preview.changedBlocks : 0);
         boolean hasSize = workspace.size != null;
         item.addProperty("hasSize", hasSize);

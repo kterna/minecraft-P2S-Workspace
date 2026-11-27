@@ -681,7 +681,8 @@ public final class ClientSessionState {
                         getInt(obj, "sizeX"),
                         getInt(obj, "sizeY"),
                         getInt(obj, "sizeZ"),
-                        Math.max(0, getInt(obj, "pendingChangedBlocks"))
+                        Math.max(0, getInt(obj, "pendingChangedBlocks")),
+                        getString(obj, "pendingRevision")
                 ));
             }
         } catch (Exception ignored) {
@@ -910,7 +911,8 @@ public final class ClientSessionState {
             int sizeX,
             int sizeY,
             int sizeZ,
-            int pendingChangedBlocks
+            int pendingChangedBlocks,
+            String pendingRevision
     ) {
     }
 }
