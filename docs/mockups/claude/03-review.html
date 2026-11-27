@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>P2S 面板效果图 · 审阅</title>
+<style>
+html,body{margin:0;background:#161616;color:#d8d8d8;font:14px/1.5 system-ui,'Noto Sans CJK SC',sans-serif}
+.chrome{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 16px;border-bottom:1px solid #2a2a2a}
+.chrome b{color:#fff;font-weight:600}
+.chrome .grp{display:flex;gap:4px;align-items:center}
+.chrome a,.chrome button{font:inherit;font-size:13px;color:#cfcfcf;background:#232323;border:1px solid #3a3a3a;padding:2px 9px;text-decoration:none;cursor:pointer}
+.chrome a.on,.chrome button.on{background:#3b5f86;border-color:#6aa0d8;color:#fff}
+.chrome .lbl{color:#888;font-size:12px}
+.desc{padding:8px 16px 0;color:#aaa;font-size:13px;max-width:1280px}
+.wrap{padding:12px 16px 24px}
+pre.json{display:none;margin:0 16px 12px;padding:10px;background:#0f0f0f;border:1px solid #2a2a2a;color:#cfe3ff;font:12px/1.45 ui-monospace,monospace;max-height:340px;overflow:auto;max-width:1248px}
+pre.json.show{display:block}
+
+.stage{position:relative;overflow:hidden;font-family:'Unifont','WenQuanYi Zen Hei Sharp',monospace;font-size:16px;line-height:var(--lineHeight);color:var(--text);background:#000;-webkit-font-smoothing:none;font-kerning:none;letter-spacing:0}
+.stage *{box-sizing:border-box}
+.w640{width:1280px;height:720px}.w480{width:960px;height:540px}
+.world{position:absolute;left:0;top:0}
+.panel{position:absolute;left:0;top:0;bottom:0;width:var(--panelW);background:var(--panelBg);border-right:2px solid var(--panelEdge);display:flex;flex-direction:column;text-shadow:var(--textShadow)}
+.row{display:flex;align-items:center}
+.grow{flex:1;min-width:0}
+.nw{white-space:nowrap;overflow:hidden}
+.muted{color:var(--textMuted)}.dim{color:var(--textDim)}.acc{color:var(--accent)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.danger{color:var(--danger)}.pend{color:var(--pending)}
+.add{color:var(--diffAddText)}.del{color:var(--diffDelText)}
+.sp4{width:8px;flex:none}.sp8{width:16px;flex:none}
+
+.titlebar{height:36px;flex:none;padding:0 var(--pad);background:var(--headerBg);border-bottom:2px solid var(--divider);gap:6px}
+.logo{width:14px;height:14px;background:var(--accent);flex:none;margin-right:6px;box-shadow:2px 2px 0 var(--bevelLo)}
+.dd{height:28px;padding:0 6px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dd .car{color:var(--textDim)}
+.ib{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:var(--textMuted);flex:none}
+.tabs{height:32px;flex:none;background:var(--tabBarBg);border-bottom:2px solid var(--divider);padding:0 var(--pad) 0 calc(var(--pad) - 4px)}
+.tab{height:32px;padding:0 16px;display:flex;align-items:center;gap:6px;color:var(--tabText);white-space:nowrap}
+.tab.on{background:var(--tabActiveBg);color:var(--tabTextActive);box-shadow:inset 0 -4px 0 var(--accent)}
+.badge{display:inline-block;background:var(--badgeBg);color:var(--badgeText);height:18px;line-height:18px;padding:0 4px;text-shadow:none}
+.runtag{color:var(--accent);white-space:nowrap}
+
+.chat{flex:1;min-height:0;padding:var(--pad);display:flex;flex-direction:column;justify-content:flex-end;gap:12px;overflow:hidden}
+.u{align-self:flex-end;max-width:80%;background:var(--userBubble);border:2px solid var(--userBorder);color:var(--userText);padding:6px 10px}
+.a{color:var(--assistantText)}
+.sys{color:var(--textDim);display:flex;align-items:center;gap:10px;white-space:nowrap}
+.sys:before,.sys:after{content:"";flex:1;height:2px;background:var(--divider)}
+.queued{align-self:flex-end;max-width:80%;border:2px dashed var(--userBorder);color:var(--textMuted);padding:4px 8px 6px 10px;display:flex;gap:12px;align-items:center}
+
+.card{background:var(--surface);border:2px solid var(--border)}
+.card .hd{height:28px;padding:0 8px;gap:8px;white-space:nowrap}
+.card .hd.b{border-bottom:2px solid var(--divider)}
+.step{height:22px;padding:0 8px;gap:8px;display:flex;align-items:center;white-space:nowrap}
+.step .ic{width:16px;text-align:center;flex:none}
+.step .vb{color:var(--toolVerb);width:36px;flex:none}
+.step .ar{flex:1;min-width:0;overflow:hidden}
+.step .t{color:var(--textDim);flex:none}
+.step.cur{background:var(--surfaceHi);box-shadow:inset 4px 0 0 var(--accent)}
+.step.sub{padding-left:32px}
+.nest{padding:2px 8px 4px 60px;color:var(--textMuted);border-left:0}
+.nest div{height:20px;white-space:nowrap;overflow:hidden}
+.think{color:var(--thinkingText)}
+
+.btn{height:28px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;background:var(--buttonBg);border:2px solid var(--buttonBorder);color:var(--buttonText);box-shadow:inset 2px 2px 0 var(--bevelHi),inset -2px -2px 0 var(--bevelLo);text-shadow:var(--buttonTextShadow);white-space:nowrap}
+.btn.p{background:var(--primaryBg);border-color:var(--primaryBorder);color:var(--primaryText)}
+.btn.d{background:var(--dangerBg);border-color:var(--dangerBorder);color:var(--dangerText)}
+.btn.s{height:24px;padding:0 8px}
+.btn.g{background:transparent;border-color:transparent;box-shadow:none;color:var(--textMuted);text-shadow:var(--textShadow)}
+.btn .k{opacity:.65}
+
+.runbar{height:30px;flex:none;padding:0 var(--pad);background:var(--runBarBg);border-top:2px solid var(--divider);gap:10px;white-space:nowrap}
+.composer{flex:none;margin:8px var(--pad) var(--pad);height:68px;background:var(--inputBg);border:2px solid var(--inputBorder);display:flex;color:var(--inputText)}
+.composer.focus{border-color:var(--inputBorderFocus)}
+.composer .txt{flex:1;min-width:0;padding:6px 8px;display:flex;flex-direction:column;justify-content:space-between}
+.composer .ph{color:var(--placeholder)}
+.composer .hint{color:var(--placeholder);white-space:nowrap}
+.composer .side{display:flex;align-items:flex-end;padding:6px}
+.composer.one{height:36px}.composer.one .txt{flex-direction:row;align-items:center;padding:0 8px}.composer.one .side{align-items:center;padding:2px}
+.caret{display:inline-block;width:2px;height:18px;background:var(--caret);vertical-align:-2px}
+.chip{display:inline-flex;height:20px;align-items:center;padding:0 6px;background:var(--surfaceHi);border:2px solid var(--border);color:var(--accent);margin-right:6px;text-shadow:none}
+
+.rc{background:var(--pendingBg);border:2px solid var(--pending)}
+.rc .hd{height:30px;padding:0 10px;gap:8px;border-bottom:2px solid var(--border);white-space:nowrap}
+.rc .f{height:28px;padding:0 10px;gap:10px;display:flex;align-items:center;white-space:nowrap}
+.rc .f + .f{border-top:2px solid var(--divider)}
+.rc .ft{padding:6px 10px;gap:8px;border-top:2px solid var(--border)}
+.dot{width:8px;height:8px;flex:none}
+.bg-ok{background:var(--ok)}.bg-warn{background:var(--warn)}.bg-danger{background:var(--danger)}.bg-pend{background:var(--pending)}.bg-dim{background:var(--textDim)}
+.pathc{width:192px;flex:none;overflow:hidden}
+.num{width:52px;flex:none}
+.tag.fill{background:var(--accent);color:var(--accentText);border-color:var(--accent)}
+.tag{height:18px;line-height:18px;padding:0 4px;border:2px solid currentColor;text-shadow:none;flex:none}
+
+.split{flex:1;min-height:0;display:flex}
+.side-list{width:224px;flex:none;border-right:2px solid var(--divider);display:flex;flex-direction:column}
+.side-list .hd{height:28px;padding:0 10px;border-bottom:2px solid var(--divider);color:var(--textMuted);gap:8px;white-space:nowrap}
+.li{padding:4px 10px 6px;border-bottom:2px solid var(--divider)}
+.li .l1,.li .l2{height:20px;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.li.on{background:var(--surfaceHi);box-shadow:inset 4px 0 0 var(--accent)}
+.li.done{opacity:.55}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.mh{height:32px;flex:none;padding:0 10px;gap:8px;border-bottom:2px solid var(--divider);white-space:nowrap}
+.note{flex:none;margin:8px 10px 0;padding:4px 10px 6px;background:var(--surface);border:2px solid var(--border);box-shadow:inset 4px 0 0 var(--accent);color:var(--text)}
+.code{flex:1;min-height:0;overflow:hidden;background:var(--surface);margin:8px 10px 0;border:2px solid var(--border);padding:4px 0;text-shadow:none}
+.ln{height:20px;display:flex;white-space:pre}
+.ln .g{width:30px;flex:none;text-align:right;color:var(--gutterText);padding-right:6px}
+.ln .m{width:16px;flex:none;text-align:center}
+.ln .x{flex:1;min-width:0;overflow:hidden;padding-left:4px}
+.ln.la{background:var(--diffAddBg);color:var(--diffAddText)}
+.ln.ld{background:var(--diffDelBg);color:var(--diffDelText)}
+.ln.lh{color:var(--textDim);background:var(--surfaceHi)}
+.ln.cur{background:var(--selection)}
+.ln.mod .g{box-shadow:inset -4px 0 0 var(--warn)}
+.k{color:var(--synKey)}.s{color:var(--synString)}.n{color:var(--synNumber)}.sec{color:var(--synSection)}.c{color:var(--synComment)}
+.actions{height:44px;flex:none;padding:0 10px;gap:8px;white-space:nowrap}
+.mfoot{height:24px;flex:none;padding:0 10px;color:var(--textDim);white-space:nowrap;gap:12px}
+
+.tr{height:22px;padding:0 8px;gap:6px;display:flex;align-items:center;white-space:nowrap}
+.tr.on{background:var(--surfaceHi);box-shadow:inset 4px 0 0 var(--accent)}
+.tr .cnt{margin-left:auto;color:var(--textDim)}
+.tfoot{margin-top:auto;padding:6px 8px;border-top:2px solid var(--divider);gap:4px;flex-wrap:wrap;display:flex}
+.banner{flex:none;margin:8px 10px 0;padding:4px 10px 6px;background:var(--pendingBg);border:2px solid var(--pending);gap:10px;display:flex;align-items:center}
+
+.hud{position:absolute;right:12px;top:12px;background:var(--hudBg);color:var(--hudText);padding:6px 12px 8px;text-shadow:var(--textShadow);box-shadow:inset 4px 0 0 var(--accent)}
+.hud .l{height:20px;white-space:nowrap;display:flex;gap:8px;align-items:center}
+
+.stage .only-edit,.stage .only-pend,.stage .only-done,.stage .fn-p{display:none}
+.stage.st-edit .only-edit{display:flex}.stage.st-edit .only-view{display:none}
+.stage.st-pend .only-pend{display:flex}.stage.st-pend .np,.stage.st-pend .fn-np{display:none}.stage.st-pend .fn-p{display:inline}
+.stage.st-done .only-done{display:flex}.stage.st-done .only-run{display:none}
+.stage:not(.st-pend) .tr.on-np,.stage.st-pend .tr.on-p{background:var(--surfaceHi);box-shadow:inset 4px 0 0 var(--accent)}
+</style></head>
+<body>
+<div class="chrome"><b>P2S 面板 · Claude 方案</b>
+<span class="grp"><a href="index.html">目录</a><a data-page="01-chat-running.html" class="">对话 · 运行中</a><a data-page="02-chat-review-card.html" class="">对话 · 待审卡片</a><a data-page="03-review.html" class="on">审阅</a><a data-page="04-files.html" class="">文件</a><a data-page="05-narrow.html" class="">窄屏 480×270</a><a data-page="06-hud.html" class="">面板关闭 · HUD</a></span>
+<span class="grp"><span class="lbl">主题</span><button data-theme="midnight">深夜</button><button data-theme="contrast">高对比</button><button data-theme="stone">原版石板</button><button id="showjson">查看主题 JSON</button></span>
+</div>
+<div class="desc">审阅页：左边是待审列表，右边是差异，上方是 Agent 对这个文件的一句说明。底部按钮带快捷键（A 应用，D 丢弃，⇧A 全部应用）。输入框自动带上当前文件，可以直接说“箭孔再密一点”。世界里只高亮当前文件，其他文件的预览变暗。</div>
+<pre class="json" id="json"></pre>
+<div class="wrap">
+<div class="stage w640" data-w="640" data-h="360" data-world="focus" data-defstate="">
+<svg class="world" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"></svg>
+<div class="panel"><div class="titlebar row">
+<div class="logo"></div><div class="dd">北岸城堡<span class="car">▾</span></div>
+<span class="dim">·</span><div class="dd muted">会话 12<span class="car">▾</span></div>
+<span class="grow"></span>
+<div class="ib" title="撤销 Ctrl+Z">↶</div><div class="ib" title="重做">↷</div><div class="ib">⋯</div><div class="ib">⚙</div></div><div class="tabs row"><div class="tab">对话</div><div class="tab on">审阅<span class="badge">3</span></div><div class="tab">文件</div></div>
+<div class="split">
+ <div class="side-list">
+  <div class="hd row"><span>待审 3</span><span class="dim">· 已处理 0</span></div>
+  <div class="li on"><div class="l1"><span class="dot bg-warn"></span><span class="nw">walls/north.toml</span></div><div class="l2"><span class="add">+96</span><span class="del">−12</span><span class="warn">中</span></div></div>
+  <div class="li"><div class="l1"><span class="dot bg-ok"></span><span class="nw">roof.toml</span></div><div class="l2"><span class="add">+88</span><span class="del">−40</span><span class="ok">低</span></div></div>
+  <div class="li"><div class="l1"><span class="dot bg-ok"></span><span class="nw">gate.toml</span></div><div class="l2"><span class="add">+6</span><span class="del">−2</span><span class="ok">低</span></div></div>
+  <div style="flex:1"></div>
+  <div style="padding:8px 10px;border-top:2px solid var(--divider)" class="row"><span class="btn s" style="flex:1">全部应用 <span class="k">⇧A</span></span></div>
+ </div>
+ <div class="main">
+  <div class="mh row"><span>walls/north.toml</span><span class="add">+96</span><span class="del">−12</span><span class="tag warn">风险 中</span><span class="grow"></span><span class="btn g s">◀</span><span class="dim">第 1/3 处</span><span class="btn g s">▶</span></div>
+  <div class="note"><span class="acc">Agent：</span>北墙从 8 格加高到 12 格，第 9 层每隔 3 格留一个箭孔；原来的石台阶顶拆掉。</div>
+  <div class="code"><div class="ln lh"><span class="g"></span><span class="g"></span><span class="m"></span><span class="x">@@ 第 1 处 · 第 12 行</span></div><div class="ln "><span class="g">12</span><span class="g">12</span><span class="m"></span><span class="x"><span class="sec">[parts.wall_north]</span></span></div><div class="ln ld"><span class="g">13</span><span class="g"></span><span class="m">−</span><span class="x">size = [15, 8, 1]</span></div><div class="ln la"><span class="g"></span><span class="g">13</span><span class="m">+</span><span class="x">size = [15, 12, 1]</span></div><div class="ln "><span class="g">14</span><span class="g">14</span><span class="m"></span><span class="x"><span class="k">block</span> = <span class="s">"stone_bricks"</span></span></div><div class="ln "><span class="g">15</span><span class="g">15</span><span class="m"></span><span class="x"><span class="k">origin</span> = [<span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>]</span></div><div class="ln la"><span class="g"></span><span class="g">16</span><span class="m">+</span><span class="x"></span></div><div class="ln la"><span class="g"></span><span class="g">17</span><span class="m">+</span><span class="x">[parts.arrow_slits]</span></div><div class="ln la"><span class="g"></span><span class="g">18</span><span class="m">+</span><span class="x">block = "air"</span></div><div class="ln la"><span class="g"></span><span class="g">19</span><span class="m">+</span><span class="x">at = { y = 9, x = [2, 5, 8, 11] }</span></div><div class="ln lh"><span class="g"></span><span class="g"></span><span class="m"></span><span class="x">@@ 第 2 处 · 第 40 行</span></div><div class="ln "><span class="g">40</span><span class="g">41</span><span class="m"></span><span class="x"><span class="sec">[parts.parapet]</span></span></div><div class="ln ld"><span class="g">41</span><span class="g"></span><span class="m">−</span><span class="x">y = 8</span></div><div class="ln la"><span class="g"></span><span class="g">42</span><span class="m">+</span><span class="x">y = 12</span></div><div class="ln "><span class="g">42</span><span class="g">43</span><span class="m"></span><span class="x"><span class="k">pattern</span> = <span class="s">"crenel"</span></span></div><div class="ln lh"><span class="g"></span><span class="g"></span><span class="m"></span><span class="x">@@ 第 3 处 · 第 58 行</span></div><div class="ln ld"><span class="g">58</span><span class="g"></span><span class="m">−</span><span class="x">[parts.slab_top]</span></div><div class="ln ld"><span class="g">59</span><span class="g"></span><span class="m">−</span><span class="x">block = "smooth_stone_slab"</span></div></div>
+  <div class="actions row"><span class="btn s">◀ 上一个</span><span class="dim">1 / 3</span><span class="btn s">下一个 ▶</span><span class="grow"></span><span class="btn d">丢弃 <span class="k">D</span></span><span class="btn p">应用 <span class="k">A</span></span></div>
+ </div>
+</div>
+<div class="composer">
+<div class="txt"><div class="nw"><span class="chip">@walls/north.toml</span><span class="ph">对这个文件提意见，比如“箭孔再密一点”</span></div><div class="hint">意见会附带当前文件　Enter 发送</div></div>
+<div class="side"><span class="btn p">发送 <span class="k">⏎</span></span></div></div>
+</div>
+</div></div>
+<script>
+const THEMES = {"midnight": {"schema": 1, "id": "midnight", "name": "深夜", "colors": {"panelBg": "#0B111BE8", "panelEdge": "#2B3A50", "headerBg": "#0E1623F2", "runBarBg": "#101B2CF2", "tabBarBg": "#0C1320E8", "tabActiveBg": "#17243A", "tabText": "#8394AE", "tabTextActive": "#EEF3FA", "surface": "#111A27F0", "surfaceHi": "#1A273B", "border": "#27364C", "divider": "#1C283A", "selection": "#62B6F240", "text": "#E3EAF4", "textMuted": "#9CABC0", "textDim": "#64748C", "accent": "#62B6F2", "accentText": "#06121F", "userBubble": "#182A44", "userBorder": "#2F4C73", "userText": "#EAF2FF", "assistantText": "#D8E1ED", "toolVerb": "#8DB7E2", "thinkingText": "#7686A0", "ok": "#6CD48E", "warn": "#F2C25B", "danger": "#F2786B", "pending": "#F0A65A", "pendingBg": "#261D14F0", "diffAddBg": "#12301D", "diffAddText": "#9DE6B2", "diffDelBg": "#3A181B", "diffDelText": "#F5A9A4", "gutterText": "#4E5E75", "inputBg": "#060B13F2", "inputText": "#E3EAF4", "inputBorder": "#2B3A50", "inputBorderFocus": "#62B6F2", "placeholder": "#56667E", "caret": "#EEF3FA", "buttonBg": "#17233A", "buttonBorder": "#33455F", "buttonText": "#DCE5F0", "primaryBg": "#2869A0", "primaryBorder": "#62B6F2", "primaryText": "#FFFFFF", "dangerBg": "#3A1B1E", "dangerBorder": "#B05850", "dangerText": "#FFD7D2", "bevelHi": "#FFFFFF14", "bevelLo": "#00000050", "badgeBg": "#F0A65A", "badgeText": "#1A1206", "synKey": "#8FC3F0", "synString": "#A8DDA0", "synNumber": "#F2C98A", "synSection": "#D2B2F5", "synComment": "#5C6D85", "hudBg": "#0B111BCC", "hudText": "#E3EAF4"}, "metrics": {"panelWidth": 0.54, "minPanelWidth": 300, "pad": 6, "lineHeight": 10, "textShadow": true, "buttonTextShadow": true}}, "contrast": {"schema": 1, "id": "contrast", "name": "高对比", "colors": {"panelBg": "#000000FA", "panelEdge": "#FFFFFF", "headerBg": "#000000", "runBarBg": "#000000", "tabBarBg": "#000000", "tabActiveBg": "#FFFFFF", "tabText": "#FFFFFF", "tabTextActive": "#000000", "surface": "#000000", "surfaceHi": "#262626", "border": "#FFFFFF", "divider": "#9A9A9A", "selection": "#FFE60066", "text": "#FFFFFF", "textMuted": "#EDEDED", "textDim": "#CFCFCF", "accent": "#FFE600", "accentText": "#000000", "userBubble": "#000000", "userBorder": "#FFE600", "userText": "#FFFFFF", "assistantText": "#FFFFFF", "toolVerb": "#7FDBFF", "thinkingText": "#D6D6D6", "ok": "#3CFF7A", "warn": "#FFE600", "danger": "#FF6B6B", "pending": "#FFB000", "pendingBg": "#000000", "diffAddBg": "#003D14", "diffAddText": "#8CFFAE", "diffDelBg": "#520000", "diffDelText": "#FFC2C2", "gutterText": "#CFCFCF", "inputBg": "#000000", "inputText": "#FFFFFF", "inputBorder": "#FFFFFF", "inputBorderFocus": "#FFE600", "placeholder": "#BDBDBD", "caret": "#FFE600", "buttonBg": "#000000", "buttonBorder": "#FFFFFF", "buttonText": "#FFFFFF", "primaryBg": "#FFE600", "primaryBorder": "#FFE600", "primaryText": "#000000", "dangerBg": "#000000", "dangerBorder": "#FF6B6B", "dangerText": "#FF8A8A", "bevelHi": "#00000000", "bevelLo": "#00000000", "badgeBg": "#FFE600", "badgeText": "#000000", "synKey": "#7FDBFF", "synString": "#8CFFAE", "synNumber": "#FFE600", "synSection": "#FFB8FF", "synComment": "#CFCFCF", "hudBg": "#000000F0", "hudText": "#FFFFFF"}, "metrics": {"panelWidth": 0.54, "minPanelWidth": 300, "pad": 6, "lineHeight": 11, "textShadow": false, "buttonTextShadow": false}}, "stone": {"schema": 1, "id": "stone", "name": "原版石板", "colors": {"panelBg": "#C6C6C6F7", "panelEdge": "#000000", "headerBg": "#C6C6C6", "runBarBg": "#B5B5B5", "tabBarBg": "#9A9A9A", "tabActiveBg": "#C6C6C6", "tabText": "#3A3A3A", "tabTextActive": "#1E1E1E", "surface": "#B9B9B9", "surfaceHi": "#DADADA", "border": "#555555", "divider": "#8B8B8B", "selection": "#2F5E8F55", "text": "#262626", "textMuted": "#474747", "textDim": "#6B6B6B", "accent": "#2F5E8F", "accentText": "#FFFFFF", "userBubble": "#E4E4E4", "userBorder": "#555555", "userText": "#1E1E1E", "assistantText": "#262626", "toolVerb": "#2F5E8F", "thinkingText": "#6B6B6B", "ok": "#2E7D32", "warn": "#8A6100", "danger": "#B3261E", "pending": "#A85400", "pendingBg": "#E7D8BE", "diffAddBg": "#BFE3C3", "diffAddText": "#1D5824", "diffDelBg": "#EDC4C0", "diffDelText": "#7A1D16", "gutterText": "#6B6B6B", "inputBg": "#000000", "inputText": "#E0E0E0", "inputBorder": "#A0A0A0", "inputBorderFocus": "#FFFFFF", "placeholder": "#707070", "caret": "#D0D0D0", "buttonBg": "#727272", "buttonBorder": "#000000", "buttonText": "#FFFFFF", "primaryBg": "#3D6C9C", "primaryBorder": "#000000", "primaryText": "#FFFFFF", "dangerBg": "#8E3A33", "dangerBorder": "#000000", "dangerText": "#FFFFFF", "bevelHi": "#FFFFFF66", "bevelLo": "#00000066", "badgeBg": "#A85400", "badgeText": "#FFFFFF", "synKey": "#1F4F80", "synString": "#2E6B2E", "synNumber": "#8A5A00", "synSection": "#6A2E8A", "synComment": "#6B6B6B", "hudBg": "#000000A0", "hudText": "#FFFFFF"}, "metrics": {"panelWidth": 0.54, "minPanelWidth": 300, "pad": 6, "lineHeight": 10, "textShadow": false, "buttonTextShadow": true}}};
+const S = 2;
+function hexOk(v){return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)}
+function params(){const p=new URLSearchParams(location.hash.slice(1));return {t:p.get('t')||'midnight',s:p.get('s')||''}}
+function setHash(t,s){const p=new URLSearchParams();p.set('t',t);if(s)p.set('s',s);history.replaceState(null,'','#'+p.toString());}
+function applyTheme(id){
+  const th=THEMES[id]||THEMES.midnight, st=document.querySelector('.stage');
+  for(const [k,v] of Object.entries(th.colors)){ if(hexOk(v)) st.style.setProperty('--'+k,v); }
+  const m=th.metrics, W=+st.dataset.w;
+  const pw=Math.max(m.minPanelWidth, Math.round(W*m.panelWidth));
+  st.dataset.panel=st.dataset.fixedpanel||pw;
+  st.style.setProperty('--panelW',(+st.dataset.panel)*S+'px');
+  st.style.setProperty('--pad',m.pad*S+'px');
+  st.style.setProperty('--lineHeight',m.lineHeight*S+'px');
+  const sh=`${S}px ${S}px 0 color-mix(in srgb, currentColor 25%, #000)`;
+  st.style.setProperty('--textShadow',m.textShadow?sh:'none');
+  st.style.setProperty('--buttonTextShadow',m.buttonTextShadow?sh:'none');
+  document.querySelectorAll('[data-theme]').forEach(b=>b.classList.toggle('on',b.dataset.theme===id));
+  document.getElementById('json').textContent=JSON.stringify(th,null,2);
+  drawWorld();
+}
+function setState(s){
+  const st=document.querySelector('.stage');
+  st.className=st.className.replace(/\bst-\w+/g,'').trim();
+  if(s) st.classList.add('st-'+s);
+  document.querySelectorAll('[data-state]').forEach(b=>b.classList.toggle('on',b.dataset.state===s));
+}
+function syncLinks(){const {t}=params();document.querySelectorAll('a[data-page]').forEach(a=>a.href=a.dataset.page+'#t='+t);}
+/* ---- pixel world: side view, 1 block = 8 GUI px ---- */
+function drawWorld(){
+  const st=document.querySelector('.stage'), svg=st.querySelector('svg.world');
+  const W=+st.dataset.w, H=+st.dataset.h, mode=st.dataset.world||'review';
+  const panel=st.dataset.nopanel? 0 : +st.dataset.panel;
+  const out=[]; const R=(x,y,w,h,f)=>out.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${f}"/>`);
+  const box=(x,y,w,h,f)=>{R(x,y,w,1,f);R(x,y+h-1,w,1,f);R(x,y,1,h,f);R(x+w-1,y,1,h,f)};
+  let seed=7; const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff};
+  const B=8, gy=H-(H>300?64:48);
+  // sky bands
+  R(0,0,W,H,'#79A6F2'); R(0,Math.round(H*0.30),W,H,'#8DB5F6'); R(0,Math.round(H*0.48),W,H,'#A3C5F8'); R(0,gy-24,W,24,'#B7D2F9');
+  // sun
+  R(W-64,22,18,18,'#FFF6C2'); R(W-62,24,14,14,'#FFF0A0');
+  // clouds
+  [[panel+30,40,48],[panel+150,28,64],[W-150,64,40],[panel+90,86,32]].forEach(([x,y,w])=>{R(x,y,w,6,'#FFFFFF');R(x+8,y-4,w-20,4,'#FFFFFF');R(x+4,y+6,w-8,2,'#E6EEFB')});
+  // far hills
+  for(let x=0;x<W;x+=8){const h=16+Math.round(10*Math.sin(x/37)+8*Math.sin(x/13+1));R(x,gy-h,8,h,'#8FB0C9');}
+  for(let x=0;x<W;x+=8){const h=6+Math.round(7*Math.sin(x/29+2)+4*Math.sin(x/11));R(x,gy-h,8,h,'#6E9A63');}
+  // ground layers
+  R(0,gy,W,3,'#7BC05A'); R(0,gy+3,W,5,'#5E9A3F'); R(0,gy+8,W,24,'#8B5E3C'); R(0,gy+32,W,H,'#7C7C7C');
+  for(let x=0;x<W;x+=2){ for(let y=gy+8;y<H;y+=2){ const r=rnd(); if(r<0.10) R(x,y,2,2,y<gy+32?'#7A5032':'#6C6C6C'); else if(r>0.95) R(x,y,2,2,y<gy+32?'#9A6B47':'#8C8C8C'); } }
+  for(let x=0;x<W;x+=4){ if(rnd()<0.3) R(x,gy+3,2,2,'#6DB04B'); }
+  // trees
+  const tree=(x)=>{R(x+6,gy-20,4,20,'#6B4A2B');R(x,gy-36,16,16,'#3F7A2F');R(x+2,gy-40,12,4,'#3F7A2F');R(x+2,gy-34,4,4,'#4E8F3A');R(x+10,gy-28,4,4,'#356A27')};
+  // castle
+  const cw=15*B, cx = panel + Math.max(14, Math.round((W-panel-cw)/2)) ;
+  tree(cx-34); tree(cx+cw+16); if(W-panel>260) tree(cx+cw+60);
+  const blk=(c,r,col)=>{const x=cx+c*B,y=gy-(r+1)*B;R(x,y,B,B,col||'#8E8E8E');R(x,y+3,B,1,'#727272');R(x,y+7,B,1,'#727272');R(x+((r%2)?2:6),y,1,3,'#727272');R(x+((r%2)?6:2),y+4,1,3,'#727272');R(x,y,B,1,'#A2A2A2')};
+  for(let r=0;r<6;r++) for(let c=0;c<15;c++){ if(c>=6&&c<=8&&r<3) continue; blk(c,r); }
+  for(const t0 of [0,12]) for(let r=6;r<9;r++) for(let c=t0;c<t0+3;c++) blk(c,r);
+  for(const t0 of [0,12]) for(const c of [t0,t0+2]) blk(c,9);
+  // gate
+  R(cx+6*B,gy-3*B,3*B,3*B,'#2A2018'); R(cx+6*B+2,gy-3*B+2,3*B-4,3*B-2,'#3B2B1D'); R(cx+7*B+3,gy-3*B+2,2,3*B-2,'#2A2018');
+  // tower windows
+  R(cx+1*B+2,gy-8*B+2,4,6,'#1E2430'); R(cx+13*B+2,gy-8*B+2,4,6,'#1E2430');
+  // old flat slab on wall top (row 6, cols 3..11)
+  for(let c=3;c<12;c++){const x=cx+c*B,y=gy-7*B+4;R(x,y,B,4,'#A9A9A9');R(x,y,B,1,'#C2C2C2');}
+  // preview ghosts
+  const g=(c,r,fill,edge)=>{const x=cx+c*B,y=gy-(r+1)*B;R(x,y,B,B,fill);box(x,y,B,B,edge)};
+  const GW='rgba(120,255,150,0.30)', GE='rgba(185,255,200,0.95)', GR='rgba(90,58,36,0.62)', GRE='rgba(210,170,120,0.95)';
+  const DIM=(s)=>s.replace(/[\d.]+\)$/,m=>(parseFloat(m)*0.35).toFixed(2)+')');
+  const focus = mode==='focus';
+  if(mode!=='none'){
+    const wallRows = mode==='running'?[6,7]:[6,7,8,9];
+    for(const r of wallRows) for(let c=3;c<12;c++){ if(r===8&&(c===5||c===8||c===11)&&mode!=='running') continue; if(r===8&&(c===5||c===8)) continue; g(c,r,GW,GE); }
+    if(mode!=='running'){
+      const rows=[[10,3,11],[11,4,10],[12,5,9],[13,6,8],[14,7,7]];
+      for(const [r,a,b] of rows) for(let c=a;c<=b;c++) g(c,r, focus?DIM(GR):GR, focus?DIM(GRE):GRE);
+      // removed slab: red
+      for(let c=3;c<12;c++){const x=cx+c*B,y=gy-7*B+4;R(x,y,B,4,'rgba(255,70,70,0.35)');box(x,y,B,4,'rgba(255,110,110,0.95)');}
+      // gate widen
+      g(9,0, focus?DIM(GW):GW, focus?DIM(GE):GE); g(9,1, focus?DIM(GW):GW, focus?DIM(GE):GE);
+    } else {
+      // block being placed right now
+      const x=cx+9*B,y=gy-8*B; box(x-1,y-1,B+2,B+2,'#FFFFFF');
+    }
+    // selection box
+    const sx=cx-B, sy=gy-16*B, sw=17*B, sh=16*B;
+    box(sx,sy,sw,sh,'rgba(255,255,255,0.85)');
+    for(const [x,y] of [[sx,sy],[sx+sw-4,sy],[sx,sy+sh-4],[sx+sw-4,sy+sh-4]]) R(x,y,4,4,'#FFFFFF');
+  }
+  if(st.dataset.hotbar){
+    const hx=Math.round((W-182)/2), hy=H-22;
+    R(hx,hy,182,22,'rgba(0,0,0,0.55)'); box(hx,hy,182,22,'#8B8B8B');
+    for(let i=0;i<9;i++){box(hx+1+i*20,hy+1,20,20,'#555555'); }
+    box(hx-1+0*20,hy-1,24,24,'#FFFFFF');
+    const items=['#9A9A9A','#4A3222','#7BC05A','#C9A86B','#E0E0E0','#6B4A2B','#B33A3A','#D9D9D9','#7C7C7C'];
+    items.forEach((c,i)=>{R(hx+5+i*20,hy+5,12,12,c);R(hx+5+i*20,hy+5,12,2,'rgba(255,255,255,0.25)')});
+    const mx=Math.round(W/2), my=Math.round(H/2); R(mx-5,my,11,1,'#FFFFFF'); R(mx,my-5,1,11,'#FFFFFF');
+  }
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.setAttribute('width',W*S); svg.setAttribute('height',H*S);
+  svg.innerHTML=out.join('');
+}
+window.addEventListener('DOMContentLoaded',()=>{
+  const {t,s}=params();
+  document.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>{const p=params();setHash(b.dataset.theme,p.s);applyTheme(b.dataset.theme);syncLinks();});
+  document.querySelectorAll('[data-state]').forEach(b=>b.onclick=()=>{const p=params();setHash(p.t,b.dataset.state);setState(b.dataset.state);});
+  document.getElementById('showjson').onclick=()=>document.getElementById('json').classList.toggle('show');
+  const st=document.querySelector('.stage');
+  setState(s|| (st.dataset.defstate||''));
+  applyTheme(THEMES[t]?t:'midnight'); syncLinks();
+});
+</script>
+</body></html>

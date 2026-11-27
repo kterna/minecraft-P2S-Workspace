@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2S 效果图 03 · 审阅页（多文件 Diff 与世界预览联动）</title>
+<style>
+  :root {
+    --panel-bg: rgba(17, 23, 34, 0.88);
+    --panel-bg-elevated: rgba(24, 33, 48, 0.94);
+    --panel-bg-subtle: rgba(11, 16, 24, 0.84);
+    --panel-border: #314159;
+    --panel-border-strong: #5A749B;
+    --panel-divider: rgba(63, 82, 112, 0.55);
+    --tab-bg: rgba(18, 25, 37, 0.82);
+    --tab-bg-active: #253650;
+    --tab-border-active: #7EA6E0;
+    --tab-text: #8EA3C2;
+    --tab-text-active: #F0F6FF;
+    --text-primary: #EAF2FF;
+    --text-secondary: #B4C4DC;
+    --text-muted: #778AA8;
+    --text-user-role: #7CE8FF;
+    --text-agent-role: #90F2A7;
+    --text-system-role: #D6B778;
+    --btn-normal-bg: rgba(36, 52, 71, 0.88);
+    --btn-normal-bg-hover: rgba(48, 69, 95, 0.94);
+    --btn-normal-border: #5D789E;
+    --btn-primary-bg: rgba(41, 78, 122, 0.92);
+    --btn-primary-bg-hover: rgba(53, 100, 154, 0.98);
+    --btn-primary-border: #7BA8E0;
+    --btn-danger-bg: rgba(88, 38, 42, 0.92);
+    --btn-danger-bg-hover: rgba(116, 48, 52, 0.98);
+    --btn-danger-border: #C97175;
+    --btn-muted-bg: rgba(25, 34, 48, 0.84);
+    --btn-muted-border: #435570;
+    --btn-text: #EAF2FF;
+    --btn-text-disabled: #687892;
+    --input-bg: rgba(10, 14, 22, 0.92);
+    --input-border: #3B4E6B;
+    --input-border-focus: #82ACFF;
+    --input-placeholder: #62738F;
+    --card-tool-bg: rgba(26, 36, 51, 0.90);
+    --card-tool-border: #4E6688;
+    --card-plan-bg: rgba(21, 34, 49, 0.92);
+    --card-plan-border: #4A729E;
+    --card-pending-bg: rgba(44, 34, 20, 0.92);
+    --card-pending-border: #D19A52;
+    --card-queue-bg: rgba(30, 39, 59, 0.92);
+    --card-queue-border: #6C8CD5;
+    --badge-pending-bg: rgba(75, 53, 32, 0.94);
+    --badge-pending-border: #CF9A69;
+    --badge-pending-text: #FFE6C2;
+    --badge-risk-low: #66DD88;
+    --badge-risk-medium: #F0B45A;
+    --badge-risk-high: #FF7676;
+    --diff-add-bg: rgba(35, 92, 46, 0.34);
+    --diff-add-text: #BFFFCA;
+    --diff-add-marker: #66DD88;
+    --diff-del-bg: rgba(104, 38, 38, 0.36);
+    --diff-del-text: #FFC2C4;
+    --diff-del-marker: #FF7C7C;
+    --diff-skip-bg: rgba(38, 46, 60, 0.38);
+    --diff-hunk-highlight: #D3A65E;
+    --status-running: #6BC4FF;
+    --status-success: #66DD88;
+    --status-warning: #F0B45A;
+    --status-error: #FF7676;
+    --scrollbar-track: rgba(42, 56, 76, 0.45);
+    --scrollbar-thumb: rgba(126, 150, 184, 0.85);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #0a0d12; color: #dbe6f7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh; -webkit-text-size-adjust: none;
+  }
+
+  .gallery-bar {
+    width: 1280px; margin: 12px auto 10px; padding: 8px 12px;
+    background: #121722; border: 1px solid #2a3548;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px;
+  }
+  .gallery-title { display: flex; align-items: center; gap: 10px; font-weight: 600; color: #f0f6ff; }
+  .res-pill { font-family: monospace; font-size: 11px; padding: 2px 6px; background: #1e2838; border: 1px solid #3c4d69; color: #9dc0f5; }
+  .gallery-nav { display: flex; align-items: center; gap: 6px; }
+  .gallery-nav a, .gallery-btn {
+    color: #b7c6de; text-decoration: none; padding: 4px 8px;
+    border: 1px solid #2e3b50; background: #171e2b; font-size: 12px; cursor: pointer;
+  }
+  .gallery-nav a:hover, .gallery-btn:hover { background: #222d40; color: #fff; }
+  .gallery-nav a.active { background: #2a466e; border-color: #6b96d6; color: #fff; }
+  .theme-controls { display: flex; align-items: center; gap: 6px; }
+  .theme-controls .gallery-btn.active-theme { background: #2a466e; border-color: #7ea6e0; color: #fff; }
+
+  .stage-shell {
+    width: 1280px; height: 720px; margin: 0 auto 20px;
+    border: 1px solid #2b374b; overflow: hidden; position: relative; background: #000;
+  }
+
+  .mc-screen {
+    width: 640px; height: 360px; transform: scale(2); transform-origin: top left;
+    position: relative; overflow: hidden;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+    font-size: 8px; line-height: 10px; color: var(--text-primary);
+    -webkit-font-smoothing: none; image-rendering: pixelated; user-select: none;
+  }
+  .mc-screen * { border-radius: 0 !important; }
+  canvas.mc-world { position: absolute; inset: 0; width: 640px; height: 360px; image-rendering: pixelated; display: block; }
+  .shadow-txt { text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.72); }
+
+  .workbench {
+    position: absolute; left: 0; top: 0; width: 352px; height: 360px;
+    background: var(--panel-bg); border-right: 1px solid var(--panel-border-strong);
+    display: flex; flex-direction: column; z-index: 5;
+  }
+  .workbench.collapsed { width: 20px; }
+  .workbench.collapsed .wb-expanded-only { display: none; }
+  .wb-collapsed-rail { display: none; flex-direction: column; align-items: center; padding: 6px 2px; gap: 6px; height: 100%; }
+  .workbench.collapsed .wb-collapsed-rail { display: flex; }
+
+  .topbar {
+    height: 18px; padding: 0 5px; background: var(--panel-bg-elevated);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex; align-items: center; justify-content: space-between; gap: 4px; flex-shrink: 0;
+  }
+  .proj-pill {
+    display: flex; align-items: center; gap: 4px; padding: 1px 5px; height: 14px;
+    background: var(--btn-muted-bg); border: 1px solid var(--btn-muted-border); color: var(--text-primary); cursor: pointer;
+  }
+  .proj-dot { width: 4px; height: 4px; background: var(--status-warning); display: inline-block; }
+  .size-meta { color: var(--text-muted); line-height: 9px; }
+  .top-actions { display: flex; align-items: center; gap: 2px; }
+
+  .mc-btn {
+    height: 14px; padding: 0 4px; background: var(--btn-normal-bg); border: 1px solid var(--btn-normal-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14); color: var(--btn-text);
+    font-family: inherit; font-size: 8px; line-height: 12px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; text-decoration: none;
+  }
+  .mc-btn:hover { background: var(--btn-normal-bg-hover); }
+  .mc-btn.primary { background: var(--btn-primary-bg); border-color: var(--btn-primary-border); }
+  .mc-btn.primary:hover { background: var(--btn-primary-bg-hover); }
+  .mc-btn.danger { background: var(--btn-danger-bg); border-color: var(--btn-danger-border); }
+  .mc-btn.danger:hover { background: var(--btn-danger-bg-hover); }
+  .mc-btn.muted { background: var(--btn-muted-bg); border-color: var(--btn-muted-border); color: var(--text-secondary); }
+  .mc-btn.tall { height: 16px; line-height: 14px; padding: 0 6px; }
+
+  .tabbar {
+    height: 18px; padding: 0 5px; background: var(--panel-bg-subtle);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex; align-items: flex-end; justify-content: space-between; flex-shrink: 0;
+  }
+  .tab-list { display: flex; align-items: flex-end; gap: 3px; height: 100%; }
+  .mc-tab {
+    height: 16px; padding: 0 8px; background: var(--tab-bg); border: 1px solid var(--panel-border); border-bottom: none;
+    color: var(--tab-text); font-family: inherit; font-size: 8px; line-height: 15px;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;
+  }
+  .mc-tab.active {
+    background: var(--tab-bg-active); border-color: var(--panel-border-strong);
+    border-bottom: 2px solid var(--tab-border-active); color: var(--tab-text-active); height: 17px;
+  }
+  .tab-badge {
+    padding: 0 3px; height: 10px; line-height: 10px;
+    background: var(--badge-pending-bg); border: 1px solid var(--badge-pending-border); color: var(--badge-pending-text);
+  }
+  .tab-right-meta { display: flex; align-items: center; gap: 4px; padding-bottom: 2px; }
+
+  /* Review Queue Strip */
+  .queue-bar {
+    padding: 4px 5px;
+    background: var(--panel-bg-elevated);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .queue-pills {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    overflow: hidden;
+  }
+  .q-pill {
+    height: 15px;
+    padding: 0 5px;
+    background: var(--tab-bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 8px;
+    line-height: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .q-pill.active {
+    background: var(--card-pending-bg);
+    border-color: var(--card-pending-border);
+    color: var(--badge-pending-text);
+  }
+  .q-pill.applied {
+    border-color: var(--status-success);
+    color: var(--status-success);
+    opacity: 0.72;
+  }
+
+  /* File Meta Header */
+  .review-meta {
+    padding: 4px 6px;
+    background: var(--panel-bg-subtle);
+    border-bottom: 1px solid var(--panel-border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .review-meta-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 4px; line-height: 9px;
+  }
+  .risk-tag { padding: 0 3px; height: 10px; line-height: 10px; border: 1px solid currentColor; }
+  .review-summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 4px;
+    color: var(--text-secondary); line-height: 9px;
+  }
+
+  /* Diff Viewport */
+  .diff-box {
+    flex: 1;
+    overflow-y: auto;
+    background: var(--panel-bg-subtle);
+    padding: 3px 0;
+    font-size: 8px;
+    line-height: 11px;
+  }
+  .diff-box::-webkit-scrollbar { width: 4px; }
+  .diff-box::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  .diff-box::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
+
+  .diff-line {
+    display: grid;
+    grid-template-columns: 20px 20px 10px 1fr;
+    padding: 0 5px;
+    min-height: 12px;
+    line-height: 12px;
+    white-space: pre;
+    overflow: hidden;
+  }
+  .diff-line.add { background: var(--diff-add-bg); color: var(--diff-add-text); }
+  .diff-line.del { background: var(--diff-del-bg); color: var(--diff-del-text); }
+  .diff-line.skip { background: var(--diff-skip-bg); color: var(--text-muted); }
+  .diff-line.active-hunk-top { border-top: 1px solid var(--diff-hunk-highlight); }
+  .diff-line.active-hunk-bot { border-bottom: 1px solid var(--diff-hunk-highlight); }
+  .ln { color: var(--text-muted); text-align: right; padding-right: 4px; }
+  .mk { text-align: center; }
+  .mk-add { color: var(--diff-add-marker); }
+  .mk-del { color: var(--diff-del-marker); }
+  .code-cell { overflow: hidden; text-overflow: ellipsis; }
+
+  /* Inline Discard Reason Row */
+  .discard-bar {
+    padding: 4px 5px;
+    background: var(--btn-danger-bg);
+    border-top: 1px solid var(--btn-danger-border);
+    display: none;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .discard-bar.open { display: flex; }
+  .mc-input {
+    flex: 1; height: 16px; padding: 0 5px;
+    background: var(--input-bg); border: 1px solid var(--input-border);
+    color: var(--text-primary); font-family: inherit; font-size: 8px; line-height: 14px; outline: none;
+  }
+
+  /* Bottom Decision Bar */
+  .decision-bar {
+    padding: 4px 5px 5px;
+    background: var(--panel-bg-elevated);
+    border-top: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .done-banner {
+    display: none;
+    padding: 8px;
+    margin: 8px;
+    background: var(--card-plan-bg);
+    border: 1px solid var(--status-success);
+    flex-direction: column;
+    gap: 6px;
+  }
+  .done-banner.show { display: flex; }
+
+  /* World Right HUD */
+  .world-hud-top {
+    position: absolute; right: 8px; top: 8px; padding: 4px 6px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--text-primary);
+    z-index: 3; pointer-events: none;
+  }
+
+  .json-modal {
+    width: 1280px; margin: 0 auto 24px; background: #10151f; border: 1px solid #2d3a4f;
+    padding: 12px 16px; display: none; font-family: monospace; font-size: 12px; line-height: 1.5; color: #cde0ff;
+  }
+  .json-modal.open { display: block; }
+  .json-modal pre { max-height: 320px; overflow: auto; margin-top: 8px; background: #0a0e16; padding: 10px; border: 1px solid #233046; }
+</style>
+</head>
+<body>
+
+<div class="gallery-bar">
+  <div class="gallery-title">
+    <span>P2S 游戏内 Agent 界面 · 03 审阅页（逐文件 Diff 与世界预览联动）</span>
+    <span class="res-pill">MC 640×360 → 2× 1280×720</span>
+  </div>
+  <div class="gallery-nav">
+    <a href="index.html">目录</a>
+    <a href="01-chat-running.html">01 运行中</a>
+    <a href="02-chat-pending-review.html">02 待审卡片</a>
+    <a href="03-review-diff.html" class="active">03 审阅页</a>
+    <a href="04-files-editor.html">04 文件页</a>
+    <a href="05-narrow-480x270.html">05 窄屏</a>
+  </div>
+  <div class="theme-controls">
+    <button class="gallery-btn active-theme" data-theme-btn="slate-blueprint" onclick="setTheme('slate-blueprint')">深空蓝图</button>
+    <button class="gallery-btn" data-theme-btn="mc-stone" onclick="setTheme('mc-stone')">原版石砖</button>
+    <button class="gallery-btn" data-theme-btn="obsidian-amber" onclick="setTheme('obsidian-amber')">黑曜琥珀</button>
+    <button class="gallery-btn" onclick="cycleTheme()">切换主题</button>
+    <button class="gallery-btn" onclick="toggleJsonBox()">主题 JSON</button>
+  </div>
+</div>
+
+<div class="stage-shell">
+  <div class="mc-screen">
+    <canvas id="worldCanvas" class="mc-world" width="640" height="360"></canvas>
+    <div class="world-hud-top">
+      <div class="shadow-txt" id="worldHudTitle" style="line-height:9px;">当前高亮：workspace/roof.toml</div>
+      <div id="worldHudSub" style="color:var(--badge-pending-text); line-height:9px;">+184 / -12 方块 · 其他 2 个文件呈暗线框</div>
+    </div>
+
+    <div class="workbench" id="workbench">
+      <div class="wb-collapsed-rail">
+        <button class="mc-btn" onclick="toggleCollapse()">&gt;</button>
+        <span class="proj-dot"></span>
+        <span class="tab-badge" id="railCount">3</span>
+      </div>
+
+      <!-- A. Top Bar -->
+      <div class="topbar wb-expanded-only">
+        <div style="display:flex; align-items:center; gap:5px;">
+          <button class="proj-pill shadow-txt">
+            <span class="proj-dot"></span>
+            <span>竹林小院 · #a4f2 ▾</span>
+          </button>
+          <span class="size-meta">32×18×32</span>
+        </div>
+        <div class="top-actions">
+          <button class="mc-btn muted">撤销</button>
+          <button class="mc-btn muted">重做</button>
+          <button class="mc-btn muted">存点</button>
+          <button class="mc-btn muted">压缩</button>
+          <button class="mc-btn muted">⚙</button>
+        </div>
+      </div>
+
+      <!-- B. B+C Tabs -->
+      <div class="tabbar wb-expanded-only">
+        <div class="tab-list">
+          <a class="mc-tab" href="02-chat-pending-review.html">对话</a>
+          <a class="mc-tab active" href="03-review-diff.html">审阅 <span class="tab-badge" id="tabBadge">3</span></a>
+          <a class="mc-tab" href="04-files-editor.html">文件</a>
+        </div>
+        <div class="tab-right-meta">
+          <span style="color:var(--text-muted); line-height:9px;">Alt+1/2/3</span>
+          <button class="mc-btn muted" onclick="toggleCollapse()" title="收起看世界">◧</button>
+        </div>
+      </div>
+
+      <!-- Queue Selector Strip -->
+      <div class="queue-bar wb-expanded-only">
+        <div class="queue-pills" id="queuePills">
+          <button class="q-pill active" data-file="roof" onclick="selectFile('roof')">1/3 roof.toml</button>
+          <button class="q-pill" data-file="walls" onclick="selectFile('walls')">2/3 walls.toml</button>
+          <button class="q-pill" data-file="interior" onclick="selectFile('interior')">3/3 interior.toml</button>
+        </div>
+        <button class="mc-btn muted" onclick="applyAllRemaining()">全部应用</button>
+      </div>
+
+      <!-- Current File Header -->
+      <div class="review-meta wb-expanded-only" id="reviewMeta">
+        <div class="review-meta-top">
+          <span style="display:flex; align-items:center; gap:4px;">
+            <strong id="metaPath" class="shadow-txt">workspace/roof.toml</strong>
+            <span id="metaDelta" style="color:var(--badge-risk-low);">+184 / -12</span>
+            <span id="metaRisk" class="risk-tag" style="color:var(--badge-risk-medium);">中风险</span>
+          </span>
+          <div style="display:flex; gap:3px; align-items:center;">
+            <button class="mc-btn muted" onclick="stepHunk(-1)">&lt;D</button>
+            <span id="hunkCounter" style="color:var(--text-secondary);">1/3</span>
+            <button class="mc-btn muted" onclick="stepHunk(1)">D&gt;</button>
+          </div>
+        </div>
+        <div class="review-summary">
+          <span id="metaSummary">添加双坡云杉木屋顶与四角上翘飞檐（含部分旧顶棚清理）</span>
+          <a class="mc-btn muted" href="04-files-editor.html" title="切到文件页手改">微调 ↗</a>
+        </div>
+      </div>
+
+      <!-- Diff Viewer -->
+      <div class="diff-box wb-expanded-only" id="diffBox"></div>
+
+      <!-- All Done State -->
+      <div class="done-banner wb-expanded-only" id="doneBanner">
+        <div class="shadow-txt" style="color:var(--status-success);">✓ 全部 3 个待审文件已处理完毕</div>
+        <div style="color:var(--text-secondary); line-height:10px;">Agent 已收到你的应用与丢弃决定，可以回到对话页查看总结或继续下达下一句指令。</div>
+        <div><a class="mc-btn primary tall" href="02-chat-pending-review.html">回到对话页</a></div>
+      </div>
+
+      <!-- Inline Discard Reason Row -->
+      <div class="discard-bar wb-expanded-only" id="discardBar">
+        <input class="mc-input" id="discardReasonInput" type="text" placeholder="可选：告诉 AI 丢弃原因（如：飞檐翘太高，降 1 格）">
+        <button class="mc-btn danger" onclick="confirmDiscard()">确认丢弃</button>
+        <button class="mc-btn muted" onclick="toggleDiscardBar(false)">取消</button>
+      </div>
+
+      <!-- Bottom Decision Bar -->
+      <div class="decision-bar wb-expanded-only" id="decisionBar">
+        <div style="display:flex; gap:3px;">
+          <button class="mc-btn primary tall" onclick="applyCurrent()">✓ 应用此文件</button>
+          <button class="mc-btn danger tall" onclick="toggleDiscardBar(true)">✕ 丢弃...</button>
+        </div>
+        <div style="display:flex; gap:3px;">
+          <button class="mc-btn muted tall" onclick="stepFile(-1)">← 上个</button>
+          <button class="mc-btn muted tall" onclick="stepFile(1)">下个 →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="json-modal" id="jsonModal">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <strong>当前主题 JSON 配置（与 CSS 变量 1:1 对应）</strong>
+    <button class="gallery-btn" onclick="toggleJsonBox()">关闭</button>
+  </div>
+  <pre id="jsonCode"></pre>
+</div>
+
+<script>
+const THEMES = {
+  "slate-blueprint": {
+    meta: { id: "slate-blueprint", name: "深空蓝图 (Slate Blueprint)" },
+    tokens: {
+      "panel.bg": "rgba(17, 23, 34, 0.88)", "panel.bgElevated": "rgba(24, 33, 48, 0.94)", "panel.bgSubtle": "rgba(11, 16, 24, 0.84)",
+      "panel.border": "#314159", "panel.borderStrong": "#5A749B", "panel.divider": "rgba(63, 82, 112, 0.55)",
+      "tab.bg": "rgba(18, 25, 37, 0.82)", "tab.bgActive": "#253650", "tab.borderActive": "#7EA6E0", "tab.text": "#8EA3C2", "tab.textActive": "#F0F6FF",
+      "text.primary": "#EAF2FF", "text.secondary": "#B4C4DC", "text.muted": "#778AA8", "text.userRole": "#7CE8FF", "text.agentRole": "#90F2A7", "text.systemRole": "#D6B778",
+      "btn.normalBg": "rgba(36, 52, 71, 0.88)", "btn.normalBgHover": "rgba(48, 69, 95, 0.94)", "btn.normalBorder": "#5D789E",
+      "btn.primaryBg": "rgba(41, 78, 122, 0.92)", "btn.primaryBgHover": "rgba(53, 100, 154, 0.98)", "btn.primaryBorder": "#7BA8E0",
+      "btn.dangerBg": "rgba(88, 38, 42, 0.92)", "btn.dangerBgHover": "rgba(116, 48, 52, 0.98)", "btn.dangerBorder": "#C97175",
+      "btn.mutedBg": "rgba(25, 34, 48, 0.84)", "btn.mutedBorder": "#435570", "btn.text": "#EAF2FF", "btn.textDisabled": "#687892",
+      "input.bg": "rgba(10, 14, 22, 0.92)", "input.border": "#3B4E6B", "input.borderFocus": "#82ACFF", "input.placeholder": "#62738F",
+      "card.toolBg": "rgba(26, 36, 51, 0.90)", "card.toolBorder": "#4E6688", "card.planBg": "rgba(21, 34, 49, 0.92)", "card.planBorder": "#4A729E",
+      "card.pendingBg": "rgba(44, 34, 20, 0.92)", "card.pendingBorder": "#D19A52", "card.queueBg": "rgba(30, 39, 59, 0.92)", "card.queueBorder": "#6C8CD5",
+      "badge.pendingBg": "rgba(75, 53, 32, 0.94)", "badge.pendingBorder": "#CF9A69", "badge.pendingText": "#FFE6C2",
+      "badge.riskLow": "#66DD88", "badge.riskMedium": "#F0B45A", "badge.riskHigh": "#FF7676",
+      "diff.addBg": "rgba(35, 92, 46, 0.34)", "diff.addText": "#BFFFCA", "diff.addMarker": "#66DD88",
+      "diff.delBg": "rgba(104, 38, 38, 0.36)", "diff.delText": "#FFC2C4", "diff.delMarker": "#FF7C7C",
+      "diff.skipBg": "rgba(38, 46, 60, 0.38)", "diff.hunkHighlight": "#D3A65E",
+      "status.running": "#6BC4FF", "status.success": "#66DD88", "status.warning": "#F0B45A", "status.error": "#FF7676",
+      "scrollbar.track": "rgba(42, 56, 76, 0.45)", "scrollbar.thumb": "rgba(126, 150, 184, 0.85)"
+    }
+  },
+  "mc-stone": {
+    meta: { id: "mc-stone", name: "原版石砖 (Vanilla Stone)" },
+    tokens: {
+      "panel.bg": "rgba(32, 32, 36, 0.90)", "panel.bgElevated": "rgba(44, 44, 50, 0.95)", "panel.bgSubtle": "rgba(22, 22, 26, 0.88)",
+      "panel.border": "#5A5A63", "panel.borderStrong": "#8E8E99", "panel.divider": "rgba(110, 110, 122, 0.55)",
+      "tab.bg": "rgba(36, 36, 42, 0.86)", "tab.bgActive": "#494952", "tab.borderActive": "#63D471", "tab.text": "#B0B0BC", "tab.textActive": "#FFFFFF",
+      "text.primary": "#F4F4F6", "text.secondary": "#C6C6D0", "text.muted": "#8C8C98", "text.userRole": "#55FFFF", "text.agentRole": "#55FF55", "text.systemRole": "#FFAA00",
+      "btn.normalBg": "rgba(68, 68, 76, 0.92)", "btn.normalBgHover": "rgba(84, 84, 94, 0.96)", "btn.normalBorder": "#9696A4",
+      "btn.primaryBg": "rgba(44, 102, 56, 0.94)", "btn.primaryBgHover": "rgba(56, 128, 70, 0.98)", "btn.primaryBorder": "#74D986",
+      "btn.dangerBg": "rgba(112, 42, 42, 0.94)", "btn.dangerBgHover": "rgba(142, 54, 54, 0.98)", "btn.dangerBorder": "#E07B7B",
+      "btn.mutedBg": "rgba(48, 48, 54, 0.88)", "btn.mutedBorder": "#6A6A75", "btn.text": "#FFFFFF", "btn.textDisabled": "#7A7A86",
+      "input.bg": "rgba(14, 14, 18, 0.94)", "input.border": "#686874", "input.borderFocus": "#FFFFFF", "input.placeholder": "#767684",
+      "card.toolBg": "rgba(42, 42, 48, 0.92)", "card.toolBorder": "#6E6E7B", "card.planBg": "rgba(38, 46, 40, 0.92)", "card.planBorder": "#5EA66B",
+      "card.pendingBg": "rgba(56, 46, 26, 0.94)", "card.pendingBorder": "#E0B04B", "card.queueBg": "rgba(40, 48, 56, 0.94)", "card.queueBorder": "#78A8D8",
+      "badge.pendingBg": "rgba(86, 62, 24, 0.96)", "badge.pendingBorder": "#E5B454", "badge.pendingText": "#FFF0C8",
+      "badge.riskLow": "#55FF55", "badge.riskMedium": "#FFAA00", "badge.riskHigh": "#FF5555",
+      "diff.addBg": "rgba(42, 104, 48, 0.38)", "diff.addText": "#C8FFD0", "diff.addMarker": "#55FF55",
+      "diff.delBg": "rgba(116, 40, 40, 0.38)", "diff.delText": "#FFC8C8", "diff.delMarker": "#FF6666",
+      "diff.skipBg": "rgba(50, 50, 58, 0.45)", "diff.hunkHighlight": "#FFCC55",
+      "status.running": "#55DDFF", "status.success": "#55FF55", "status.warning": "#FFAA00", "status.error": "#FF5555",
+      "scrollbar.track": "rgba(56, 56, 64, 0.55)", "scrollbar.thumb": "rgba(150, 150, 165, 0.85)"
+    }
+  },
+  "obsidian-amber": {
+    meta: { id: "obsidian-amber", name: "黑曜琥珀 (Obsidian Amber)" },
+    tokens: {
+      "panel.bg": "rgba(21, 18, 25, 0.90)", "panel.bgElevated": "rgba(31, 26, 37, 0.95)", "panel.bgSubtle": "rgba(14, 12, 18, 0.88)",
+      "panel.border": "#483C57", "panel.borderStrong": "#7B6794", "panel.divider": "rgba(92, 76, 112, 0.55)",
+      "tab.bg": "rgba(25, 21, 31, 0.84)", "tab.bgActive": "#3A2E46", "tab.borderActive": "#E6A24C", "tab.text": "#AD9EC2", "tab.textActive": "#FFF5E6",
+      "text.primary": "#F7EFE4", "text.secondary": "#CBBED8", "text.muted": "#8B7D9C", "text.userRole": "#F2B863", "text.agentRole": "#8FE3A8", "text.systemRole": "#D19FE8",
+      "btn.normalBg": "rgba(48, 39, 59, 0.90)", "btn.normalBgHover": "rgba(64, 52, 79, 0.95)", "btn.normalBorder": "#76628F",
+      "btn.primaryBg": "rgba(126, 78, 32, 0.92)", "btn.primaryBgHover": "rgba(154, 96, 40, 0.98)", "btn.primaryBorder": "#E8A656",
+      "btn.dangerBg": "rgba(98, 36, 48, 0.92)", "btn.dangerBgHover": "rgba(128, 46, 62, 0.98)", "btn.dangerBorder": "#DE7385",
+      "btn.mutedBg": "rgba(33, 27, 41, 0.86)", "btn.mutedBorder": "#594A6B", "btn.text": "#FFF6EB", "btn.textDisabled": "#786A87",
+      "input.bg": "rgba(12, 10, 16, 0.94)", "input.border": "#524363", "input.borderFocus": "#E8A656", "input.placeholder": "#706280",
+      "card.toolBg": "rgba(33, 28, 41, 0.92)", "card.toolBorder": "#66557D", "card.planBg": "rgba(38, 30, 44, 0.92)", "card.planBorder": "#9D76B5",
+      "card.pendingBg": "rgba(54, 37, 22, 0.94)", "card.pendingBorder": "#E6A24C", "card.queueBg": "rgba(42, 34, 56, 0.94)", "card.queueBorder": "#B286E0",
+      "badge.pendingBg": "rgba(88, 56, 24, 0.95)", "badge.pendingBorder": "#E8A656", "badge.pendingText": "#FFE9C7",
+      "badge.riskLow": "#7CE09B", "badge.riskMedium": "#F5B85C", "badge.riskHigh": "#FF7A8A",
+      "diff.addBg": "rgba(42, 92, 54, 0.36)", "diff.addText": "#C6FFD4", "diff.addMarker": "#7CE09B",
+      "diff.delBg": "rgba(112, 38, 52, 0.38)", "diff.delText": "#FFC4CE", "diff.delMarker": "#FF7A8A",
+      "diff.skipBg": "rgba(44, 36, 54, 0.44)", "diff.hunkHighlight": "#F5B85C",
+      "status.running": "#F5B85C", "status.success": "#7CE09B", "status.warning": "#F5B85C", "status.error": "#FF7A8A",
+      "scrollbar.track": "rgba(56, 46, 70, 0.48)", "scrollbar.thumb": "rgba(166, 138, 194, 0.85)"
+    }
+  }
+};
+
+const FILES = {
+  roof: {
+    id: "roof", path: "workspace/roof.toml", delta: "+184 / -12", risk: "中风险", riskColor: "var(--badge-risk-medium)",
+    summary: "添加双坡云杉木屋顶与四角上翘飞檐（含旧顶棚清理）",
+    lines: [
+      { o: 1, n: 1, t: "same", s: "[palette]" },
+      { o: 2, n: 2, t: "del", s: 'roof_main = "minecraft:oak_stairs"' },
+      { o: "", n: 3, t: "add", s: 'roof_main = "minecraft:spruce_stairs"' },
+      { o: "", n: 4, t: "add", s: 'roof_eave = "minecraft:dark_oak_slab"' },
+      { o: 3, n: 5, t: "same", s: "" },
+      { o: "", n: 6, t: "skip", s: "... 省略中间 8 行未改动 ..." },
+      { o: 12, n: 15, t: "same", s: "[[part]]" },
+      { o: 13, n: 16, t: "same", s: 'name = "gable_roof"' },
+      { o: 14, n: 17, t: "del", s: "[[part.action]]" },
+      { o: 15, n: 18, t: "del", s: 'type = "plane", block = "roof_main", from = [3,8,3], to = [21,8,19]' },
+      { o: "", n: 19, t: "add", s: '[[part.action]] # 北坡阶梯' },
+      { o: "", n: 20, t: "add", s: 'type = "plane", axis = "y", block = "roof_main", facing = "south"' },
+      { o: "", n: 21, t: "add", s: 'from = [2, 8, 2], to = [22, 8, 11]' },
+      { o: "", n: 22, t: "add", s: '[[part.action]] # 四角上翘飞檐' },
+      { o: "", n: 23, t: "add", s: 'type = "points", block = "roof_eave"' },
+      { o: "", n: 24, t: "add", s: 'at = [[1,9,1], [23,9,1], [1,9,21], [23,9,21]]' },
+      { o: 16, n: 25, t: "same", s: "priority = 30" }
+    ],
+    hunks: [1, 10, 14]
+  },
+  walls: {
+    id: "walls", path: "workspace/walls.toml", delta: "+312 / -16", risk: "低风险", riskColor: "var(--badge-risk-low)",
+    summary: "石砖台基、深色橡木柱框与格栅推拉门洞",
+    lines: [
+      { o: 1, n: 1, t: "same", s: "[[part]]" },
+      { o: 2, n: 2, t: "same", s: 'name = "plinth_and_walls"' },
+      { o: "", n: 3, t: "add", s: '[[part.action]] # 石砖台基' },
+      { o: "", n: 4, t: "add", s: 'type = "box", mode = "solid", block = "minecraft:stone_bricks"' },
+      { o: "", n: 5, t: "add", s: 'from = [4, 0, 4], to = [20, 1, 18]' },
+      { o: "", n: 6, t: "add", s: '[[part.action]] # 深色橡木立柱' },
+      { o: "", n: 7, t: "add", s: 'type = "line", block = "minecraft:dark_oak_log"' },
+      { o: "", n: 8, t: "add", s: 'from = [4, 2, 4], to = [4, 7, 4]' },
+      { o: 3, n: 9, t: "del", s: 'type = "box", mode = "walls", block = "minecraft:oak_planks"' },
+      { o: "", n: 10, t: "add", s: 'type = "box", mode = "walls", block = "minecraft:white_concrete"' }
+    ],
+    hunks: [2, 8]
+  },
+  interior: {
+    id: "interior", path: "workspace/interior.toml", delta: "+68 / -0", risk: "低风险", riskColor: "var(--badge-risk-low)",
+    summary: "门口石阶两侧灯笼柱、室内茶席矮几与屏风",
+    lines: [
+      { o: 1, n: 1, t: "same", s: "[[part]]" },
+      { o: 2, n: 2, t: "same", s: 'name = "entrance_lanterns"' },
+      { o: "", n: 3, t: "add", s: "[[part.action]]" },
+      { o: "", n: 4, t: "add", s: 'type = "points", block = "minecraft:dark_oak_fence"' },
+      { o: "", n: 5, t: "add", s: "at = [[10,2,19], [10,3,19], [14,2,19], [14,3,19]]" },
+      { o: "", n: 6, t: "add", s: "[[part.action]]" },
+      { o: "", n: 7, t: "add", s: 'type = "points", block = "minecraft:lantern"' },
+      { o: "", n: 8, t: "add", s: "at = [[10,4,19], [14,4,19]]" }
+    ],
+    hunks: [2]
+  }
+};
+
+let order = ["roof", "walls", "interior"];
+let currentId = "roof";
+let activeHunkIdx = 0;
+let decided = {};
+
+function toCssVar(k) { return "--" + k.replace(".", "-").replace(/([A-Z])/g, "-$1").toLowerCase(); }
+let currentThemeId = localStorage.getItem("p2s_gemini_theme") || "slate-blueprint";
+if (!THEMES[currentThemeId]) currentThemeId = "slate-blueprint";
+function setTheme(id) {
+  const theme = THEMES[id] || THEMES["slate-blueprint"];
+  currentThemeId = theme.meta.id;
+  localStorage.setItem("p2s_gemini_theme", currentThemeId);
+  for (const [k, v] of Object.entries(theme.tokens)) document.documentElement.style.setProperty(toCssVar(k), v);
+  document.querySelectorAll("[data-theme-btn]").forEach(b => b.classList.toggle("active-theme", b.getAttribute("data-theme-btn") === currentThemeId));
+  document.getElementById("jsonCode").textContent = JSON.stringify(theme, null, 2);
+}
+function cycleTheme() { const ks = Object.keys(THEMES); setTheme(ks[(ks.indexOf(currentThemeId) + 1) % ks.length]); }
+function toggleJsonBox() { document.getElementById("jsonModal").classList.toggle("open"); }
+function toggleCollapse() { document.getElementById("workbench").classList.toggle("collapsed"); }
+
+function selectFile(id) {
+  currentId = id;
+  activeHunkIdx = 0;
+  toggleDiscardBar(false);
+  renderReview();
+  drawWorld(id);
+}
+
+function stepFile(dir) {
+  const idx = order.indexOf(currentId);
+  selectFile(order[(idx + dir + order.length) % order.length]);
+}
+
+function stepHunk(dir) {
+  const f = FILES[currentId];
+  activeHunkIdx = (activeHunkIdx + dir + f.hunks.length) % f.hunks.length;
+  renderReview();
+}
+
+function toggleDiscardBar(open) {
+  document.getElementById("discardBar").classList.toggle("open", open);
+}
+
+function applyCurrent() {
+  decided[currentId] = "applied";
+  advanceAfterDecision();
+}
+
+function confirmDiscard() {
+  decided[currentId] = "discarded";
+  toggleDiscardBar(false);
+  advanceAfterDecision();
+}
+
+function applyAllRemaining() {
+  order.forEach(id => { if (!decided[id]) decided[id] = "applied"; });
+  renderReview();
+}
+
+function advanceAfterDecision() {
+  const next = order.find(id => !decided[id]);
+  if (next) {
+    currentId = next;
+    activeHunkIdx = 0;
+  }
+  renderReview();
+  drawWorld(currentId);
+}
+
+function renderReview() {
+  const remCount = order.filter(id => !decided[id]).length;
+  document.getElementById("tabBadge").textContent = remCount;
+  document.getElementById("railCount").textContent = remCount;
+
+  document.querySelectorAll(".q-pill").forEach((el, i) => {
+    const id = el.getAttribute("data-file");
+    el.classList.toggle("active", id === currentId);
+    el.classList.toggle("applied", Boolean(decided[id]));
+    const prefix = decided[id] === "applied" ? "✓ " : decided[id] === "discarded" ? "✕ " : (i + 1) + "/3 ";
+    el.textContent = prefix + id + ".toml";
+  });
+
+  const allDone = remCount === 0;
+  document.getElementById("doneBanner").classList.toggle("show", allDone);
+  document.getElementById("reviewMeta").style.display = allDone ? "none" : "flex";
+  document.getElementById("diffBox").style.display = allDone ? "none" : "block";
+  document.getElementById("decisionBar").style.display = allDone ? "none" : "flex";
+  if (allDone) {
+    document.getElementById("worldHudTitle").textContent = "全部待审文件已处理";
+    document.getElementById("worldHudSub").textContent = "建筑已提交到选区 · 可回到对话继续";
+    return;
+  }
+
+  const f = FILES[currentId];
+  document.getElementById("metaPath").textContent = f.path;
+  document.getElementById("metaDelta").textContent = f.delta;
+  const rEl = document.getElementById("metaRisk");
+  rEl.textContent = f.risk;
+  rEl.style.color = f.riskColor;
+  document.getElementById("metaSummary").textContent = f.summary;
+  document.getElementById("hunkCounter").textContent = (activeHunkIdx + 1) + "/" + f.hunks.length;
+  document.getElementById("worldHudTitle").textContent = "当前高亮：" + f.path;
+  document.getElementById("worldHudSub").textContent = f.delta + " 方块 · 其他待审文件呈暗线框";
+
+  const hunkRow = f.hunks[activeHunkIdx];
+  const box = document.getElementById("diffBox");
+  box.innerHTML = f.lines.map((l, idx) => {
+    const cls = l.t === "add" ? "add" : l.t === "del" ? "del" : l.t === "skip" ? "skip" : "";
+    const mk = l.t === "add" ? "+" : l.t === "del" ? "-" : l.t === "skip" ? "~" : " ";
+    const mkCls = l.t === "add" ? "mk-add" : l.t === "del" ? "mk-del" : "";
+    const hunkCls = idx === hunkRow ? " active-hunk-top active-hunk-bot" : "";
+    return `<div class="diff-line ${cls}${hunkCls}"><span class="ln">${l.o}</span><span class="ln">${l.n}</span><span class="mk ${mkCls}">${mk}</span><span class="code-cell">${l.s.replace(/</g,"&lt;")}</span></div>`;
+  }).join("");
+}
+
+function drawWorld(focusId) {
+  const c = document.getElementById("worldCanvas");
+  const ctx = c.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+
+  const skyBands = ["#5B8DE0", "#6A9AE8", "#7AA8EE", "#8DB7F2", "#A4C7F5"];
+  skyBands.forEach((col, i) => { ctx.fillStyle = col; ctx.fillRect(0, i * 44, 640, 45); });
+  ctx.fillStyle = "#FFF5B8"; ctx.fillRect(560, 26, 26, 26);
+  ctx.fillStyle = "rgba(255,255,255,0.88)"; ctx.fillRect(368, 34, 48, 10); ctx.fillRect(462, 54, 62, 10);
+  ctx.fillStyle = "#426282"; ctx.fillRect(410, 148, 110, 62);
+  ctx.fillStyle = "#4E7294"; ctx.fillRect(500, 156, 140, 54);
+  for (let gx = 340; gx < 640; gx += 16) {
+    for (let gy = 204; gy < 360; gy += 16) {
+      ctx.fillStyle = ((gx + gy) / 16) % 2 === 0 ? "#569835" : "#62A63F";
+      ctx.fillRect(gx, gy, 16, 16);
+    }
+  }
+  ctx.strokeStyle = "rgba(75, 227, 255, 0.5)"; ctx.strokeRect(392.5, 136.5, 178, 146);
+
+  // Walls
+  const wallFocus = focusId === "walls";
+  ctx.fillStyle = wallFocus ? "rgba(107, 196, 255, 0.62)" : "rgba(180, 192, 210, 0.25)";
+  ctx.fillRect(430, 196, 116, 52);
+  ctx.strokeStyle = wallFocus ? "#7CE8FF" : "rgba(180, 200, 220, 0.45)";
+  ctx.strokeRect(430.5, 196.5, 115, 51);
+  ctx.fillStyle = wallFocus ? "#5D3B22" : "rgba(72, 48, 30, 0.5)";
+  [430, 466, 504, 540].forEach(px => ctx.fillRect(px, 194, 6, 54));
+
+  // Roof
+  const roofFocus = focusId === "roof";
+  ctx.fillStyle = roofFocus ? "rgba(240, 180, 90, 0.68)" : "rgba(180, 160, 130, 0.22)";
+  ctx.beginPath();
+  ctx.moveTo(414, 196); ctx.lineTo(488, 144); ctx.lineTo(562, 196); ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = roofFocus ? "#FFD27D" : "rgba(210, 185, 140, 0.45)";
+  ctx.stroke();
+
+  // Interior
+  const intFocus = focusId === "interior";
+  ctx.fillStyle = intFocus ? "rgba(124, 224, 155, 0.68)" : "rgba(130, 170, 145, 0.22)";
+  ctx.fillRect(474, 250, 28, 18);
+  ctx.strokeStyle = intFocus ? "#7CE09B" : "rgba(124, 224, 155, 0.4)";
+  ctx.strokeRect(474.5, 250.5, 27, 17);
+  [468, 504].forEach(lx => {
+    ctx.fillStyle = intFocus ? "#FFE17D" : "rgba(255, 225, 125, 0.35)";
+    ctx.fillRect(lx - 1, 227, 5, 6);
+    if (intFocus) { ctx.strokeStyle = "#7CE09B"; ctx.strokeRect(lx - 2.5, 225.5, 8, 9); }
+  });
+}
+
+setTheme(currentThemeId);
+renderReview();
+drawWorld(currentId);
+</script>
+</body>
+</html>

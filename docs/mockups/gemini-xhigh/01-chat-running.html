@@ -1,0 +1,1301 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="slate-mist">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2S UI 效果图 01 · 对话首页（Agent 运行中）</title>
+<style>
+  :root {
+    --bg-canvas: #191C23EB;
+    --bg-surface: #20242DF2;
+    --bg-elevated: #272C37FA;
+    --bg-inset: #13161CF2;
+    --bg-hover: #2E3442F5;
+    --bg-selected: #2A3346F5;
+    --border-subtle: #2E3440D9;
+    --border-default: #3B4354EB;
+    --border-focus: #7B9ED9FF;
+    --text-primary: #D8DEE9FF;
+    --text-secondary: #97A1B3FF;
+    --text-muted: #667084FF;
+    --text-on-accent: #12161FFF;
+    --accent-primary: #7B9ED9FF;
+    --accent-hover: #8CAEE4FF;
+    --accent-soft: #7B9ED924;
+    --semantic-success: #7BB696FF;
+    --semantic-success-bg: #1D2C26EB;
+    --semantic-warning: #CFA972FF;
+    --semantic-warning-bg: #2B241CEB;
+    --semantic-danger: #CC7B82FF;
+    --semantic-danger-bg: #2E1E23EB;
+    --syntax-section: #8AAAE0FF;
+    --syntax-key: #B4C1D6FF;
+    --syntax-string: #8BC0A3FF;
+    --syntax-number: #CFA972FF;
+    --diff-add-bg: #1B2D25E6;
+    --diff-add-text: #8FD1ACFF;
+    --diff-del-bg: #301F24E6;
+    --diff-del-text: #E09299FF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0D0F14;
+    color: #CBD2DF;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+
+  .gallery-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 20px;
+    background: #12151C;
+    border-bottom: 1px solid #242936;
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+  .gallery-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .gallery-brand {
+    font-weight: 600;
+    color: #E5E9F0;
+    margin-right: 6px;
+    letter-spacing: 0.2px;
+  }
+  .nav-pill {
+    text-decoration: none;
+    color: #939DB0;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    transition: background 0.15s, color 0.15s;
+  }
+  .nav-pill:hover { background: #1B202B; color: #E5E9F0; }
+  .nav-pill.active {
+    background: #232938;
+    color: #E5E9F0;
+    border-color: #343D52;
+  }
+  .gallery-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .meta-badge {
+    font-size: 12px;
+    color: #7D8799;
+    padding: 3px 8px;
+    background: #171B24;
+    border: 1px solid #242A38;
+    border-radius: 4px;
+  }
+  .theme-switch-group {
+    display: inline-flex;
+    background: #171B24;
+    border: 1px solid #272E3E;
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .theme-btn {
+    background: transparent;
+    color: #8D97AA;
+    border: none;
+    padding: 4px 9px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .theme-btn:hover { color: #E5E9F0; }
+  .theme-btn.active { background: #2A3244; color: #ECEFF4; }
+  .json-btn {
+    background: #1A1F2B;
+    color: #A7B4CA;
+    border: 1px solid #2B3345;
+    padding: 4px 10px;
+    font-size: 12px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .json-btn:hover { background: #232A3A; color: #ECEFF4; }
+
+  .stage-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 16px 28px;
+  }
+  .stage-scale-box {
+    width: 1280px;
+    height: 720px;
+    transform-origin: top center;
+  }
+
+  /* ── Minecraft Viewport (640x360 logical @ 2x = 1280x720) ── */
+  .mc-screen {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    border: 2px solid #222733;
+    background: #7A9AC0;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+    font-size: 16px;
+    line-height: 20px;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+    user-select: none;
+  }
+  .mc-screen *, .mc-screen *::before, .mc-screen *::after {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+  }
+
+  .mc-world-svg {
+    position: absolute;
+    inset: 0;
+    width: 1280px;
+    height: 720px;
+    display: block;
+    shape-rendering: crispEdges;
+  }
+
+  /* World HUD overlays on open right side */
+  .world-hud-top {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 4;
+  }
+  .world-chip {
+    background: var(--bg-canvas);
+    border: 2px solid var(--border-subtle);
+    color: var(--text-primary);
+    padding: 4px 10px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .world-chip-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent-primary);
+    display: inline-block;
+  }
+  .world-hud-bottom {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    z-index: 4;
+  }
+  .world-hint {
+    background: var(--bg-canvas);
+    border: 2px solid var(--border-subtle);
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .mc-hotbar {
+    display: flex;
+    background: #1A1D24D9;
+    border: 2px solid #3C4454;
+    padding: 2px;
+    gap: 2px;
+  }
+  .hotbar-slot {
+    width: 32px;
+    height: 32px;
+    background: #12151BB8;
+    border: 2px solid #2A303D;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #8892A6;
+  }
+  .hotbar-slot.active {
+    border-color: var(--accent-primary);
+    background: #232A38D8;
+    color: var(--text-primary);
+  }
+
+  /* ── Docked B+C Drawer (312mc = 624px wide, 348mc = 696px tall) ── */
+  .p2s-drawer {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 624px;
+    height: 696px;
+    background: var(--bg-canvas);
+    border: 2px solid var(--border-default);
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+    transition: width 0.12s steps(4);
+  }
+  .p2s-drawer.wide {
+    width: 736px;
+  }
+  .p2s-drawer.collapsed {
+    display: none;
+  }
+
+  .drawer-collapsed-pill {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    height: 38px;
+    background: var(--bg-elevated);
+    border: 2px solid var(--border-default);
+    color: var(--text-primary);
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    z-index: 15;
+    cursor: pointer;
+  }
+  .drawer-collapsed-pill.visible {
+    display: inline-flex;
+  }
+
+  /* Row 1: Identity & Global Utilities (36px + 2px border) */
+  .topbar-row {
+    height: 38px;
+    padding: 0 10px;
+    background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .topbar-left, .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Row 2: B+C Mode Tabs (40px + 2px border) */
+  .tabbar-row {
+    height: 42px;
+    padding: 0 10px;
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .tabs-group {
+    display: flex;
+    align-items: stretch;
+    height: 40px;
+    gap: 4px;
+  }
+  .tab-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 4px solid transparent;
+    cursor: pointer;
+    background: transparent;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-size: 16px;
+    line-height: 20px;
+  }
+  .tab-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .tab-item.active {
+    color: var(--text-primary);
+    background: var(--bg-canvas);
+    border-bottom-color: var(--accent-primary);
+  }
+  .tab-badge {
+    padding: 0 6px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-inset);
+    color: var(--text-muted);
+    border: 2px solid var(--border-subtle);
+  }
+  .tab-badge.pending {
+    background: var(--semantic-warning-bg);
+    color: var(--semantic-warning);
+    border-color: var(--semantic-warning);
+  }
+
+  /* MC Buttons */
+  .mc-btn {
+    height: 26px;
+    padding: 0 8px;
+    background: var(--bg-surface);
+    border: 2px solid var(--border-subtle);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 20px;
+    text-decoration: none;
+  }
+  .mc-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+  }
+  .mc-btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    padding: 0 6px;
+  }
+  .mc-btn.ghost:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-subtle);
+  }
+  .mc-btn.primary {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: var(--text-on-accent);
+  }
+  .mc-btn.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+  .mc-btn.danger {
+    background: var(--semantic-danger-bg);
+    border-color: var(--semantic-danger);
+    color: var(--semantic-danger);
+  }
+  .mc-btn.danger:hover {
+    background: var(--semantic-danger);
+    color: var(--text-on-accent);
+  }
+
+  /* Plan Progress Strip */
+  .plan-strip {
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--border-subtle);
+    padding: 8px 12px;
+    flex-shrink: 0;
+  }
+  .plan-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .plan-head.collapsed-only { margin-bottom: 0; }
+  .plan-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent-primary);
+    display: inline-block;
+    animation: mcBlink 1.2s steps(2) infinite;
+  }
+  @keyframes mcBlink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0.35; }
+  }
+  .plan-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 4px;
+  }
+  .plan-steps.hidden { display: none; }
+  .plan-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 22px;
+    color: var(--text-secondary);
+  }
+  .plan-step.done { color: var(--text-muted); }
+  .plan-step.active { color: var(--text-primary); }
+  .step-icon { width: 14px; text-align: center; }
+  .step-icon.done { color: var(--semantic-success); }
+  .step-icon.active { color: var(--accent-primary); }
+  .step-icon.todo { color: var(--text-muted); }
+  .step-tag {
+    margin-left: auto;
+    color: var(--text-muted);
+  }
+  .plan-step.active .step-tag { color: var(--accent-primary); }
+
+  /* Chat Stream */
+  .chat-stream {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .chat-stream::-webkit-scrollbar { width: 6px; }
+  .chat-stream::-webkit-scrollbar-thumb { background: var(--border-default); }
+  .chat-stream::-webkit-scrollbar-track { background: var(--bg-inset); }
+
+  .msg-user {
+    background: var(--bg-elevated);
+    border: 2px solid var(--border-subtle);
+    border-left: 4px solid var(--accent-primary);
+    padding: 8px 10px;
+    color: var(--text-primary);
+    line-height: 22px;
+  }
+  .msg-role {
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Tool Call Cards */
+  .tool-card {
+    background: var(--bg-inset);
+    border: 2px solid var(--border-subtle);
+    cursor: pointer;
+  }
+  .tool-card:hover {
+    border-color: var(--border-default);
+  }
+  .tool-card-head {
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--text-secondary);
+  }
+  .tool-card-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .tool-status-ok { color: var(--semantic-success); }
+  .tool-status-run { color: var(--accent-primary); }
+  .tool-card-meta { color: var(--text-muted); flex-shrink: 0; }
+  .tool-card-body {
+    border-top: 2px solid var(--border-subtle);
+    padding: 6px 10px 6px 26px;
+    color: var(--text-muted);
+    background: var(--bg-canvas);
+    line-height: 20px;
+    display: none;
+  }
+  .tool-card.expanded .tool-card-body {
+    display: block;
+  }
+  .tool-code {
+    color: var(--text-secondary);
+  }
+
+  .msg-assistant {
+    padding: 4px 2px;
+    color: var(--text-primary);
+    line-height: 22px;
+  }
+  .stream-caret {
+    display: inline-block;
+    width: 10px;
+    height: 16px;
+    background: var(--accent-primary);
+    vertical-align: text-bottom;
+    margin-left: 4px;
+    animation: mcBlink 0.9s steps(2) infinite;
+  }
+
+  /* Queued Follow-up + Composer Footer */
+  .composer-dock {
+    border-top: 2px solid var(--border-subtle);
+    background: var(--bg-surface);
+    padding: 8px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .queue-strip {
+    background: var(--bg-elevated);
+    border: 2px solid var(--border-default);
+    border-left: 4px solid var(--semantic-warning);
+    padding: 6px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .queue-strip.hidden { display: none; }
+  .queue-text {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+  .queue-tag {
+    color: var(--semantic-warning);
+    margin-right: 6px;
+  }
+  .composer-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .mc-input {
+    flex: 1;
+    height: 36px;
+    background: var(--bg-inset);
+    border: 2px solid var(--border-default);
+    color: var(--text-primary);
+    padding: 0 10px;
+    font-size: 16px;
+    line-height: 20px;
+    outline: none;
+  }
+  .mc-input:focus {
+    border-color: var(--border-focus);
+  }
+  .mc-input::placeholder {
+    color: var(--text-muted);
+  }
+  .composer-action {
+    height: 36px;
+    padding: 0 12px;
+  }
+  .composer-hint {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+  }
+
+  /* Popovers inside MC Panel */
+  .mc-popover {
+    position: absolute;
+    top: 40px;
+    background: var(--bg-elevated);
+    border: 2px solid var(--border-default);
+    padding: 8px;
+    z-index: 30;
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .mc-popover.open { display: flex; }
+  .popover-left { left: 10px; width: 320px; }
+  .popover-right { right: 10px; width: 256px; }
+  .popover-title {
+    color: var(--text-secondary);
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+  }
+  .popover-row {
+    padding: 6px 8px;
+    background: var(--bg-surface);
+    border: 2px solid var(--border-subtle);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .popover-row:hover { background: var(--bg-hover); }
+  .popover-row.selected {
+    background: var(--bg-selected);
+    border-color: var(--accent-primary);
+  }
+
+  /* JSON Theme Modal (outside MC canvas) */
+  .json-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(8, 10, 14, 0.78);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .json-modal-backdrop.open { display: flex; }
+  .json-modal {
+    width: 680px;
+    max-width: 100%;
+    max-height: 85vh;
+    background: #141821;
+    border: 1px solid #2B3344;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .json-modal-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid #242B3A;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #E5E9F0;
+    font-size: 14px;
+  }
+  .json-pre {
+    margin: 0;
+    padding: 14px 16px;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #BAC5D8;
+    background: #0F1219;
+  }
+
+  .note-caption {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #7D8799;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header class="gallery-bar">
+  <div class="gallery-left">
+    <span class="gallery-brand">P2S · B+C 界面效果图</span>
+    <a class="nav-pill" href="index.html">目录</a>
+    <a class="nav-pill active" href="01-chat-running.html">01 对话运行中</a>
+    <a class="nav-pill" href="02-chat-pending.html">02 待审卡片(3)</a>
+    <a class="nav-pill" href="03-review-diff.html">03 审阅 Diff</a>
+    <a class="nav-pill" href="04-files-editor.html">04 文件编辑</a>
+    <a class="nav-pill" href="05-narrow-480x270.html">05 窄屏 480×270</a>
+  </div>
+  <div class="gallery-right">
+    <span class="meta-badge">逻辑 640×360 · 2× = 1280×720</span>
+    <div class="theme-switch-group" role="group" aria-label="切换主题">
+      <button class="theme-btn active" data-theme-id="slate-mist">冷灰青</button>
+      <button class="theme-btn" data-theme-id="rose-dusk">暮玫瑰</button>
+      <button class="theme-btn" data-theme-id="warm-stone">暖石灰</button>
+    </div>
+    <button class="json-btn" id="openJsonBtn">{ 主题 JSON }</button>
+  </div>
+</header>
+
+<main class="stage-wrap">
+  <div class="stage-scale-box" id="stageBox">
+    <div class="mc-screen" id="mcScreen">
+
+      <!-- Pixel-Art Minecraft Courtyard Scene (Right 51% open world + active construction wireframe) -->
+      <svg class="mc-world-svg" viewBox="0 0 320 180" preserveAspectRatio="none" aria-hidden="true">
+        <!-- Stepped Pixel Sky -->
+        <rect x="0" y="0" width="320" height="28" fill="#82A0C2"/>
+        <rect x="0" y="28" width="320" height="24" fill="#92AECB"/>
+        <rect x="0" y="52" width="320" height="22" fill="#A2BBD4"/>
+        <rect x="0" y="74" width="320" height="24" fill="#B2C7DD"/>
+        <!-- Pixel Sun & Clouds -->
+        <rect x="272" y="16" width="14" height="14" fill="#EFE4C4"/>
+        <rect x="274" y="18" width="10" height="10" fill="#F8EED3"/>
+        <rect x="184" y="20" width="28" height="6" fill="#DCE5F0"/>
+        <rect x="190" y="16" width="14" height="4" fill="#E6EDF5"/>
+        <rect x="234" y="34" width="34" height="6" fill="#DCE5F0"/>
+        <rect x="242" y="30" width="16" height="4" fill="#E6EDF5"/>
+
+        <!-- Distant Voxel Mountains -->
+        <rect x="148" y="74" width="44" height="24" fill="#6D8496"/>
+        <rect x="158" y="66" width="22" height="8" fill="#778E9F"/>
+        <rect x="192" y="80" width="52" height="18" fill="#647B8C"/>
+        <rect x="244" y="70" width="48" height="28" fill="#6F8698"/>
+        <rect x="256" y="62" width="24" height="8" fill="#7B92A3"/>
+        <rect x="292" y="78" width="28" height="20" fill="#627889"/>
+
+        <!-- Far Trees & Rolling Grass -->
+        <rect x="0" y="96" width="320" height="84" fill="#5B7847"/>
+        <rect x="156" y="96" width="164" height="14" fill="#516D3F"/>
+        <!-- Oak trees in background -->
+        <rect x="286" y="80" width="18" height="14" fill="#466337"/>
+        <rect x="289" y="76" width="12" height="6" fill="#537342"/>
+        <rect x="293" y="94" width="4" height="8" fill="#5D4430"/>
+        <rect x="164" y="84" width="14" height="12" fill="#476438"/>
+        <rect x="169" y="96" width="4" height="6" fill="#5D4430"/>
+
+        <!-- Block Ground Grid & Stone Courtyard Path -->
+        <rect x="156" y="110" width="164" height="70" fill="#5E7D4A"/>
+        <rect x="156" y="124" width="164" height="2" fill="#537041"/>
+        <rect x="156" y="140" width="164" height="2" fill="#537041"/>
+        <rect x="156" y="156" width="164" height="2" fill="#537041"/>
+        <rect x="180" y="110" width="2" height="70" fill="#547142"/>
+        <rect x="216" y="110" width="2" height="70" fill="#547142"/>
+        <rect x="252" y="110" width="2" height="70" fill="#547142"/>
+        <rect x="288" y="110" width="2" height="70" fill="#547142"/>
+
+        <!-- Existing Main Hall (Left-behind in world) -->
+        <rect x="158" y="74" width="42" height="36" fill="#CFC9BD"/>
+        <rect x="158" y="74" width="4" height="36" fill="#5B422E"/>
+        <rect x="196" y="74" width="4" height="36" fill="#5B422E"/>
+        <rect x="162" y="88" width="34" height="3" fill="#5B422E"/>
+        <rect x="168" y="94" width="10" height="16" fill="#463324"/>
+        <rect x="183" y="79" width="8" height="7" fill="#6F8A9C"/>
+        <rect x="152" y="68" width="54" height="6" fill="#454C59"/>
+        <rect x="156" y="62" width="46" height="6" fill="#505868"/>
+        <rect x="162" y="57" width="34" height="5" fill="#5D6678"/>
+
+        <!-- Courtyard Low Stone Wall -->
+        <rect x="198" y="102" width="88" height="8" fill="#777D87"/>
+        <rect x="198" y="100" width="88" height="2" fill="#8C929C"/>
+        <rect x="210" y="102" width="10" height="8" fill="#6B717A"/>
+        <rect x="234" y="102" width="10" height="8" fill="#6B717A"/>
+        <rect x="258" y="102" width="10" height="8" fill="#6B717A"/>
+
+        <!-- Selection Wireframe Bounding Box (East Pavilion Site) -->
+        <rect x="208" y="78" width="84" height="58" fill="#7B9ED918" stroke="#7B9ED9" stroke-width="1"/>
+        <!-- Back corner wireframe edges -->
+        <line x1="208" y1="78" x2="220" y2="70" stroke="#7B9ED988" stroke-width="1"/>
+        <line x1="292" y1="78" x2="300" y2="70" stroke="#7B9ED988" stroke-width="1"/>
+        <line x1="220" y1="70" x2="300" y2="70" stroke="#7B9ED988" stroke-width="1"/>
+        <line x1="300" y1="70" x2="300" y2="124" stroke="#7B9ED988" stroke-width="1"/>
+        <line x1="292" y1="136" x2="300" y2="124" stroke="#7B9ED988" stroke-width="1"/>
+
+        <!-- Stone Foundation Being Placed -->
+        <rect x="214" y="128" width="72" height="8" fill="#757D8A"/>
+        <rect x="214" y="126" width="72" height="2" fill="#8B94A3"/>
+
+        <!-- Active Timber Pillars (Partially Built) -->
+        <rect x="218" y="96" width="5" height="30" fill="#6E4E35"/>
+        <rect x="242" y="96" width="5" height="30" fill="#6E4E35"/>
+        <rect x="268" y="96" width="5" height="30" fill="#6E4E35"/>
+        <rect x="280" y="98" width="4" height="28" fill="#593F2A"/>
+
+        <!-- Ghost Roof Blueprint Lines Currently Being Computed by Agent -->
+        <rect x="212" y="88" width="76" height="6" fill="#7B9ED944" stroke="#7B9ED9AA" stroke-width="1"/>
+        <rect x="218" y="82" width="64" height="6" fill="#7B9ED933" stroke="#7B9ED999" stroke-width="1"/>
+        <rect x="228" y="76" width="44" height="6" fill="#7B9ED926" stroke="#7B9ED977" stroke-width="1"/>
+
+        <!-- Crosshair in open center-right -->
+        <rect x="235" y="89" width="6" height="1" fill="#ECEFF4AA"/>
+        <rect x="237" y="87" width="2" height="5" fill="#ECEFF4AA"/>
+      </svg>
+
+      <!-- World Top-Right Status Chip -->
+      <div class="world-hud-top">
+        <div class="world-chip">
+          <span class="world-chip-dot"></span>
+          <span>选区 18×12×18 · 正在计算屋顶几何</span>
+        </div>
+      </div>
+
+      <!-- World Bottom-Right Hint & Hotbar -->
+      <div class="world-hud-bottom">
+        <div class="world-hint">按 « 收起面板查看完整建筑 · Esc 返回游戏</div>
+        <div class="mc-hotbar">
+          <div class="hotbar-slot active">斧</div>
+          <div class="hotbar-slot">石</div>
+          <div class="hotbar-slot">木</div>
+          <div class="hotbar-slot">瓦</div>
+          <div class="hotbar-slot">灯</div>
+          <div class="hotbar-slot"></div>
+          <div class="hotbar-slot"></div>
+        </div>
+      </div>
+
+      <!-- Collapsed World Peek Pill -->
+      <div class="drawer-collapsed-pill" id="collapsedPill" title="展开 P2S 面板">
+        <span class="pulse-dot"></span>
+        <span>P2S · 运行中 (步骤 2/4)</span>
+        <span style="color:var(--accent-primary)">展开 »</span>
+      </div>
+
+      <!-- Main B+C Docked Drawer -->
+      <aside class="p2s-drawer" id="drawer">
+        <!-- Row 1: Identity + Low-Frequency Global Actions -->
+        <div class="topbar-row">
+          <div class="topbar-left">
+            <button class="mc-btn" id="projectSwitcherBtn" title="切换项目与会话">江南庭院 · S4 ▾</button>
+            <button class="mc-btn ghost" title="新建会话">+</button>
+          </div>
+          <div class="topbar-right">
+            <button class="mc-btn ghost" title="撤销">↶</button>
+            <button class="mc-btn ghost" title="重做">↷</button>
+            <button class="mc-btn" title="检查点">◆2</button>
+            <button class="mc-btn ghost" id="moreMenuBtn" title="更多操作">···</button>
+            <button class="mc-btn ghost" id="settingsBtn" title="设置与主题">⚙</button>
+            <button class="mc-btn ghost" title="关闭 (Esc)">✕</button>
+          </div>
+        </div>
+
+        <!-- Row 2: B+C Primary Tabs -->
+        <div class="tabbar-row">
+          <nav class="tabs-group">
+            <a class="tab-item active" href="01-chat-running.html">对话</a>
+            <a class="tab-item" href="03-review-diff.html">审阅 <span class="tab-badge">0</span></a>
+            <a class="tab-item" href="04-files-editor.html">文件</a>
+          </nav>
+          <div class="topbar-right">
+            <button class="mc-btn ghost" id="toggleWidthBtn" title="切换宽/标准抽屉">◧</button>
+            <button class="mc-btn ghost" id="collapseDrawerBtn" title="收起面板仅看世界">«</button>
+          </div>
+        </div>
+
+        <!-- Popover: Project/Session Switcher -->
+        <div class="mc-popover popover-left" id="projectPopover">
+          <div class="popover-title"><span>项目与会话</span><span style="color:var(--text-muted)">Esc 关闭</span></div>
+          <div class="popover-row selected"><span>江南庭院 · S4 歇山顶木亭</span><span style="color:var(--accent-primary)">当前</span></div>
+          <div class="popover-row"><span>江南庭院 · S3 主厅修缮</span><span style="color:var(--text-muted)">12轮</span></div>
+          <div class="popover-row"><span>北方城堡 · S1 城墙箭塔</span><span style="color:var(--text-muted)">8轮</span></div>
+        </div>
+
+        <!-- Popover: More Actions -->
+        <div class="mc-popover popover-right" id="morePopover">
+          <div class="popover-title"><span>更多操作</span><span style="color:var(--text-muted)">快捷键</span></div>
+          <div class="popover-row"><span>压缩当前对话上下文</span><span style="color:var(--text-muted)">48%</span></div>
+          <div class="popover-row"><span>管理检查点 (2)</span><span style="color:var(--text-muted)">列表</span></div>
+          <div class="popover-row"><span>新建选区项目</span><span style="color:var(--text-muted)">+</span></div>
+        </div>
+
+        <!-- Popover: In-game Theme & Settings -->
+        <div class="mc-popover popover-right" id="settingsPopover">
+          <div class="popover-title"><span>外观主题 (JSON)</span><span style="color:var(--text-muted)">热切换</span></div>
+          <div class="popover-row theme-opt selected" data-theme-id="slate-mist"><span>冷灰青 · Slate Mist</span><span>●</span></div>
+          <div class="popover-row theme-opt" data-theme-id="rose-dusk"><span>暮玫瑰 · Rosé Dusk</span><span></span></div>
+          <div class="popover-row theme-opt" data-theme-id="warm-stone"><span>暖石灰 · Warm Stone</span><span></span></div>
+          <div class="popover-row" style="margin-top:2px;color:var(--text-secondary)"><span>打开完整 LLM/技能设置</span><span>→</span></div>
+        </div>
+
+        <!-- Docked Plan Progress Strip -->
+        <section class="plan-strip">
+          <div class="plan-head" id="planHead">
+            <div class="plan-title-wrap">
+              <span class="pulse-dot"></span>
+              <span>执行计划 2/4 · 正在计算屋顶几何与飞檐</span>
+            </div>
+            <span style="color:var(--text-muted)" id="planChevron">收起 ▴</span>
+          </div>
+          <div class="plan-steps" id="planSteps">
+            <div class="plan-step done">
+              <span class="step-icon done">✓</span>
+              <span>扫描选区地形与既有主厅衔接边界</span>
+              <span class="step-tag">完成</span>
+            </div>
+            <div class="plan-step active">
+              <span class="step-icon active">●</span>
+              <span>脚本生成歇山顶椽架与深色橡木飞檐</span>
+              <span class="step-tag">进行中</span>
+            </div>
+            <div class="plan-step">
+              <span class="step-icon todo">○</span>
+              <span>搭建回廊柱网与云杉木栏杆</span>
+              <span class="step-tag">待执行</span>
+            </div>
+            <div class="plan-step">
+              <span class="step-icon todo">○</span>
+              <span>铺设青石板地面并提交待审文件</span>
+              <span class="step-tag">待执行</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Conversation Stream -->
+        <div class="chat-stream" id="chatStream">
+          <div class="msg-user">
+            <div class="msg-role"><span>你</span><span>15:42</span></div>
+            <div>在选区东侧补建一座带回廊的歇山顶木亭，檐角用深色橡木，地面铺青石板。</div>
+          </div>
+
+          <!-- Collapsed Tool Log -->
+          <div class="tool-card" data-tool>
+            <div class="tool-card-head">
+              <div class="tool-card-left">
+                <span class="tool-status-ok">✓</span>
+                <span>▸ 读取世界选区 · inspect_world</span>
+              </div>
+              <span class="tool-card-meta">18×12×18 · 85ms</span>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-code">origin = [112, 64, 64] · 西侧紧邻主厅矮墙 (y=64..66)</div>
+            </div>
+          </div>
+
+          <!-- Expanded Tool Log (Script execution) -->
+          <div class="tool-card expanded" data-tool>
+            <div class="tool-card-head">
+              <div class="tool-card-left">
+                <span class="tool-status-ok">✓</span>
+                <span>▾ 运行脚本 geo.gable_roof · 歇山顶曲面</span>
+              </div>
+              <span class="tool-card-meta">420ms</span>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-code">batch(46 ops) → 暂存 workspace/pavilion_roof.toml (+142 方块)</div>
+              <div>翼角起翘弧度 1.4 格，使用 dark_oak_stairs / slate_tile</div>
+            </div>
+          </div>
+
+          <!-- Subagent Delegation Tool Log -->
+          <div class="tool-card" data-tool>
+            <div class="tool-card-head">
+              <div class="tool-card-left">
+                <span class="tool-status-run">●</span>
+                <span>▸ 委派子代理 block-id-searcher · 校验灯笼与石板</span>
+              </div>
+              <span class="tool-card-meta">运行中</span>
+            </div>
+            <div class="tool-card-body">
+              <div class="tool-code">query: "青石板 深色橡木栅栏 纸灯笼" · 等待返回</div>
+            </div>
+          </div>
+
+          <!-- Streaming Assistant Text -->
+          <div class="msg-assistant">
+            已锚定东侧庭院基底并完成歇山顶飞檐计算，正在根据子代理返回的方块 ID 同步生成回廊与地面配置…<span class="stream-caret"></span>
+          </div>
+        </div>
+
+        <!-- Queued Follow-up + Composer -->
+        <footer class="composer-dock">
+          <div class="queue-strip" id="queueStrip">
+            <div class="queue-text">
+              <span class="queue-tag">排队中 (1)</span>
+              <span id="queueContent">回廊栏杆改用云杉木栅栏，檐下加挂灯笼</span>
+            </div>
+            <button class="mc-btn ghost" id="editQueueBtn" title="编辑排队消息">改</button>
+            <button class="mc-btn ghost" id="clearQueueBtn" title="取消此排队消息">✕</button>
+          </div>
+          <div class="composer-row">
+            <input class="mc-input" id="chatInput" type="text" placeholder="运行中：输入追加要求并回车排队...">
+            <button class="mc-btn primary composer-action hidden" id="queueSendBtn" style="display:none">排队 +</button>
+            <button class="mc-btn danger composer-action" id="stopBtn" title="停止 Agent (Ctrl+.)">■ 停止</button>
+          </div>
+          <div class="composer-hint">
+            <span id="runStateHint">Agent 执行中 · 新消息将在本步工具完成后插入</span>
+            <span>Enter 排队 · Ctrl+. 停止</span>
+          </div>
+        </footer>
+      </aside>
+    </div>
+  </div>
+  <div class="note-caption">点击计划标题、工具日志行、排队条「改/✕」、顶部项目/「···」/「⚙」及「«」收起按钮，均可体验真实交互。</div>
+</main>
+
+<!-- Theme JSON Modal -->
+<div class="json-modal-backdrop" id="jsonModal">
+  <div class="json-modal">
+    <div class="json-modal-head">
+      <span id="jsonModalTitle">当前主题 JSON（与 CSS 变量一一对应）</span>
+      <div style="display:flex;gap:8px;">
+        <button class="json-btn" id="copyJsonBtn">复制 JSON</button>
+        <button class="json-btn" id="closeJsonBtn">关闭</button>
+      </div>
+    </div>
+    <pre class="json-pre" id="jsonPre"></pre>
+  </div>
+</div>
+
+<script>
+const THEMES = {
+  "slate-mist": {
+    schema_version: 1,
+    meta: { id: "slate-mist", name: "冷灰青 · Slate Mist", mode: "dark", description: "冷调石板灰配雾蓝强调，参考 Linear 与 Nord" },
+    colors: {
+      "bg-canvas": "#191C23EB",
+      "bg-surface": "#20242DF2",
+      "bg-elevated": "#272C37FA",
+      "bg-inset": "#13161CF2",
+      "bg-hover": "#2E3442F5",
+      "bg-selected": "#2A3346F5",
+      "border-subtle": "#2E3440D9",
+      "border-default": "#3B4354EB",
+      "border-focus": "#7B9ED9FF",
+      "text-primary": "#D8DEE9FF",
+      "text-secondary": "#97A1B3FF",
+      "text-muted": "#667084FF",
+      "text-on-accent": "#12161FFF",
+      "accent-primary": "#7B9ED9FF",
+      "accent-hover": "#8CAEE4FF",
+      "accent-soft": "#7B9ED924",
+      "semantic-success": "#7BB696FF",
+      "semantic-success-bg": "#1D2C26EB",
+      "semantic-warning": "#CFA972FF",
+      "semantic-warning-bg": "#2B241CEB",
+      "semantic-danger": "#CC7B82FF",
+      "semantic-danger-bg": "#2E1E23EB",
+      "syntax-section": "#8AAAE0FF",
+      "syntax-key": "#B4C1D6FF",
+      "syntax-string": "#8BC0A3FF",
+      "syntax-number": "#CFA972FF",
+      "diff-add-bg": "#1B2D25E6",
+      "diff-add-text": "#8FD1ACFF",
+      "diff-del-bg": "#301F24E6",
+      "diff-del-text": "#E09299FF"
+    }
+  },
+  "rose-dusk": {
+    schema_version: 1,
+    meta: { id: "rose-dusk", name: "暮玫瑰 · Rosé Dusk", mode: "dark", description: "暮紫深底配柔和玫瑰粉灰强调，参考 Rosé Pine" },
+    colors: {
+      "bg-canvas": "#1E1B29EB",
+      "bg-surface": "#252233F2",
+      "bg-elevated": "#2D293EFA",
+      "bg-inset": "#171421F2",
+      "bg-hover": "#353049F5",
+      "bg-selected": "#382E42F5",
+      "border-subtle": "#363149D9",
+      "border-default": "#463F5EEB",
+      "border-focus": "#D498A5FF",
+      "text-primary": "#E0DEF4FF",
+      "text-secondary": "#A59EC4FF",
+      "text-muted": "#726C8FFF",
+      "text-on-accent": "#1A1624FF",
+      "accent-primary": "#D498A5FF",
+      "accent-hover": "#E0AAB6FF",
+      "accent-soft": "#D498A524",
+      "semantic-success": "#84B9B3FF",
+      "semantic-success-bg": "#1D2B2DEB",
+      "semantic-warning": "#D7B07AFF",
+      "semantic-warning-bg": "#2C251EEB",
+      "semantic-danger": "#CE798CFF",
+      "semantic-danger-bg": "#2E1E26EB",
+      "syntax-section": "#D498A5FF",
+      "syntax-key": "#C2BCDDFF",
+      "syntax-string": "#8EC2BCFF",
+      "syntax-number": "#D7B07AFF",
+      "diff-add-bg": "#1C2B2DE6",
+      "diff-add-text": "#95CCC6FF",
+      "diff-del-bg": "#311E27E6",
+      "diff-del-text": "#E292A3FF"
+    }
+  },
+  "warm-stone": {
+    schema_version: 1,
+    meta: { id: "warm-stone", name: "暖石灰 · Warm Stone", mode: "light", description: "低反光暖羊皮石浅底，适配高亮度白天建筑场景" },
+    colors: {
+      "bg-canvas": "#EAE6DFF2",
+      "bg-surface": "#E2DDD4F5",
+      "bg-elevated": "#F2EFE9FA",
+      "bg-inset": "#DCD6CBF5",
+      "bg-hover": "#D7D1C5F5",
+      "bg-selected": "#D0DAE5F5",
+      "border-subtle": "#CEC8BCFF",
+      "border-default": "#BCB5A7FF",
+      "border-focus": "#4F749EFF",
+      "text-primary": "#2D3138FF",
+      "text-secondary": "#595E68FF",
+      "text-muted": "#838790FF",
+      "text-on-accent": "#F5F3EEFF",
+      "accent-primary": "#4F749EFF",
+      "accent-hover": "#42658DFF",
+      "accent-soft": "#4F749E20",
+      "semantic-success": "#477B61FF",
+      "semantic-success-bg": "#D7E4DBEB",
+      "semantic-warning": "#9B6F3BFF",
+      "semantic-warning-bg": "#EAE0D0EB",
+      "semantic-danger": "#A8565CFF",
+      "semantic-danger-bg": "#ECDCDEEB",
+      "syntax-section": "#466A94FF",
+      "syntax-key": "#434852FF",
+      "syntax-string": "#477B61FF",
+      "syntax-number": "#9B6F3BFF",
+      "diff-add-bg": "#D6E5DBE8",
+      "diff-add-text": "#2F5E47FF",
+      "diff-del-bg": "#ECD9DBE8",
+      "diff-del-text": "#8B3E44FF"
+    }
+  }
+};
+
+let currentThemeId = localStorage.getItem("p2s_theme") || "slate-mist";
+if (!THEMES[currentThemeId]) currentThemeId = "slate-mist";
+
+function applyTheme(id) {
+  const t = THEMES[id] || THEMES["slate-mist"];
+  currentThemeId = t.meta.id;
+  localStorage.setItem("p2s_theme", currentThemeId);
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(t.colors)) {
+    root.style.setProperty("--" + k, v);
+  }
+  document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeId === currentThemeId));
+  document.querySelectorAll(".theme-opt").forEach(r => {
+    const on = r.dataset.themeId === currentThemeId;
+    r.classList.toggle("selected", on);
+    r.lastElementChild.textContent = on ? "●" : "";
+  });
+  const pre = document.getElementById("jsonPre");
+  if (pre) pre.textContent = JSON.stringify(t, null, 2);
+}
+
+applyTheme(currentThemeId);
+
+document.querySelectorAll("[data-theme-id]").forEach(el => {
+  el.addEventListener("click", () => applyTheme(el.dataset.themeId));
+});
+
+// Fit viewport gracefully when compared side-by-side in narrow browser windows
+function fitStage() {
+  const box = document.getElementById("stageBox");
+  const avail = window.innerWidth - 32;
+  const scale = avail < 1280 ? Math.max(0.45, avail / 1280) : 1;
+  box.style.transform = scale < 1 ? `scale(${scale})` : "none";
+  box.parentElement.style.height = scale < 1 ? `${Math.ceil(720 * scale) + 48}px` : "auto";
+}
+fitStage();
+window.addEventListener("resize", fitStage);
+
+// Interactive Plan Collapse
+document.getElementById("planHead").addEventListener("click", () => {
+  const steps = document.getElementById("planSteps");
+  const chev = document.getElementById("planChevron");
+  const hidden = steps.classList.toggle("hidden");
+  document.getElementById("planHead").classList.toggle("collapsed-only", hidden);
+  chev.textContent = hidden ? "展开 ▾" : "收起 ▴";
+});
+
+// Interactive Tool Logs
+document.querySelectorAll("[data-tool]").forEach(card => {
+  card.addEventListener("click", () => {
+    card.classList.toggle("expanded");
+    const titleSpan = card.querySelector(".tool-card-left span:last-child");
+    if (titleSpan) {
+      titleSpan.textContent = card.classList.contains("expanded")
+        ? titleSpan.textContent.replace(/^▸/, "▾")
+        : titleSpan.textContent.replace(/^▾/, "▸");
+    }
+  });
+});
+
+// Interactive Queue & Stop
+const chatInput = document.getElementById("chatInput");
+const queueStrip = document.getElementById("queueStrip");
+const queueContent = document.getElementById("queueContent");
+const queueSendBtn = document.getElementById("queueSendBtn");
+const stopBtn = document.getElementById("stopBtn");
+
+chatInput.addEventListener("input", () => {
+  const hasVal = chatInput.value.trim().length > 0;
+  queueSendBtn.style.display = hasVal ? "inline-flex" : "none";
+});
+function submitQueue() {
+  const v = chatInput.value.trim();
+  if (!v) return;
+  queueContent.textContent = v;
+  queueStrip.classList.remove("hidden");
+  chatInput.value = "";
+  queueSendBtn.style.display = "none";
+}
+chatInput.addEventListener("keydown", e => { if (e.key === "Enter") submitQueue(); });
+queueSendBtn.addEventListener("click", submitQueue);
+document.getElementById("clearQueueBtn").addEventListener("click", () => queueStrip.classList.add("hidden"));
+document.getElementById("editQueueBtn").addEventListener("click", () => {
+  chatInput.value = queueContent.textContent;
+  chatInput.focus();
+  queueSendBtn.style.display = "inline-flex";
+  queueStrip.classList.add("hidden");
+});
+stopBtn.addEventListener("click", () => {
+  const stopped = stopBtn.dataset.stopped === "1";
+  if (!stopped) {
+    stopBtn.dataset.stopped = "1";
+    stopBtn.textContent = "已停止";
+    stopBtn.classList.remove("danger");
+    document.getElementById("runStateHint").textContent = "Agent 已手动中止 · 已生成部分可撤销";
+    document.querySelectorAll(".pulse-dot").forEach(d => d.style.animation = "none");
+  } else {
+    stopBtn.dataset.stopped = "0";
+    stopBtn.textContent = "■ 停止";
+    stopBtn.classList.add("danger");
+    document.getElementById("runStateHint").textContent = "Agent 执行中 · 新消息将在本步工具完成后插入";
+    document.querySelectorAll(".pulse-dot").forEach(d => d.style.animation = "");
+  }
+});
+
+// Popovers & Collapse
+function closePopovers() {
+  document.querySelectorAll(".mc-popover").forEach(p => p.classList.remove("open"));
+}
+document.getElementById("projectSwitcherBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const p = document.getElementById("projectPopover");
+  const open = !p.classList.contains("open");
+  closePopovers();
+  if (open) p.classList.add("open");
+});
+document.getElementById("moreMenuBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const p = document.getElementById("morePopover");
+  const open = !p.classList.contains("open");
+  closePopovers();
+  if (open) p.classList.add("open");
+});
+document.getElementById("settingsBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const p = document.getElementById("settingsPopover");
+  const open = !p.classList.contains("open");
+  closePopovers();
+  if (open) p.classList.add("open");
+});
+document.getElementById("mcScreen").addEventListener("click", e => {
+  if (!e.target.closest(".mc-popover")) closePopovers();
+});
+
+document.getElementById("toggleWidthBtn").addEventListener("click", () => {
+  document.getElementById("drawer").classList.toggle("wide");
+});
+document.getElementById("collapseDrawerBtn").addEventListener("click", () => {
+  document.getElementById("drawer").classList.add("collapsed");
+  document.getElementById("collapsedPill").classList.add("visible");
+});
+document.getElementById("collapsedPill").addEventListener("click", () => {
+  document.getElementById("drawer").classList.remove("collapsed");
+  document.getElementById("collapsedPill").classList.remove("visible");
+});
+
+// JSON Modal
+document.getElementById("openJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.add("open"));
+document.getElementById("closeJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.remove("open"));
+document.getElementById("jsonModal").addEventListener("click", e => { if (e.target.id === "jsonModal") e.target.classList.remove("open"); });
+document.getElementById("copyJsonBtn").addEventListener("click", () => {
+  navigator.clipboard?.writeText(document.getElementById("jsonPre").textContent);
+  document.getElementById("copyJsonBtn").textContent = "已复制";
+  setTimeout(() => document.getElementById("copyJsonBtn").textContent = "复制 JSON", 1200);
+});
+</script>
+</body>
+</html>

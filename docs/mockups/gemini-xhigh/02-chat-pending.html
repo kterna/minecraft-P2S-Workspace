@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="slate-mist">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2S UI 效果图 02 · 对话页（3 个文件待审卡片）</title>
+<style>
+  :root {
+    --bg-canvas: #191C23EB;
+    --bg-surface: #20242DF2;
+    --bg-elevated: #272C37FA;
+    --bg-inset: #13161CF2;
+    --bg-hover: #2E3442F5;
+    --bg-selected: #2A3346F5;
+    --border-subtle: #2E3440D9;
+    --border-default: #3B4354EB;
+    --border-focus: #7B9ED9FF;
+    --text-primary: #D8DEE9FF;
+    --text-secondary: #97A1B3FF;
+    --text-muted: #667084FF;
+    --text-on-accent: #12161FFF;
+    --accent-primary: #7B9ED9FF;
+    --accent-hover: #8CAEE4FF;
+    --accent-soft: #7B9ED924;
+    --semantic-success: #7BB696FF;
+    --semantic-success-bg: #1D2C26EB;
+    --semantic-warning: #CFA972FF;
+    --semantic-warning-bg: #2B241CEB;
+    --semantic-danger: #CC7B82FF;
+    --semantic-danger-bg: #2E1E23EB;
+    --syntax-section: #8AAAE0FF;
+    --syntax-key: #B4C1D6FF;
+    --syntax-string: #8BC0A3FF;
+    --syntax-number: #CFA972FF;
+    --diff-add-bg: #1B2D25E6;
+    --diff-add-text: #8FD1ACFF;
+    --diff-del-bg: #301F24E6;
+    --diff-del-text: #E09299FF;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #0D0F14; color: #CBD2DF;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+
+  .gallery-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 10px 20px; background: #12151C;
+    border-bottom: 1px solid #242936; font-size: 13px; flex-wrap: wrap;
+  }
+  .gallery-left, .gallery-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .gallery-brand { font-weight: 600; color: #E5E9F0; margin-right: 6px; }
+  .nav-pill {
+    text-decoration: none; color: #939DB0; padding: 4px 10px;
+    border-radius: 5px; border: 1px solid transparent;
+  }
+  .nav-pill:hover { background: #1B202B; color: #E5E9F0; }
+  .nav-pill.active { background: #232938; color: #E5E9F0; border-color: #343D52; }
+  .meta-badge {
+    font-size: 12px; color: #7D8799; padding: 3px 8px;
+    background: #171B24; border: 1px solid #242A38; border-radius: 4px;
+  }
+  .theme-switch-group {
+    display: inline-flex; background: #171B24; border: 1px solid #272E3E;
+    border-radius: 6px; padding: 2px; gap: 2px;
+  }
+  .theme-btn {
+    background: transparent; color: #8D97AA; border: none;
+    padding: 4px 9px; font-size: 12px; border-radius: 4px; cursor: pointer;
+  }
+  .theme-btn:hover { color: #E5E9F0; }
+  .theme-btn.active { background: #2A3244; color: #ECEFF4; }
+  .json-btn {
+    background: #1A1F2B; color: #A7B4CA; border: 1px solid #2B3345;
+    padding: 4px 10px; font-size: 12px; border-radius: 5px; cursor: pointer;
+  }
+  .json-btn:hover { background: #232A3A; color: #ECEFF4; }
+
+  .stage-wrap { display: flex; flex-direction: column; align-items: center; padding: 16px 16px 28px; }
+  .stage-scale-box { width: 1280px; height: 720px; transform-origin: top center; }
+
+  .mc-screen {
+    position: relative; width: 1280px; height: 720px; overflow: hidden;
+    border: 2px solid #222733; background: #7A9AC0;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+    font-size: 16px; line-height: 20px;
+    -webkit-font-smoothing: none; font-smooth: never; user-select: none;
+  }
+  .mc-screen *, .mc-screen *::before, .mc-screen *::after {
+    border-radius: 0 !important; box-shadow: none !important;
+    font-family: 'Unifont', 'WenQuanYi Zen Hei Sharp', monospace;
+  }
+  .mc-world-svg {
+    position: absolute; inset: 0; width: 1280px; height: 720px;
+    display: block; shape-rendering: crispEdges;
+  }
+
+  .world-hud-top {
+    position: absolute; top: 12px; right: 12px;
+    display: flex; gap: 8px; align-items: center; z-index: 4;
+  }
+  .world-chip {
+    background: var(--bg-canvas); border: 2px solid var(--border-subtle);
+    color: var(--text-primary); padding: 4px 10px; height: 30px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .world-chip-dot { width: 8px; height: 8px; background: var(--semantic-warning); display: inline-block; }
+  .world-hud-bottom {
+    position: absolute; right: 12px; bottom: 12px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 8px; z-index: 4;
+  }
+  .world-hint {
+    background: var(--bg-canvas); border: 2px solid var(--border-subtle);
+    color: var(--text-secondary); padding: 4px 10px; height: 28px; display: inline-flex; align-items: center;
+  }
+  .mc-hotbar {
+    display: flex; background: #1A1D24D9; border: 2px solid #3C4454; padding: 2px; gap: 2px;
+  }
+  .hotbar-slot {
+    width: 32px; height: 32px; background: #12151BB8; border: 2px solid #2A303D;
+    display: flex; align-items: center; justify-content: center; color: #8892A6;
+  }
+  .hotbar-slot.active { border-color: var(--accent-primary); background: #232A38D8; color: var(--text-primary); }
+
+  /* Drawer */
+  .p2s-drawer {
+    position: absolute; left: 12px; top: 12px; width: 624px; height: 696px;
+    background: var(--bg-canvas); border: 2px solid var(--border-default);
+    display: flex; flex-direction: column; z-index: 10;
+  }
+  .p2s-drawer.wide { width: 736px; }
+  .p2s-drawer.collapsed { display: none; }
+
+  .drawer-collapsed-pill {
+    position: absolute; left: 12px; top: 12px; height: 38px;
+    background: var(--bg-elevated); border: 2px solid var(--border-default);
+    color: var(--text-primary); display: none; align-items: center;
+    gap: 10px; padding: 0 12px; z-index: 15; cursor: pointer;
+  }
+  .drawer-collapsed-pill.visible { display: inline-flex; }
+
+  .topbar-row {
+    height: 38px; padding: 0 10px; background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0;
+  }
+  .topbar-left, .topbar-right { display: flex; align-items: center; gap: 4px; }
+
+  .tabbar-row {
+    height: 42px; padding: 0 10px; background: var(--bg-surface);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .tabs-group { display: flex; align-items: stretch; height: 40px; gap: 4px; }
+  .tab-item {
+    display: inline-flex; align-items: center; gap: 6px; padding: 0 12px;
+    color: var(--text-secondary); text-decoration: none; border-bottom: 4px solid transparent;
+    cursor: pointer; font-size: 16px; line-height: 20px;
+  }
+  .tab-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .tab-item.active { color: var(--text-primary); background: var(--bg-canvas); border-bottom-color: var(--accent-primary); }
+  .tab-badge {
+    padding: 0 6px; height: 20px; display: inline-flex; align-items: center;
+    background: var(--semantic-warning-bg); color: var(--semantic-warning);
+    border: 2px solid var(--semantic-warning);
+  }
+
+  .mc-btn {
+    height: 26px; padding: 0 8px; background: var(--bg-surface);
+    border: 2px solid var(--border-subtle); color: var(--text-secondary);
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer; font-size: 16px; line-height: 20px; text-decoration: none;
+  }
+  .mc-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
+  .mc-btn.ghost { background: transparent; border-color: transparent; padding: 0 6px; }
+  .mc-btn.ghost:hover { background: var(--bg-hover); border-color: var(--border-subtle); }
+  .mc-btn.primary { background: var(--accent-primary); border-color: var(--accent-primary); color: var(--text-on-accent); }
+  .mc-btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .mc-btn.success { background: var(--semantic-success-bg); border-color: var(--semantic-success); color: var(--semantic-success); }
+  .mc-btn.success:hover { background: var(--semantic-success); color: var(--text-on-accent); }
+  .mc-btn.danger-soft { background: var(--semantic-danger-bg); border-color: var(--border-default); color: var(--semantic-danger); }
+  .mc-btn.danger-soft:hover { border-color: var(--semantic-danger); }
+
+  /* Compact Done Plan Bar */
+  .plan-done-bar {
+    height: 34px;
+    padding: 0 12px;
+    background: var(--bg-surface);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  /* Chat Stream */
+  .chat-stream {
+    flex: 1; overflow-y: auto; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .msg-user {
+    background: var(--bg-elevated); border: 2px solid var(--border-subtle);
+    border-left: 4px solid var(--accent-primary);
+    padding: 6px 10px; color: var(--text-primary); line-height: 22px;
+  }
+  .msg-role { color: var(--text-muted); display: flex; justify-content: space-between; }
+
+  .tool-summary-pill {
+    background: var(--bg-inset); border: 2px solid var(--border-subtle);
+    padding: 5px 10px; display: flex; align-items: center; justify-content: space-between;
+    color: var(--text-secondary); cursor: pointer;
+  }
+  .tool-summary-pill:hover { border-color: var(--border-default); color: var(--text-primary); }
+
+  .msg-assistant {
+    padding: 2px 2px; color: var(--text-primary); line-height: 22px;
+  }
+
+  /* 3-File Pending Review Summary Card */
+  .pending-card {
+    background: var(--bg-surface);
+    border: 2px solid var(--border-default);
+    border-top: 4px solid var(--semantic-warning);
+    display: flex;
+    flex-direction: column;
+  }
+  .pending-card-head {
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .pending-title {
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .risk-tag {
+    padding: 0 6px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    background: var(--semantic-success-bg);
+    color: var(--semantic-success);
+    border: 2px solid var(--border-subtle);
+  }
+  .pending-files {
+    display: flex;
+    flex-direction: column;
+  }
+  .pending-row {
+    padding: 7px 10px;
+    border-bottom: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .pending-row:last-child { border-bottom: none; }
+  .pending-row:hover { background: var(--bg-hover); }
+  .pending-row.done { opacity: 0.62; }
+  .pending-file-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+  .pending-file-name {
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pending-dot { width: 8px; height: 8px; background: var(--semantic-warning); display: inline-block; flex-shrink: 0; }
+  .pending-dot.applied { background: var(--semantic-success); }
+  .pending-file-desc {
+    color: var(--text-secondary);
+    padding-left: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .pending-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .delta-pill {
+    color: var(--semantic-success);
+    margin-right: 4px;
+  }
+  .delta-del { color: var(--semantic-danger); }
+
+  .pending-card-foot {
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border-top: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  /* Composer locked gently while pending */
+  .composer-dock {
+    border-top: 2px solid var(--border-subtle);
+    background: var(--bg-surface);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .composer-row { display: flex; gap: 6px; align-items: center; }
+  .mc-input {
+    flex: 1; height: 34px; background: var(--bg-inset);
+    border: 2px solid var(--border-subtle); color: var(--text-muted);
+    padding: 0 10px; font-size: 16px; line-height: 20px; outline: none;
+  }
+  .composer-action { height: 34px; padding: 0 12px; }
+
+  .mc-popover {
+    position: absolute; top: 40px; background: var(--bg-elevated);
+    border: 2px solid var(--border-default); padding: 8px; z-index: 30;
+    display: none; flex-direction: column; gap: 6px;
+  }
+  .mc-popover.open { display: flex; }
+  .popover-left { left: 10px; width: 320px; }
+  .popover-right { right: 10px; width: 256px; }
+  .popover-title {
+    color: var(--text-secondary); padding-bottom: 4px;
+    border-bottom: 2px solid var(--border-subtle); display: flex; justify-content: space-between;
+  }
+  .popover-row {
+    padding: 6px 8px; background: var(--bg-surface); border: 2px solid var(--border-subtle);
+    color: var(--text-primary); cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  }
+  .popover-row:hover { background: var(--bg-hover); }
+  .popover-row.selected { background: var(--bg-selected); border-color: var(--accent-primary); }
+
+  .json-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(8,10,14,0.78);
+    display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  }
+  .json-modal-backdrop.open { display: flex; }
+  .json-modal {
+    width: 680px; max-width: 100%; max-height: 85vh; background: #141821;
+    border: 1px solid #2B3344; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .json-modal-head {
+    padding: 12px 16px; border-bottom: 1px solid #242B3A;
+    display: flex; justify-content: space-between; align-items: center; color: #E5E9F0; font-size: 14px;
+  }
+  .json-pre {
+    margin: 0; padding: 14px 16px; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55;
+    color: #BAC5D8; background: #0F1219;
+  }
+  .note-caption { margin-top: 12px; font-size: 12px; color: #7D8799; text-align: center; }
+</style>
+</head>
+<body>
+
+<header class="gallery-bar">
+  <div class="gallery-left">
+    <span class="gallery-brand">P2S · B+C 界面效果图</span>
+    <a class="nav-pill" href="index.html">目录</a>
+    <a class="nav-pill" href="01-chat-running.html">01 对话运行中</a>
+    <a class="nav-pill active" href="02-chat-pending.html">02 待审卡片(3)</a>
+    <a class="nav-pill" href="03-review-diff.html">03 审阅 Diff</a>
+    <a class="nav-pill" href="04-files-editor.html">04 文件编辑</a>
+    <a class="nav-pill" href="05-narrow-480x270.html">05 窄屏 480×270</a>
+  </div>
+  <div class="gallery-right">
+    <span class="meta-badge">逻辑 640×360 · 2× = 1280×720</span>
+    <div class="theme-switch-group">
+      <button class="theme-btn active" data-theme-id="slate-mist">冷灰青</button>
+      <button class="theme-btn" data-theme-id="rose-dusk">暮玫瑰</button>
+      <button class="theme-btn" data-theme-id="warm-stone">暖石灰</button>
+    </div>
+    <button class="json-btn" id="openJsonBtn">{ 主题 JSON }</button>
+  </div>
+</header>
+
+<main class="stage-wrap">
+  <div class="stage-scale-box" id="stageBox">
+    <div class="mc-screen" id="mcScreen">
+
+      <!-- Pixel Courtyard + Complete 3-Part Ghost Preview -->
+      <svg class="mc-world-svg" viewBox="0 0 320 180" preserveAspectRatio="none" aria-hidden="true">
+        <rect x="0" y="0" width="320" height="28" fill="#82A0C2"/>
+        <rect x="0" y="28" width="320" height="24" fill="#92AECB"/>
+        <rect x="0" y="52" width="320" height="22" fill="#A2BBD4"/>
+        <rect x="0" y="74" width="320" height="24" fill="#B2C7DD"/>
+        <rect x="272" y="16" width="14" height="14" fill="#EFE4C4"/>
+        <rect x="274" y="18" width="10" height="10" fill="#F8EED3"/>
+        <rect x="184" y="20" width="28" height="6" fill="#DCE5F0"/>
+        <rect x="190" y="16" width="14" height="4" fill="#E6EDF5"/>
+        <rect x="234" y="34" width="34" height="6" fill="#DCE5F0"/>
+        <rect x="242" y="30" width="16" height="4" fill="#E6EDF5"/>
+
+        <rect x="148" y="74" width="44" height="24" fill="#6D8496"/>
+        <rect x="158" y="66" width="22" height="8" fill="#778E9F"/>
+        <rect x="192" y="80" width="52" height="18" fill="#647B8C"/>
+        <rect x="244" y="70" width="48" height="28" fill="#6F8698"/>
+        <rect x="256" y="62" width="24" height="8" fill="#7B92A3"/>
+        <rect x="292" y="78" width="28" height="20" fill="#627889"/>
+
+        <rect x="0" y="96" width="320" height="84" fill="#5B7847"/>
+        <rect x="156" y="96" width="164" height="14" fill="#516D3F"/>
+        <rect x="286" y="80" width="18" height="14" fill="#466337"/>
+        <rect x="289" y="76" width="12" height="6" fill="#537342"/>
+        <rect x="293" y="94" width="4" height="8" fill="#5D4430"/>
+
+        <rect x="156" y="110" width="164" height="70" fill="#5E7D4A"/>
+        <rect x="156" y="124" width="164" height="2" fill="#537041"/>
+        <rect x="156" y="140" width="164" height="2" fill="#537041"/>
+        <rect x="156" y="156" width="164" height="2" fill="#537041"/>
+        <rect x="180" y="110" width="2" height="70" fill="#547142"/>
+        <rect x="216" y="110" width="2" height="70" fill="#547142"/>
+        <rect x="252" y="110" width="2" height="70" fill="#547142"/>
+
+        <!-- Existing Main Hall -->
+        <rect x="158" y="74" width="42" height="36" fill="#CFC9BD"/>
+        <rect x="158" y="74" width="4" height="36" fill="#5B422E"/>
+        <rect x="196" y="74" width="4" height="36" fill="#5B422E"/>
+        <rect x="162" y="88" width="34" height="3" fill="#5B422E"/>
+        <rect x="168" y="94" width="10" height="16" fill="#463324"/>
+        <rect x="183" y="79" width="8" height="7" fill="#6F8A9C"/>
+        <rect x="152" y="68" width="54" height="6" fill="#454C59"/>
+        <rect x="156" y="62" width="46" height="6" fill="#505868"/>
+        <rect x="162" y="57" width="34" height="5" fill="#5D6678"/>
+
+        <!-- 3 Pending Ghost Preview Layers -->
+        <!-- 1) courtyard_floor.toml (bluestone slabs + lanterns) -->
+        <rect x="206" y="128" width="90" height="10" fill="#7BB69677" stroke="#8FD1AC" stroke-width="1"/>
+        <rect x="200" y="138" width="54" height="14" fill="#7BB69666" stroke="#8FD1AC99" stroke-width="1"/>
+        <!-- 2) corridor_frame.toml (spruce pillars, beams, railings) -->
+        <rect x="214" y="96" width="6" height="32" fill="#CFA97288" stroke="#CFA972" stroke-width="1"/>
+        <rect x="240" y="96" width="6" height="32" fill="#CFA97288" stroke="#CFA972" stroke-width="1"/>
+        <rect x="266" y="96" width="6" height="32" fill="#CFA97288" stroke="#CFA972" stroke-width="1"/>
+        <rect x="284" y="96" width="6" height="32" fill="#CFA97288" stroke="#CFA972" stroke-width="1"/>
+        <rect x="220" y="117" width="20" height="6" fill="#CFA97266" stroke="#CFA972AA" stroke-width="1"/>
+        <rect x="272" y="117" width="12" height="6" fill="#CFA97266" stroke="#CFA972AA" stroke-width="1"/>
+        <!-- Hanging Lanterns -->
+        <rect x="229" y="97" width="4" height="6" fill="#E8C67D"/>
+        <rect x="255" y="97" width="4" height="6" fill="#E8C67D"/>
+        <!-- 3) pavilion_roof.toml (hip-and-gable roof) -->
+        <rect x="204" y="90" width="94" height="6" fill="#7B9ED988" stroke="#9FC0F2" stroke-width="1"/>
+        <rect x="210" y="84" width="82" height="6" fill="#7B9ED977" stroke="#9FC0F2" stroke-width="1"/>
+        <rect x="218" y="78" width="66" height="6" fill="#7B9ED966" stroke="#9FC0F2CC" stroke-width="1"/>
+        <rect x="228" y="72" width="46" height="6" fill="#7B9ED966" stroke="#9FC0F2CC" stroke-width="1"/>
+        <rect x="236" y="69" width="30" height="3" fill="#B5CEFA"/>
+
+        <!-- Crosshair -->
+        <rect x="248" y="99" width="6" height="1" fill="#ECEFF4AA"/>
+        <rect x="250" y="97" width="2" height="5" fill="#ECEFF4AA"/>
+      </svg>
+
+      <div class="world-hud-top">
+        <div class="world-chip">
+          <span class="world-chip-dot"></span>
+          <span>虚影预览 · 3 个待审文件 (+318 方块)</span>
+        </div>
+      </div>
+
+      <div class="world-hud-bottom">
+        <div class="world-hint">点击左侧待审文件「审阅」可单独高亮对应结构</div>
+        <div class="mc-hotbar">
+          <div class="hotbar-slot active">斧</div>
+          <div class="hotbar-slot">石</div>
+          <div class="hotbar-slot">木</div>
+          <div class="hotbar-slot">瓦</div>
+          <div class="hotbar-slot">灯</div>
+          <div class="hotbar-slot"></div>
+          <div class="hotbar-slot"></div>
+        </div>
+      </div>
+
+      <div class="drawer-collapsed-pill" id="collapsedPill">
+        <span style="width:8px;height:8px;background:var(--semantic-warning);display:inline-block;"></span>
+        <span>P2S · 3 个文件待审</span>
+        <span style="color:var(--accent-primary)">展开 »</span>
+      </div>
+
+      <aside class="p2s-drawer" id="drawer">
+        <div class="topbar-row">
+          <div class="topbar-left">
+            <button class="mc-btn" id="projectSwitcherBtn">江南庭院 · S4 ▾</button>
+            <button class="mc-btn ghost" title="新建会话">+</button>
+          </div>
+          <div class="topbar-right">
+            <button class="mc-btn ghost" title="撤销">↶</button>
+            <button class="mc-btn ghost" title="重做">↷</button>
+            <button class="mc-btn" title="检查点">◆2</button>
+            <button class="mc-btn ghost" id="moreMenuBtn">···</button>
+            <button class="mc-btn ghost" id="settingsBtn">⚙</button>
+            <button class="mc-btn ghost">✕</button>
+          </div>
+        </div>
+
+        <div class="tabbar-row">
+          <nav class="tabs-group">
+            <a class="tab-item active" href="02-chat-pending.html">对话</a>
+            <a class="tab-item" href="03-review-diff.html">审阅 <span class="tab-badge" id="pendingTabBadge">3</span></a>
+            <a class="tab-item" href="04-files-editor.html">文件</a>
+          </nav>
+          <div class="topbar-right">
+            <button class="mc-btn ghost" id="toggleWidthBtn" title="宽/标准">◧</button>
+            <button class="mc-btn ghost" id="collapseDrawerBtn" title="收起">«</button>
+          </div>
+        </div>
+
+        <div class="mc-popover popover-left" id="projectPopover">
+          <div class="popover-title"><span>项目与会话</span><span style="color:var(--text-muted)">Esc 关闭</span></div>
+          <div class="popover-row selected"><span>江南庭院 · S4 歇山顶木亭</span><span style="color:var(--accent-primary)">当前</span></div>
+          <div class="popover-row"><span>江南庭院 · S3 主厅修缮</span><span style="color:var(--text-muted)">12轮</span></div>
+        </div>
+        <div class="mc-popover popover-right" id="morePopover">
+          <div class="popover-title"><span>更多操作</span><span style="color:var(--text-muted)">快捷键</span></div>
+          <div class="popover-row"><span>压缩当前对话上下文</span><span style="color:var(--text-muted)">51%</span></div>
+          <div class="popover-row"><span>管理检查点 (2)</span><span style="color:var(--text-muted)">列表</span></div>
+        </div>
+        <div class="mc-popover popover-right" id="settingsPopover">
+          <div class="popover-title"><span>外观主题 (JSON)</span><span style="color:var(--text-muted)">热切换</span></div>
+          <div class="popover-row theme-opt selected" data-theme-id="slate-mist"><span>冷灰青 · Slate Mist</span><span>●</span></div>
+          <div class="popover-row theme-opt" data-theme-id="rose-dusk"><span>暮玫瑰 · Rosé Dusk</span><span></span></div>
+          <div class="popover-row theme-opt" data-theme-id="warm-stone"><span>暖石灰 · Warm Stone</span><span></span></div>
+        </div>
+
+        <!-- Compact Completed Plan Bar -->
+        <div class="plan-done-bar">
+          <span><span style="color:var(--semantic-success)">✓</span> 计划已完成 4/4 · 歇山顶木亭与回廊已暂存</span>
+          <span style="color:var(--text-muted)">耗时 4.2s</span>
+        </div>
+
+        <div class="chat-stream">
+          <div class="msg-user">
+            <div class="msg-role"><span>你</span><span>15:42</span></div>
+            <div>在选区东侧补建一座带回廊的歇山顶木亭，檐角用深色橡木，地面铺青石板。（已补充：云杉木栏杆、挂灯笼）</div>
+          </div>
+
+          <div class="tool-summary-pill">
+            <span>▸ 已执行 6 项工具 · inspect_world / geo.gable_roof / 写 3 个 TOML</span>
+            <span style="color:var(--semantic-success)">✓ 4.2s</span>
+          </div>
+
+          <div class="msg-assistant">
+            已按补充要求调整为云杉木栅栏并加挂灯笼。本次改动拆分为 3 个工作区文件并已开启右侧世界虚影预览，请确认：
+          </div>
+
+          <!-- 3-File Pending Review Card -->
+          <section class="pending-card" id="pendingCard">
+            <div class="pending-card-head">
+              <div class="pending-title">
+                <span class="pending-dot" id="cardDot"></span>
+                <span id="cardHeading">待审改动 · 3 个文件 · +318 / -24 方块</span>
+              </div>
+              <span class="risk-tag">风险: 低</span>
+            </div>
+
+            <div class="pending-files">
+              <div class="pending-row" data-file="pavilion_roof.toml">
+                <div class="pending-file-info">
+                  <div class="pending-file-name">
+                    <span class="pending-dot"></span>
+                    <span>workspace/pavilion_roof.toml</span>
+                  </div>
+                  <div class="pending-file-desc">歇山顶双坡屋檐与深色橡木角梁</div>
+                </div>
+                <div class="pending-row-actions">
+                  <span class="delta-pill">+142 <span class="delta-del">-6</span></span>
+                  <a class="mc-btn" href="03-review-diff.html#file=pavilion_roof.toml">审阅</a>
+                  <button class="mc-btn success apply-one-btn">应用</button>
+                </div>
+              </div>
+
+              <div class="pending-row" data-file="corridor_frame.toml">
+                <div class="pending-file-info">
+                  <div class="pending-file-name">
+                    <span class="pending-dot"></span>
+                    <span>workspace/corridor_frame.toml</span>
+                  </div>
+                  <div class="pending-file-desc">回廊柱网、云杉木栅栏与挂灯笼</div>
+                </div>
+                <div class="pending-row-actions">
+                  <span class="delta-pill">+118 <span class="delta-del">-10</span></span>
+                  <a class="mc-btn" href="03-review-diff.html#file=corridor_frame.toml">审阅</a>
+                  <button class="mc-btn success apply-one-btn">应用</button>
+                </div>
+              </div>
+
+              <div class="pending-row" data-file="courtyard_floor.toml">
+                <div class="pending-file-info">
+                  <div class="pending-file-name">
+                    <span class="pending-dot"></span>
+                    <span>workspace/courtyard_floor.toml</span>
+                  </div>
+                  <div class="pending-file-desc">青石板步道衔接与庭院石阶</div>
+                </div>
+                <div class="pending-row-actions">
+                  <span class="delta-pill">+58 <span class="delta-del">-8</span></span>
+                  <a class="mc-btn" href="03-review-diff.html#file=courtyard_floor.toml">审阅</a>
+                  <button class="mc-btn success apply-one-btn">应用</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="pending-card-foot">
+              <div style="display:flex;gap:6px;">
+                <a class="mc-btn primary" href="03-review-diff.html">逐个审阅 (1/3) →</a>
+                <button class="mc-btn success" id="applyAllBtn">全部应用 (3)</button>
+              </div>
+              <button class="mc-btn danger-soft" id="discardAllBtn">全部丢弃</button>
+            </div>
+          </section>
+        </div>
+
+        <footer class="composer-dock">
+          <div class="composer-row">
+            <input class="mc-input" type="text" placeholder="请先应用或丢弃上方 3 个待审文件后继续对话..." disabled>
+            <button class="mc-btn composer-action" disabled>发送</button>
+          </div>
+        </footer>
+      </aside>
+    </div>
+  </div>
+  <div class="note-caption">点击每行「审阅」直接跳转至 03-review-diff.html；点击「应用」或「全部应用」可模拟逐个批复状态变化。</div>
+</main>
+
+<div class="json-modal-backdrop" id="jsonModal">
+  <div class="json-modal">
+    <div class="json-modal-head">
+      <span>当前主题 JSON（与 CSS 变量一一对应）</span>
+      <div style="display:flex;gap:8px;">
+        <button class="json-btn" id="copyJsonBtn">复制 JSON</button>
+        <button class="json-btn" id="closeJsonBtn">关闭</button>
+      </div>
+    </div>
+    <pre class="json-pre" id="jsonPre"></pre>
+  </div>
+</div>
+
+<script>
+const THEMES = {
+  "slate-mist": {
+    schema_version: 1,
+    meta: { id: "slate-mist", name: "冷灰青 · Slate Mist", mode: "dark", description: "冷调石板灰配雾蓝强调，参考 Linear 与 Nord" },
+    colors: {
+      "bg-canvas": "#191C23EB", "bg-surface": "#20242DF2", "bg-elevated": "#272C37FA", "bg-inset": "#13161CF2",
+      "bg-hover": "#2E3442F5", "bg-selected": "#2A3346F5", "border-subtle": "#2E3440D9", "border-default": "#3B4354EB",
+      "border-focus": "#7B9ED9FF", "text-primary": "#D8DEE9FF", "text-secondary": "#97A1B3FF", "text-muted": "#667084FF",
+      "text-on-accent": "#12161FFF", "accent-primary": "#7B9ED9FF", "accent-hover": "#8CAEE4FF", "accent-soft": "#7B9ED924",
+      "semantic-success": "#7BB696FF", "semantic-success-bg": "#1D2C26EB", "semantic-warning": "#CFA972FF", "semantic-warning-bg": "#2B241CEB",
+      "semantic-danger": "#CC7B82FF", "semantic-danger-bg": "#2E1E23EB", "syntax-section": "#8AAAE0FF", "syntax-key": "#B4C1D6FF",
+      "syntax-string": "#8BC0A3FF", "syntax-number": "#CFA972FF", "diff-add-bg": "#1B2D25E6", "diff-add-text": "#8FD1ACFF",
+      "diff-del-bg": "#301F24E6", "diff-del-text": "#E09299FF"
+    }
+  },
+  "rose-dusk": {
+    schema_version: 1,
+    meta: { id: "rose-dusk", name: "暮玫瑰 · Rosé Dusk", mode: "dark", description: "暮紫深底配柔和玫瑰粉灰强调，参考 Rosé Pine" },
+    colors: {
+      "bg-canvas": "#1E1B29EB", "bg-surface": "#252233F2", "bg-elevated": "#2D293EFA", "bg-inset": "#171421F2",
+      "bg-hover": "#353049F5", "bg-selected": "#382E42F5", "border-subtle": "#363149D9", "border-default": "#463F5EEB",
+      "border-focus": "#D498A5FF", "text-primary": "#E0DEF4FF", "text-secondary": "#A59EC4FF", "text-muted": "#726C8FFF",
+      "text-on-accent": "#1A1624FF", "accent-primary": "#D498A5FF", "accent-hover": "#E0AAB6FF", "accent-soft": "#D498A524",
+      "semantic-success": "#84B9B3FF", "semantic-success-bg": "#1D2B2DEB", "semantic-warning": "#D7B07AFF", "semantic-warning-bg": "#2C251EEB",
+      "semantic-danger": "#CE798CFF", "semantic-danger-bg": "#2E1E26EB", "syntax-section": "#D498A5FF", "syntax-key": "#C2BCDDFF",
+      "syntax-string": "#8EC2BCFF", "syntax-number": "#D7B07AFF", "diff-add-bg": "#1C2B2DE6", "diff-add-text": "#95CCC6FF",
+      "diff-del-bg": "#311E27E6", "diff-del-text": "#E292A3FF"
+    }
+  },
+  "warm-stone": {
+    schema_version: 1,
+    meta: { id: "warm-stone", name: "暖石灰 · Warm Stone", mode: "light", description: "低反光暖羊皮石浅底，适配高亮度白天建筑场景" },
+    colors: {
+      "bg-canvas": "#EAE6DFF2", "bg-surface": "#E2DDD4F5", "bg-elevated": "#F2EFE9FA", "bg-inset": "#DCD6CBF5",
+      "bg-hover": "#D7D1C5F5", "bg-selected": "#D0DAE5F5", "border-subtle": "#CEC8BCFF", "border-default": "#BCB5A7FF",
+      "border-focus": "#4F749EFF", "text-primary": "#2D3138FF", "text-secondary": "#595E68FF", "text-muted": "#838790FF",
+      "text-on-accent": "#F5F3EEFF", "accent-primary": "#4F749EFF", "accent-hover": "#42658DFF", "accent-soft": "#4F749E20",
+      "semantic-success": "#477B61FF", "semantic-success-bg": "#D7E4DBEB", "semantic-warning": "#9B6F3BFF", "semantic-warning-bg": "#EAE0D0EB",
+      "semantic-danger": "#A8565CFF", "semantic-danger-bg": "#ECDCDEEB", "syntax-section": "#466A94FF", "syntax-key": "#434852FF",
+      "syntax-string": "#477B61FF", "syntax-number": "#9B6F3BFF", "diff-add-bg": "#D6E5DBE8", "diff-add-text": "#2F5E47FF",
+      "diff-del-bg": "#ECD9DBE8", "diff-del-text": "#8B3E44FF"
+    }
+  }
+};
+
+let currentThemeId = localStorage.getItem("p2s_theme") || "slate-mist";
+if (!THEMES[currentThemeId]) currentThemeId = "slate-mist";
+
+function applyTheme(id) {
+  const t = THEMES[id] || THEMES["slate-mist"];
+  currentThemeId = t.meta.id;
+  localStorage.setItem("p2s_theme", currentThemeId);
+  for (const [k, v] of Object.entries(t.colors)) document.documentElement.style.setProperty("--" + k, v);
+  document.querySelectorAll(".theme-btn").forEach(b => b.classList.toggle("active", b.dataset.themeId === currentThemeId));
+  document.querySelectorAll(".theme-opt").forEach(r => {
+    const on = r.dataset.themeId === currentThemeId;
+    r.classList.toggle("selected", on);
+    r.lastElementChild.textContent = on ? "●" : "";
+  });
+  const pre = document.getElementById("jsonPre");
+  if (pre) pre.textContent = JSON.stringify(t, null, 2);
+}
+applyTheme(currentThemeId);
+document.querySelectorAll("[data-theme-id]").forEach(el => el.addEventListener("click", () => applyTheme(el.dataset.themeId)));
+
+function fitStage() {
+  const box = document.getElementById("stageBox");
+  const avail = window.innerWidth - 32;
+  const scale = avail < 1280 ? Math.max(0.45, avail / 1280) : 1;
+  box.style.transform = scale < 1 ? `scale(${scale})` : "none";
+  box.parentElement.style.height = scale < 1 ? `${Math.ceil(720 * scale) + 48}px` : "auto";
+}
+fitStage();
+window.addEventListener("resize", fitStage);
+
+// Interactive Pending Apply simulation
+function syncPendingCounts() {
+  const rows = [...document.querySelectorAll(".pending-row")];
+  const remaining = rows.filter(r => !r.classList.contains("done")).length;
+  document.getElementById("pendingTabBadge").textContent = remaining;
+  document.getElementById("applyAllBtn").textContent = remaining > 0 ? `全部应用 (${remaining})` : "已全部应用";
+  document.getElementById("cardHeading").textContent = remaining > 0
+    ? `待审改动 · ${remaining} 个文件待处理`
+    : "所有改动已应用到世界 · 可继续对话";
+  if (remaining === 0) {
+    document.getElementById("cardDot").classList.add("applied");
+    document.getElementById("pendingTabBadge").style.opacity = "0.5";
+    document.querySelector(".mc-input").disabled = false;
+    document.querySelector(".mc-input").placeholder = "继续描述下一步修改...";
+    document.querySelector(".composer-dock button").disabled = false;
+  }
+}
+document.querySelectorAll(".apply-one-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const row = btn.closest(".pending-row");
+    row.classList.add("done");
+    row.querySelector(".pending-dot").classList.add("applied");
+    btn.textContent = "已应用 ✓";
+    btn.disabled = true;
+    syncPendingCounts();
+  });
+});
+document.getElementById("applyAllBtn").addEventListener("click", () => {
+  document.querySelectorAll(".apply-one-btn").forEach(b => b.click());
+});
+
+// Popovers & Collapse
+function closePopovers() { document.querySelectorAll(".mc-popover").forEach(p => p.classList.remove("open")); }
+document.getElementById("projectSwitcherBtn").addEventListener("click", e => { e.stopPropagation(); const p = document.getElementById("projectPopover"); const o = !p.classList.contains("open"); closePopovers(); if (o) p.classList.add("open"); });
+document.getElementById("moreMenuBtn").addEventListener("click", e => { e.stopPropagation(); const p = document.getElementById("morePopover"); const o = !p.classList.contains("open"); closePopovers(); if (o) p.classList.add("open"); });
+document.getElementById("settingsBtn").addEventListener("click", e => { e.stopPropagation(); const p = document.getElementById("settingsPopover"); const o = !p.classList.contains("open"); closePopovers(); if (o) p.classList.add("open"); });
+document.getElementById("mcScreen").addEventListener("click", e => { if (!e.target.closest(".mc-popover")) closePopovers(); });
+document.getElementById("toggleWidthBtn").addEventListener("click", () => document.getElementById("drawer").classList.toggle("wide"));
+document.getElementById("collapseDrawerBtn").addEventListener("click", () => {
+  document.getElementById("drawer").classList.add("collapsed");
+  document.getElementById("collapsedPill").classList.add("visible");
+});
+document.getElementById("collapsedPill").addEventListener("click", () => {
+  document.getElementById("drawer").classList.remove("collapsed");
+  document.getElementById("collapsedPill").classList.remove("visible");
+});
+
+document.getElementById("openJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.add("open"));
+document.getElementById("closeJsonBtn").addEventListener("click", () => document.getElementById("jsonModal").classList.remove("open"));
+document.getElementById("jsonModal").addEventListener("click", e => { if (e.target.id === "jsonModal") e.target.classList.remove("open"); });
+document.getElementById("copyJsonBtn").addEventListener("click", () => {
+  navigator.clipboard?.writeText(document.getElementById("jsonPre").textContent);
+  document.getElementById("copyJsonBtn").textContent = "已复制";
+  setTimeout(() => document.getElementById("copyJsonBtn").textContent = "复制 JSON", 1200);
+});
+</script>
+</body>
+</html>
