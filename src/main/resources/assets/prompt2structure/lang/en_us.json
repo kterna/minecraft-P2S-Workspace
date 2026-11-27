@@ -447,6 +447,7 @@
   "screen.p2s.wb.menu.compact": "Compact context",
   "screen.p2s.wb.menu.export": "Export diagnostics",
   "screen.p2s.wb.menu.settings": "Settings",
+  "screen.p2s.wb.menu.appearance": "Appearance",
   "screen.p2s.wb.menu.classic": "Classic view",
   "screen.p2s.wb.welcome.title": "What would you like to build?",
   "screen.p2s.wb.welcome.body": "Describe the building or change in a sentence. The agent reads the selection and terrain, writes workspace files, and shows the changes as ghosts in the world for you to apply file by file.",

@@ -10,6 +10,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.world.level.block.RenderShape;
@@ -31,7 +32,7 @@ public final class GhostBlockRenderer {
     }
 
     public static void register() {
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(GhostBlockRenderer::render);
+        WorldRenderEvents.AFTER_ENTITIES.register(GhostBlockRenderer::render);
     }
 
     private static void render(WorldRenderContext context) {
@@ -58,9 +59,9 @@ public final class GhostBlockRenderer {
                     continue;
                 }
                 float alpha = focus ? FOCUS_ALPHA : OTHER_ALPHA;
+                int[] add = PreviewColors.add();
                 int[] remove = PreviewColors.remove();
-                VertexConsumer lines = buffers.getBuffer(RenderType.lines());
-                MultiBufferSource ghostBuffers = alphaBuffers(buffers, alpha);
+                MultiBufferSource ghostBuffers = alphaBuffers(buffers, alpha, add);
                 for (ClientPreviewStore.Ghost ghost : file.ghosts()) {
                     double dx = ghost.pos().getX() + 0.5 - cam.x;
                     double dy = ghost.pos().getY() + 0.5 - cam.y;
@@ -69,8 +70,10 @@ public final class GhostBlockRenderer {
                         continue;
                     }
                     if (ghost.removal() || ghost.state().getRenderShape() != RenderShape.MODEL) {
-                        LevelRenderer.renderLineBox(pose, lines, new AABB(ghost.pos()).deflate(0.02),
-                                remove[0] / 255f, remove[1] / 255f, remove[2] / 255f, focus ? 0.9f : 0.35f);
+                        int[] color = ghost.removal() ? remove : add;
+                        // An outline inside an opaque block is hidden by that very block's depth.
+                        LevelRenderer.renderLineBox(pose, buffers.getBuffer(RenderType.lines()), new AABB(ghost.pos()).inflate(0.006),
+                                color[0] / 255f, color[1] / 255f, color[2] / 255f, focus ? 0.95f : 0.55f);
                         continue;
                     }
                     if (budget-- <= 0) {
@@ -86,7 +89,7 @@ public final class GhostBlockRenderer {
                 }
                 if (focus && anyFocus && file.bounds() != null) {
                     int[] outline = PreviewColors.file();
-                    LevelRenderer.renderLineBox(pose, lines, file.bounds().inflate(0.03),
+                    LevelRenderer.renderLineBox(pose, buffers.getBuffer(RenderType.lines()), file.bounds().inflate(0.03),
                             outline[0] / 255f, outline[1] / 255f, outline[2] / 255f, 1f);
                 }
             }
@@ -94,12 +97,12 @@ public final class GhostBlockRenderer {
         pose.popPose();
     }
 
-    /** Routes every block layer to the translucent buffer and scales vertex alpha. */
-    private static MultiBufferSource alphaBuffers(MultiBufferSource buffers, float alpha) {
-        return type -> new AlphaVertexConsumer(buffers.getBuffer(RenderType.translucent()), alpha);
+    /** Keep the block texture and its lighting, with a wash of the theme's addition colour. */
+    private static MultiBufferSource alphaBuffers(MultiBufferSource buffers, float alpha, int[] add) {
+        return type -> new AlphaVertexConsumer(buffers.getBuffer(Sheets.translucentCullBlockSheet()), alpha, add);
     }
 
-    private record AlphaVertexConsumer(VertexConsumer delegate, float alpha) implements VertexConsumer {
+    private record AlphaVertexConsumer(VertexConsumer delegate, float alpha, int[] add) implements VertexConsumer {
         @Override
         public VertexConsumer addVertex(float x, float y, float z) {
             delegate.addVertex(x, y, z);
@@ -108,8 +111,12 @@ public final class GhostBlockRenderer {
 
         @Override
         public VertexConsumer setColor(int r, int g, int b, int a) {
-            delegate.setColor(r, g, b, Math.round(a * alpha));
+            delegate.setColor(tint(r, add[0]), tint(g, add[1]), tint(b, add[2]), Math.round(a * alpha));
             return this;
+        }
+
+        private static int tint(int channel, int tint) {
+            return Math.round(channel * (0.5f + 0.5f * tint / 255f));
         }
 
         @Override

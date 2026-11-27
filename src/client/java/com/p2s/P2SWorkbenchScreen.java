@@ -9,6 +9,7 @@ import com.p2s.screen.P2SProjectListScreen;
 import com.p2s.screen.P2SSessionListScreen;
 import com.p2s.workbench.LineDiff;
 import com.p2s.workbench.WbPalette;
+import com.p2s.workbench.WbThemeMenu;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
@@ -55,6 +56,7 @@ public class P2SWorkbenchScreen extends Screen {
     private Tab tab = lastTab;
     private boolean collapsed = lastCollapsed;
     private boolean menuOpen;
+    private WbThemeMenu themeMenu;
     private boolean diffOpen;
     private boolean discardOpen;
     private String appliedPath = "";
@@ -211,7 +213,10 @@ public class P2SWorkbenchScreen extends Screen {
         }
         renderWorldControls(gfx, mouseX, mouseY, pw);
         super.render(gfx, mouseX, mouseY, delta);
-        if (menuOpen) {
+        if (themeMenu != null) {
+            themeMenu.render(gfx, font, pw - PAD - 16, TOP - 2, height, mouseX, mouseY);
+        } else if (menuOpen) {
+            hits.clear();
             renderMenu(gfx, mouseX, mouseY, pw);
         }
     }
@@ -988,6 +993,8 @@ public class P2SWorkbenchScreen extends Screen {
         }
         items.add(new Object[]{"screen.p2s.wb.menu.export", (Runnable) ClientDiagnostics::start});
         items.add(new Object[]{"screen.p2s.wb.menu.settings", (Runnable) () -> minecraft.setScreen(new P2SConfigScreen(this))});
+        items.add(new Object[]{"screen.p2s.wb.menu.appearance", (Runnable) () -> themeMenu = new WbThemeMenu(
+                () -> themeMenu = null, () -> { themeMenu = null; menuOpen = true; })});
         items.add(new Object[]{"screen.p2s.wb.menu.classic", (Runnable) () -> minecraft.setScreen(new P2SChatScreen())});
         int w = 0;
         for (Object[] item : items) {
@@ -1024,6 +1031,10 @@ public class P2SWorkbenchScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (themeMenu != null) {
+            if (button == 0) themeMenu.click(mouseX, mouseY);
+            return true;
+        }
         if (button == 0) {
             // Topmost (last drawn) region wins; the menu is drawn last.
             for (int k = hits.size() - 1; k >= 0; k--) {
@@ -1077,6 +1088,10 @@ public class P2SWorkbenchScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+        if (themeMenu != null) {
+            themeMenu.scroll(vertical);
+            return true;
+        }
         if (!overPanel(mouseX, mouseY) && !collapsed || collapsed && mouseX >= COLLAPSED) {
             if (OrbitCamera.active()) {
                 OrbitCamera.zoom(vertical);
@@ -1098,6 +1113,10 @@ public class P2SWorkbenchScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
+        if (themeMenu != null) {
+            themeMenu.keyPressed(key);
+            return true;
+        }
         if (key == GLFW.GLFW_KEY_ESCAPE) {
             return escape();
         }
@@ -1145,6 +1164,11 @@ public class P2SWorkbenchScreen extends Screen {
     @Override
     public boolean shouldCloseOnEsc() {
         return false;
+    }
+
+    @Override
+    public boolean charTyped(char character, int modifiers) {
+        return themeMenu != null || super.charTyped(character, modifiers);
     }
 
     // ------------------------------------------------------------------ actions

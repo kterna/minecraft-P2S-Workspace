@@ -447,6 +447,7 @@
   "screen.p2s.wb.menu.compact": "压缩上下文",
   "screen.p2s.wb.menu.export": "导出诊断",
   "screen.p2s.wb.menu.settings": "设置",
+  "screen.p2s.wb.menu.appearance": "外观",
   "screen.p2s.wb.menu.classic": "经典界面",
   "screen.p2s.wb.welcome.title": "想建点什么？",
   "screen.p2s.wb.welcome.body": "用一句话说出你想要的建筑或修改。Agent 会读取选区和地形，写出工作区文件，改动会先以虚影出现在世界里，由你逐份决定是否应用。",

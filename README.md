@@ -90,7 +90,7 @@ Google Gemini、Vertex、Bedrock 等连接的地址、鉴权和各协议支持�
 
 ### 界面主题
 
-在设置页点击右上角的「外观」切换到下一套主题，按住 Shift 点击可切回上一套。也可以输入 `/p2s theme glacier` 直接选冰川，输入 `/p2s theme ` 后按 Tab 查看可用 ID。切换立即生效，所选 ID 保存在 `config/p2s_client.json` 的 `theme` 字段。
+在工作台的「⋯ → 外观」展开全部主题，按色块预览直接点选，当前主题带勾。切换会保留草稿与阅读位置。在设置页点击右上角的「外观」切换到下一套主题，按住 Shift 点击可切回上一套。也可以输入 `/p2s theme glacier` 直接选冰川，输入 `/p2s theme ` 后按 Tab 查看可用 ID。切换立即生效，所选 ID 保存在 `config/p2s_client.json` 的 `theme` 字段。
 
 内置余烬、冰川、靛夜、陶笺、苔庭、暮藤、砂纸和石墨。可在 `config/p2s_themes/` 添加 JSON 文件，再运行 `/p2s theme reload`。相同 ID 会覆盖已有主题；多个文件按文件名排序读取，后面的定义优先。每个颜色支持 `#RRGGBB` 或 `#RRGGBBAA`，缺少的颜色使用默认主题的对应值。以下文件增加一套只调整强调色的主题：
 
