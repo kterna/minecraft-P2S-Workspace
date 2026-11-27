@@ -9,8 +9,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.block.state.properties.Property;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -652,19 +650,7 @@ public final class StructureBuilder {
     }
 
     private static BlockState applyFacing(BlockState state, String facing) {
-        if (facing == null || facing.isBlank()) {
-            return state;
-        }
-        var dir = P2SGameCompat.directionByName(facing.trim().toLowerCase());
-        if (dir == null) {
-            return state;
-        }
-        for (Property<?> property : state.getProperties()) {
-            if (property instanceof DirectionProperty dirProp && dirProp.getPossibleValues().contains(dir)) {
-                return state.setValue(dirProp, dir);
-            }
-        }
-        return state;
+        return P2SGameCompat.applyFacing(state, facing);
     }
 
     public static class VbsScript {

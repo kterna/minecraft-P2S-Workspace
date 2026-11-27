@@ -12,6 +12,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -95,8 +96,8 @@ public final class P2SGameCompat {
         if (id == null) {
             return ItemStack.EMPTY;
         }
-        Block block = BuiltInRegistries.BLOCK.get(id);
-        return new ItemStack(block.asItem());
+        Block block = BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+        return block == null ? ItemStack.EMPTY : new ItemStack(block.asItem());
     }
 
     public static BlockState parseBlockState(String state) {
@@ -117,6 +118,23 @@ public final class P2SGameCompat {
 
     public static MinecraftServer serverOf(ServerPlayer player) {
         return player == null ? null : player.getServer();
+    }
+
+    @SuppressWarnings("unchecked")
+    public static BlockState applyFacing(BlockState state, String facing) {
+        if (state == null || facing == null || facing.isBlank()) {
+            return state;
+        }
+        Direction dir = directionByName(facing.trim().toLowerCase());
+        if (dir == null) {
+            return state;
+        }
+        for (Property<?> property : state.getProperties()) {
+            if (property.getValueClass() == Direction.class && property.getPossibleValues().contains(dir)) {
+                return state.setValue((Property<Direction>) property, dir);
+            }
+        }
+        return state;
     }
 
     public static Direction directionByName(String raw) {

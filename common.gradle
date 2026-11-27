@@ -48,8 +48,10 @@ loom {
 def sharedSrcRoot = rootProject.file('src')
 def compatSpecs = [
 	[facet: 'game', tier: (findProperty('compat_game') ?: 'v1_21').toString()],
+	[facet: 'hooks', tier: (findProperty('compat_hooks') ?: 'v1_21').toString()],
 	[facet: 'networking', tier: (findProperty('compat_networking') ?: 'modern').toString()],
 	[facet: 'render', tier: (findProperty('compat_render') ?: 'v1_21').toString()],
+	[facet: 'hud', tier: (findProperty('compat_hud') ?: 'v1_21').toString()],
 	[facet: 'gui', tier: (findProperty('compat_gui') ?: 'v1_21').toString()],
 	[facet: 'mixins', tier: (findProperty('compat_mixins') ?: 'v1_21').toString()]
 ]
