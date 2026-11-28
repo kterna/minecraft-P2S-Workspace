@@ -633,8 +633,8 @@ public class P2SChatScreen extends P2SScreenBase {
                         choiceCustomDraft,
                         modeLabel(),
                         this::onSendButton,
-                        () -> this.minecraft.setScreen(new P2SProjectListScreen(this)),
-                        () -> this.minecraft.setScreen(new P2SSessionListScreen(this)),
+                        () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, new P2SProjectListScreen(this)),
+                        () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, new P2SSessionListScreen(this)),
                         ClientAgentManager::newSession,
                         ClientAgentManager::submitManualCompact,
                         () -> {
@@ -644,9 +644,9 @@ public class P2SChatScreen extends P2SScreenBase {
                                 closeChoicePopup();
                             }
                         },
-                        () -> this.minecraft.setScreen(new P2SConfigScreen(this)),
+                        () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, new P2SConfigScreen(this)),
                         ClientDiagnostics::start,
-                        () -> this.minecraft.setScreen(new P2SCheckpointListScreen(this)),
+                        () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, new P2SCheckpointListScreen(this)),
                         ClientAgentManager::submitPatchApply,
                         this::enterDiscardReasonMode,
                         () -> sendSessionAction("undo", ""),

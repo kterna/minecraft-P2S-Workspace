@@ -123,8 +123,8 @@ public class P2SWorkbenchScreen extends P2SScreenBase {
     @Override
     protected void init() {
         if (previousHideGui == null && minecraft != null) {
-            previousHideGui = minecraft.options.hideGui;
-            minecraft.options.hideGui = true;
+            previousHideGui = com.p2s.compat.P2SClientLifecycleCompat.isHideGui(minecraft);
+            com.p2s.compat.P2SClientLifecycleCompat.setHideGui(minecraft, true);
         }
         input = new P2SEditBoxBase(font, 0, 0, 10, 12, P2SI18n.tr("screen.p2s.wb.input"));
         input.setMaxLength(8000);
@@ -166,7 +166,7 @@ public class P2SWorkbenchScreen extends P2SScreenBase {
         lastCollapsed = collapsed;
         OrbitCamera.stop();
         if (previousHideGui != null && minecraft != null) {
-            minecraft.options.hideGui = previousHideGui;
+            com.p2s.compat.P2SClientLifecycleCompat.setHideGui(minecraft, previousHideGui);
             previousHideGui = null;
         }
         super.removed();
@@ -924,7 +924,7 @@ public class P2SWorkbenchScreen extends P2SScreenBase {
             JsonObject payload = new JsonObject();
             payload.addProperty("path", filePath);
             ClientServerBridge.sendSessionAction("session_select_workspace", payload.toString());
-            minecraft.setScreen(new P2SChatScreen());
+            com.p2s.compat.P2SClientLifecycleCompat.setScreen(minecraft, new P2SChatScreen());
         });
     }
 
@@ -978,17 +978,17 @@ public class P2SWorkbenchScreen extends P2SScreenBase {
     private void renderMenu(P2SGfx gfx, int mouseX, int mouseY, int pw) {
         List<Object[]> items = new ArrayList<>();
         items.add(new Object[]{"screen.p2s.wb.menu.new_session", (Runnable) ClientAgentManager::newSession});
-        items.add(new Object[]{"screen.p2s.wb.menu.sessions", (Runnable) () -> minecraft.setScreen(new P2SSessionListScreen(this))});
-        items.add(new Object[]{"screen.p2s.wb.menu.projects", (Runnable) () -> minecraft.setScreen(new P2SProjectListScreen(this))});
-        items.add(new Object[]{"screen.p2s.wb.menu.checkpoints", (Runnable) () -> minecraft.setScreen(new P2SCheckpointListScreen(this))});
+        items.add(new Object[]{"screen.p2s.wb.menu.sessions", (Runnable) () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(minecraft, new P2SSessionListScreen(this))});
+        items.add(new Object[]{"screen.p2s.wb.menu.projects", (Runnable) () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(minecraft, new P2SProjectListScreen(this))});
+        items.add(new Object[]{"screen.p2s.wb.menu.checkpoints", (Runnable) () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(minecraft, new P2SCheckpointListScreen(this))});
         items.add(new Object[]{"screen.p2s.wb.menu.undo", (Runnable) () -> ClientServerBridge.sendSessionAction("undo", "")});
         items.add(new Object[]{"screen.p2s.wb.menu.redo", (Runnable) () -> ClientServerBridge.sendSessionAction("redo", "")});
         if (ClientAgentManager.canManualCompact()) {
             items.add(new Object[]{"screen.p2s.wb.menu.compact", (Runnable) ClientAgentManager::submitManualCompact});
         }
         items.add(new Object[]{"screen.p2s.wb.menu.export", (Runnable) ClientDiagnostics::start});
-        items.add(new Object[]{"screen.p2s.wb.menu.settings", (Runnable) () -> minecraft.setScreen(new P2SConfigScreen(this))});
-        items.add(new Object[]{"screen.p2s.wb.menu.classic", (Runnable) () -> minecraft.setScreen(new P2SChatScreen())});
+        items.add(new Object[]{"screen.p2s.wb.menu.settings", (Runnable) () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(minecraft, new P2SConfigScreen(this))});
+        items.add(new Object[]{"screen.p2s.wb.menu.classic", (Runnable) () -> com.p2s.compat.P2SClientLifecycleCompat.setScreen(minecraft, new P2SChatScreen())});
         int w = 0;
         for (Object[] item : items) {
             w = Math.max(w, font.width(P2SI18n.tr((String) item[0]).getString()));

@@ -424,7 +424,7 @@ public class P2SCheckpointListScreen extends P2SScreenBase {
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+            com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, parent);
         }
     }
 

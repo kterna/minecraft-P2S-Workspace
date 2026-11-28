@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
@@ -28,6 +29,26 @@ public final class P2SClientLifecycleCompat {
 
     public static void registerEndClientTick(Consumer<Minecraft> listener) {
         ClientTickEvents.END_CLIENT_TICK.register(listener::accept);
+    }
+
+    public static Screen currentScreen(Minecraft client) {
+        return client == null ? null : client.screen;
+    }
+
+    public static void setScreen(Minecraft client, Screen screen) {
+        if (client != null) {
+            client.setScreen(screen);
+        }
+    }
+
+    public static boolean isHideGui(Minecraft client) {
+        return client != null && client.options != null && client.options.hideGui;
+    }
+
+    public static void setHideGui(Minecraft client, boolean hidden) {
+        if (client != null && client.options != null) {
+            client.options.hideGui = hidden;
+        }
     }
 
     public static void addChatMessage(Minecraft client, Component message) {

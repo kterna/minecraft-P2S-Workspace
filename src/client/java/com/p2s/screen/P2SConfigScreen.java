@@ -599,7 +599,7 @@ public class P2SConfigScreen extends P2SScreenBase {
         String editingId = mode == P2SSkillEditorScreen.Mode.CREATE ? "" : selectedId;
         if (mode != P2SSkillEditorScreen.Mode.CREATE && (editingId == null || editingId.isBlank())) return;
         if (this.minecraft != null) {
-            this.minecraft.setScreen(new P2SSkillEditorScreen(this, mode, editingId));
+            com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, new P2SSkillEditorScreen(this, mode, editingId));
         }
     }
 
@@ -825,7 +825,7 @@ public class P2SConfigScreen extends P2SScreenBase {
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+            com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, parent);
         }
     }
 

@@ -172,7 +172,7 @@ public class P2SSkillEditorScreen extends P2SScreenBase {
                 cfg.onSkillSaved(saved.meta().id());
             }
             if (this.minecraft != null) {
-                this.minecraft.setScreen(parent);
+                com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, parent);
             }
         } catch (Exception e) {
             statusText = P2SI18n.tr("screen.p2s.skill_editor.status.save_failed_with_reason", e.getMessage());
@@ -281,7 +281,7 @@ public class P2SSkillEditorScreen extends P2SScreenBase {
     @Override
     public void onClose() {
         if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+            com.p2s.compat.P2SClientLifecycleCompat.setScreen(this.minecraft, parent);
         }
     }
 

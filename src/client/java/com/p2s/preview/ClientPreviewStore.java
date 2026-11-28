@@ -9,7 +9,6 @@ import com.p2s.P2SMod;
 import com.p2s.compat.P2SGameCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
@@ -192,7 +191,7 @@ public final class ClientPreviewStore {
     private static BlockState parseState(String state) {
         BlockState parsed = P2SGameCompat.parseBlockState(state);
         // A block from a mod this client lacks: still show where it goes.
-        return parsed != null ? parsed : Blocks.MAGENTA_STAINED_GLASS.defaultBlockState();
+        return parsed != null ? parsed : P2SGameCompat.defaultBlockState("minecraft:magenta_stained_glass");
     }
 
     private static AABB bounds(JsonObject summary) {
