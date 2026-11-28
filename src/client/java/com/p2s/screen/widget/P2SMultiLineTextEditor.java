@@ -4,7 +4,6 @@ import com.p2s.compat.P2SGfx;
 import com.p2s.compat.P2SInputCompat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import org.lwjgl.glfw.GLFW;
 
 import static com.p2s.screen.widget.ThemePaint.color;
 
@@ -240,20 +239,20 @@ public class P2SMultiLineTextEditor {
             return false;
         }
         if (P2SInputCompat.hasControlDown()) {
-            if (keyCode == GLFW.GLFW_KEY_A) {
+            if (keyCode == P2SInputCompat.KEY_A) {
                 selectAllText();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_C) {
+            if (keyCode == P2SInputCompat.KEY_C) {
                 copySelectionToClipboard();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_X) {
+            if (keyCode == P2SInputCompat.KEY_X) {
                 copySelectionToClipboard();
                 deleteSelection();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_V) {
+            if (keyCode == P2SInputCompat.KEY_V) {
                 Minecraft minecraft = Minecraft.getInstance();
                 String clipboard = P2SInputCompat.getClipboard(minecraft);
                 if (clipboard != null && !clipboard.isEmpty()) {
@@ -265,51 +264,51 @@ public class P2SMultiLineTextEditor {
 
         boolean selecting = P2SInputCompat.hasShiftDown();
         return switch (keyCode) {
-            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
+            case P2SInputCompat.KEY_ENTER, P2SInputCompat.KEY_KP_ENTER -> {
                 insertText("\n");
                 yield true;
             }
-            case GLFW.GLFW_KEY_BACKSPACE -> {
+            case P2SInputCompat.KEY_BACKSPACE -> {
                 backspaceChar();
                 yield true;
             }
-            case GLFW.GLFW_KEY_DELETE -> {
+            case P2SInputCompat.KEY_DELETE -> {
                 deleteChar();
                 yield true;
             }
-            case GLFW.GLFW_KEY_LEFT -> {
+            case P2SInputCompat.KEY_LEFT -> {
                 moveCursorHorizontal(-1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_RIGHT -> {
+            case P2SInputCompat.KEY_RIGHT -> {
                 moveCursorHorizontal(1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_UP -> {
+            case P2SInputCompat.KEY_UP -> {
                 moveCursorVertical(-1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_DOWN -> {
+            case P2SInputCompat.KEY_DOWN -> {
                 moveCursorVertical(1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_HOME -> {
+            case P2SInputCompat.KEY_HOME -> {
                 moveCursorToLineStart(selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_END -> {
+            case P2SInputCompat.KEY_END -> {
                 moveCursorToLineEnd(selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_PAGE_UP -> {
+            case P2SInputCompat.KEY_PAGE_UP -> {
                 moveCursorVertical(-Math.max(1, visibleRows() - 1), selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_PAGE_DOWN -> {
+            case P2SInputCompat.KEY_PAGE_DOWN -> {
                 moveCursorVertical(Math.max(1, visibleRows() - 1), selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_TAB -> {
+            case P2SInputCompat.KEY_TAB -> {
                 insertText("    ");
                 yield true;
             }

@@ -17,7 +17,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.p2s.compat.P2SInputCompat;
 
 public class P2SSkillEditorScreen extends P2SScreenBase {
     public enum Mode {
@@ -182,7 +182,7 @@ public class P2SSkillEditorScreen extends P2SScreenBase {
 
     @Override
     public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == P2SInputCompat.KEY_ESCAPE) {
             onClose();
             return true;
         }

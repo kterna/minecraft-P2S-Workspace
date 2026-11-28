@@ -19,7 +19,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -1097,15 +1096,15 @@ public class P2SWorkbenchScreen extends P2SScreenBase {
 
     @Override
     public boolean p2sKeyPressed(int key, int scan, int modifiers) {
-        if (key == GLFW.GLFW_KEY_ESCAPE) {
+        if (key == P2SInputCompat.KEY_ESCAPE) {
             return escape();
         }
-        boolean alt = (modifiers & GLFW.GLFW_MOD_ALT) != 0;
-        if (alt && key >= GLFW.GLFW_KEY_1 && key <= GLFW.GLFW_KEY_3) {
-            switchTab(Tab.values()[key - GLFW.GLFW_KEY_1]);
+        boolean alt = (modifiers & P2SInputCompat.MOD_ALT) != 0;
+        if (alt && key >= P2SInputCompat.KEY_1 && key <= P2SInputCompat.KEY_3) {
+            switchTab(Tab.values()[key - P2SInputCompat.KEY_1]);
             return true;
         }
-        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER)) {
+        if ((key == P2SInputCompat.KEY_ENTER || key == P2SInputCompat.KEY_KP_ENTER)) {
             if (input.isFocused() && input.visible) {
                 send();
                 return true;

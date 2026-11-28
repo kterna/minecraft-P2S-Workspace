@@ -17,7 +17,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.p2s.compat.P2SInputCompat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -377,27 +377,27 @@ public class P2SCheckpointListScreen extends P2SScreenBase {
 
     @Override
     public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == P2SInputCompat.KEY_ESCAPE) {
             onClose();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_UP && (checkpointNameInput == null || !checkpointNameInput.isFocused())) {
+        if (keyCode == P2SInputCompat.KEY_UP && (checkpointNameInput == null || !checkpointNameInput.isFocused())) {
             moveSelection(-1);
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_DOWN && (checkpointNameInput == null || !checkpointNameInput.isFocused())) {
+        if (keyCode == P2SInputCompat.KEY_DOWN && (checkpointNameInput == null || !checkpointNameInput.isFocused())) {
             moveSelection(1);
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_PAGE_UP) {
+        if (keyCode == P2SInputCompat.KEY_PAGE_UP) {
             moveSelection(-Math.max(1, visibleRows - 1));
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
+        if (keyCode == P2SInputCompat.KEY_PAGE_DOWN) {
             moveSelection(Math.max(1, visibleRows - 1));
             return true;
         }
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) && checkpointNameInput != null && checkpointNameInput.isFocused()) {
+        if ((keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER) && checkpointNameInput != null && checkpointNameInput.isFocused()) {
             if (ClientSessionState.getSelectedCheckpoint() != null) {
                 renameCheckpoint();
             } else {

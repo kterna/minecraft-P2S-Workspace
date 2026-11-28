@@ -23,7 +23,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.p2s.compat.P2SInputCompat;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -633,11 +633,11 @@ public class P2SProjectListScreen extends P2SScreenBase {
 
     @Override
     public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == P2SInputCompat.KEY_ESCAPE) {
             onClose();
             return true;
         }
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+        if ((keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER)
                 && ((nameInput != null && nameInput.isFocused()) || (descriptionInput != null && descriptionInput.isFocused()))) {
             if (findSelectedProject() != null) {
                 renameProject();

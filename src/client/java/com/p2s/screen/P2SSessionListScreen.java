@@ -15,7 +15,7 @@ import com.p2s.store.SessionPersistence;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import org.lwjgl.glfw.GLFW;
+import com.p2s.compat.P2SInputCompat;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -216,7 +216,7 @@ public class P2SSessionListScreen extends P2SScreenBase {
 
     @Override
     public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == P2SInputCompat.KEY_ESCAPE) {
             onClose();
             return true;
         }

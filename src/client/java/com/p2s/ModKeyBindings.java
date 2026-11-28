@@ -3,11 +3,10 @@ package com.p2s;
 import com.p2s.compat.P2SClientLifecycleCompat;
 import com.p2s.compat.P2SInputCompat;
 import net.minecraft.client.KeyMapping;
-import org.lwjgl.glfw.GLFW;
 
 public final class ModKeyBindings {
     public static final KeyMapping OPEN_CHAT = P2SInputCompat.registerKeyMapping(
-            "key.p2s.open_chat", GLFW.GLFW_KEY_O, "category.p2s"
+            "key.p2s.open_chat", P2SInputCompat.KEY_O, "category.p2s"
     );
 
     private ModKeyBindings() {

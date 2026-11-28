@@ -24,7 +24,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
-import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -2669,41 +2668,41 @@ public class P2SChatScreen extends P2SScreenBase {
         }
         if (contextDiffMode) {
             return switch (keyCode) {
-                case GLFW.GLFW_KEY_UP -> {
+                case P2SInputCompat.KEY_UP -> {
                     scrollContextEditor(-1);
                     yield true;
                 }
-                case GLFW.GLFW_KEY_DOWN -> {
+                case P2SInputCompat.KEY_DOWN -> {
                     scrollContextEditor(1);
                     yield true;
                 }
-                case GLFW.GLFW_KEY_PAGE_UP -> {
+                case P2SInputCompat.KEY_PAGE_UP -> {
                     scrollContextEditor(-Math.max(1, contextVisibleRows - 1));
                     yield true;
                 }
-                case GLFW.GLFW_KEY_PAGE_DOWN -> {
+                case P2SInputCompat.KEY_PAGE_DOWN -> {
                     scrollContextEditor(Math.max(1, contextVisibleRows - 1));
                     yield true;
                 }
-                case GLFW.GLFW_KEY_HOME -> {
+                case P2SInputCompat.KEY_HOME -> {
                     contextScroll = 0;
                     clampContextScroll();
                     yield true;
                 }
-                case GLFW.GLFW_KEY_END -> {
+                case P2SInputCompat.KEY_END -> {
                     contextScroll = Integer.MAX_VALUE;
                     clampContextScroll();
                     yield true;
                 }
-                case GLFW.GLFW_KEY_F7 -> {
+                case P2SInputCompat.KEY_F7 -> {
                     navigateContextDiffChange(hasShiftDown() ? -1 : 1);
                     yield true;
                 }
-                case GLFW.GLFW_KEY_LEFT -> {
+                case P2SInputCompat.KEY_LEFT -> {
                     navigateContextDiffChange(-1);
                     yield true;
                 }
-                case GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
+                case P2SInputCompat.KEY_RIGHT, P2SInputCompat.KEY_ENTER, P2SInputCompat.KEY_KP_ENTER -> {
                     navigateContextDiffChange(1);
                     yield true;
                 }
@@ -2711,20 +2710,20 @@ public class P2SChatScreen extends P2SScreenBase {
             };
         }
         if (hasControlDown()) {
-            if (keyCode == GLFW.GLFW_KEY_A) {
+            if (keyCode == P2SInputCompat.KEY_A) {
                 selectAllContextText();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_C) {
+            if (keyCode == P2SInputCompat.KEY_C) {
                 copyContextSelectionToClipboard();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_X) {
+            if (keyCode == P2SInputCompat.KEY_X) {
                 copyContextSelectionToClipboard();
                 deleteContextSelection();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_V) {
+            if (keyCode == P2SInputCompat.KEY_V) {
                 String clipboard = P2SInputCompat.getClipboard(this.minecraft);
                 if (clipboard != null && !clipboard.isEmpty()) {
                     insertContextText(clipboard);
@@ -2734,51 +2733,51 @@ public class P2SChatScreen extends P2SScreenBase {
         }
         boolean selecting = hasShiftDown();
         return switch (keyCode) {
-            case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
+            case P2SInputCompat.KEY_ENTER, P2SInputCompat.KEY_KP_ENTER -> {
                 insertContextText("\n");
                 yield true;
             }
-            case GLFW.GLFW_KEY_BACKSPACE -> {
+            case P2SInputCompat.KEY_BACKSPACE -> {
                 backspaceContextChar();
                 yield true;
             }
-            case GLFW.GLFW_KEY_DELETE -> {
+            case P2SInputCompat.KEY_DELETE -> {
                 deleteContextChar();
                 yield true;
             }
-            case GLFW.GLFW_KEY_LEFT -> {
+            case P2SInputCompat.KEY_LEFT -> {
                 moveContextCursorHorizontal(-1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_RIGHT -> {
+            case P2SInputCompat.KEY_RIGHT -> {
                 moveContextCursorHorizontal(1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_UP -> {
+            case P2SInputCompat.KEY_UP -> {
                 moveContextCursorVertical(-1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_DOWN -> {
+            case P2SInputCompat.KEY_DOWN -> {
                 moveContextCursorVertical(1, selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_HOME -> {
+            case P2SInputCompat.KEY_HOME -> {
                 moveContextCursorToLineStart(selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_END -> {
+            case P2SInputCompat.KEY_END -> {
                 moveContextCursorToLineEnd(selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_PAGE_UP -> {
+            case P2SInputCompat.KEY_PAGE_UP -> {
                 moveContextCursorVertical(-Math.max(1, contextVisibleRows - 1), selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_PAGE_DOWN -> {
+            case P2SInputCompat.KEY_PAGE_DOWN -> {
                 moveContextCursorVertical(Math.max(1, contextVisibleRows - 1), selecting);
                 yield true;
             }
-            case GLFW.GLFW_KEY_TAB -> {
+            case P2SInputCompat.KEY_TAB -> {
                 insertContextText("    ");
                 yield true;
             }
@@ -2800,11 +2799,11 @@ public class P2SChatScreen extends P2SScreenBase {
     @Override
     public boolean p2sKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (workspaceCreateMode) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (keyCode == P2SInputCompat.KEY_ESCAPE) {
                 exitWorkspaceCreateMode();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            if (keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER) {
                 confirmWorkspaceCreate();
                 return true;
             }
@@ -2815,11 +2814,11 @@ public class P2SChatScreen extends P2SScreenBase {
         }
 
         if (workspaceRenameMode) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (keyCode == P2SInputCompat.KEY_ESCAPE) {
                 exitWorkspaceRenameMode();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            if (keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER) {
                 confirmWorkspaceRename();
                 return true;
             }
@@ -2830,11 +2829,11 @@ public class P2SChatScreen extends P2SScreenBase {
         }
 
         if (discardReasonMode) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (keyCode == P2SInputCompat.KEY_ESCAPE) {
                 exitDiscardReasonMode();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            if (keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER) {
                 confirmDiscard();
                 return true;
             }
@@ -2845,11 +2844,11 @@ public class P2SChatScreen extends P2SScreenBase {
         }
 
         if (choicePopupVisible) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (keyCode == P2SInputCompat.KEY_ESCAPE) {
                 closeChoicePopup();
                 return true;
             }
-            if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+            if ((keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER)
                     && choiceCustomInput != null && choiceCustomInput.isFocused()) {
                 submitCustomChoice();
                 return true;
@@ -2860,11 +2859,11 @@ public class P2SChatScreen extends P2SScreenBase {
         }
 
         if (contextSelectionConfirmVisible) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            if (keyCode == P2SInputCompat.KEY_ESCAPE) {
                 hideContextSelectionConfirm();
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            if (keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER) {
                 confirmSelectionAsContext();
                 return true;
             }
@@ -2872,11 +2871,11 @@ public class P2SChatScreen extends P2SScreenBase {
         }
 
         if (contextEditorCollapsed && !hasPinnedCollapsedPanelFocus()) {
-            if (keyCode == GLFW.GLFW_KEY_TAB) {
+            if (keyCode == P2SInputCompat.KEY_TAB) {
                 cycleCollapsedPanelFocus(hasShiftDown() ? -1 : 1);
                 return true;
             }
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE && collapsedPanelFocus != PanelFocus.NONE) {
+            if (keyCode == P2SInputCompat.KEY_ESCAPE && collapsedPanelFocus != PanelFocus.NONE) {
                 setCollapsedPanelFocus(PanelFocus.NONE);
                 return true;
             }
@@ -2886,12 +2885,12 @@ public class P2SChatScreen extends P2SScreenBase {
             return false;
         }
 
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == P2SInputCompat.KEY_ESCAPE) {
             onClose();
             return true;
         }
 
-        if ((keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER)
+        if ((keyCode == P2SInputCompat.KEY_ENTER || keyCode == P2SInputCompat.KEY_KP_ENTER)
                 && input != null && input.isFocused()) {
             sendMessage();
             return true;
