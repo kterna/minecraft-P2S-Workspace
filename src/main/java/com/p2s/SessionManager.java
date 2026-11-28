@@ -73,7 +73,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             case "rename_checkpoint" -> renameCheckpoint(player, payload);
             case "rollback_checkpoint" -> rollbackCheckpoint(player, payload);
             case "session_select_workspace" -> selectWorkspacePath(player, payload);
-            default -> player.displayClientMessage(P2SI18n.tr("message.p2s.session.unknown_action", action), false);
+            default -> P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.session.unknown_action", action), false);
         }
     }
 
@@ -178,14 +178,14 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
             projectId = currentProjectIds.getOrDefault(player.getUUID(), "");
         }
         if (projectId.isBlank()) {
-            player.displayClientMessage(P2SI18n.tr("message.p2s.session.no_project_open"), false);
+            P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.session.no_project_open"), false);
             sendSessionSync(player, null);
             return null;
         }
 
         ProjectPersistence.ProjectRecord project = loadProject(projectId);
         if (project == null) {
-            player.displayClientMessage(P2SI18n.tr("message.p2s.project.not_found", projectId), false);
+            P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.project.not_found", projectId), false);
             sendSessionSync(player, null);
             return null;
         }
@@ -199,7 +199,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         sessions.put(player.getUUID(), session);
         sendSessionSync(player, session);
         sendPatchPreview(player, null);
-        player.displayClientMessage(P2SI18n.tr("message.p2s.session.opened", session.id), false);
+        P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.session.opened", session.id), false);
         return session;
     }
 
@@ -210,7 +210,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         sessions.remove(player.getUUID());
         sendPatchPreview(player, null);
         sendSessionSync(player, null);
-        player.displayClientMessage(P2SI18n.tr("message.p2s.session.closed"), false);
+        P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.session.closed"), false);
     }
 
     public static void undo(ServerPlayer player) {
@@ -229,11 +229,11 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         ProjectPersistence.ProjectRecord project = currentProject(player, session);
         ProjectPersistence.WorkspaceFileRecord workspace = selectedWorkspace(project, session);
         if (workspace == null || workspace.current == null) {
-            player.displayClientMessage(P2SI18n.tr("message.p2s.workspace.no_selected_content"), false);
+            P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.workspace.no_selected_content"), false);
             return;
         }
         String saved = ScriptStorage.saveV2(workspace.path, workspace.current, workspace.summary, name);
-        player.displayClientMessage(P2SI18n.tr("message.p2s.workspace.saved_as", saved), false);
+        P2SGameCompat.displayClientMessage(player, P2SI18n.tr("message.p2s.workspace.saved_as", saved), false);
     }
 
     private static JsonObject handleListProjectsTool() {
@@ -2248,7 +2248,7 @@ private static final AtomicLong CHECKPOINT_COUNTER = new AtomicLong();
         if (player == null) {
             return;
         }
-        player.displayClientMessage(P2SI18n.tr(key, args), false);
+        P2SGameCompat.displayClientMessage(player, P2SI18n.tr(key, args), false);
     }
 
     private static void sendToolBridgeResponse(ServerPlayer player, String requestId, boolean ok, JsonObject payload, String error) {

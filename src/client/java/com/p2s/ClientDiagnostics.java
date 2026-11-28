@@ -65,7 +65,7 @@ final class ClientDiagnostics {
     }
 
     private static void report(Component message) {
-        Minecraft.getInstance().gui.getChat().addMessage(message);
+        com.p2s.compat.P2SClientLifecycleCompat.addChatMessage(Minecraft.getInstance(), message);
         ClientSessionState.addSystemMessage(message.getString());
     }
 

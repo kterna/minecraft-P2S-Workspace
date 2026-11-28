@@ -1,0 +1,159 @@
+package com.p2s.compat;
+
+import net.minecraft.commands.arguments.blocks.BlockStateParser;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/** Game, registry, blockstate, and player identity helpers for MC 26.1+ (unobfuscated + sendSystemMessage). */
+public final class P2SGameCompat {
+    private P2SGameCompat() {
+    }
+
+    public static String normalizeResourceId(String raw) {
+        Identifier id = parseResourceId(raw);
+        return id == null ? null : id.toString();
+    }
+
+    private static Identifier parseResourceId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        Identifier id = Identifier.tryParse(raw);
+        if (id == null && !raw.contains(":")) {
+            id = Identifier.tryParse("minecraft:" + raw);
+        }
+        return id;
+    }
+
+    public static Block findBlock(String rawId) {
+        Identifier id = parseResourceId(rawId);
+        if (id == null) {
+            return null;
+        }
+        return BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+    }
+
+    public static BlockState defaultBlockState(String rawId) {
+        Block block = findBlock(rawId);
+        return block == null ? null : block.defaultBlockState();
+    }
+
+    public static Iterable<String> allBlockIds() {
+        List<String> ids = new ArrayList<>(BuiltInRegistries.BLOCK.keySet().size());
+        for (Identifier id : BuiltInRegistries.BLOCK.keySet()) {
+            ids.add(id.toString());
+        }
+        return ids;
+    }
+
+    public static String blockId(BlockState state) {
+        return state == null ? "" : blockId(state.getBlock());
+    }
+
+    public static String blockId(Block block) {
+        return block == null ? "" : BuiltInRegistries.BLOCK.getKey(block).toString();
+    }
+
+    public static String normalizeItemId(String rawItemId) {
+        if (rawItemId == null || rawItemId.isBlank()) {
+            return null;
+        }
+        String trimmed = rawItemId.trim().toLowerCase();
+        Identifier id = parseResourceId(trimmed);
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
+            return null;
+        }
+        return id.toString();
+    }
+
+    public static boolean isItemWithId(Item item, String configuredId) {
+        if (item == null) {
+            return false;
+        }
+        Identifier id = Identifier.tryParse(configuredId);
+        if (id == null) {
+            return false;
+        }
+        Item target = BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+        return target != null && target == item;
+    }
+
+    public static ItemStack iconForBlock(String blockId) {
+        Identifier id = Identifier.tryParse(blockId);
+        if (id == null) {
+            return ItemStack.EMPTY;
+        }
+        Block block = BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+        return block == null ? ItemStack.EMPTY : new ItemStack(block.asItem());
+    }
+
+    public static BlockState parseBlockState(String state) {
+        try {
+            return BlockStateParser.parseForBlock(BuiltInRegistries.BLOCK, state, false).blockState();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    public static String serializeBlockState(BlockState state) {
+        return BlockStateParser.serialize(state);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static BlockState applyFacing(BlockState state, String facing) {
+        if (state == null || facing == null || facing.isBlank()) {
+            return state;
+        }
+        Direction dir = directionByName(facing.trim().toLowerCase());
+        if (dir == null) {
+            return state;
+        }
+        for (Property<?> property : state.getProperties()) {
+            if (property.getValueClass() == Direction.class && property.getPossibleValues().contains(dir)) {
+                return state.setValue((Property<Direction>) property, dir);
+            }
+        }
+        return state;
+    }
+
+    public static String playerName(Player player) {
+        return player == null ? "" : player.getGameProfile().name();
+    }
+
+    public static MinecraftServer serverOf(ServerPlayer player) {
+        return player == null ? null : player.level().getServer();
+    }
+
+    public static ServerLevel serverLevel(ServerPlayer player) {
+        return player == null ? null : player.level();
+    }
+
+    public static Direction directionByName(String raw) {
+        return Direction.byName(raw);
+    }
+
+    public static void displayClientMessage(ServerPlayer player, Component message, boolean overlay) {
+        if (player != null && message != null) {
+            player.sendSystemMessage(message, overlay);
+        }
+    }
+
+    public static long millis() {
+        return Util.getMillis();
+    }
+}

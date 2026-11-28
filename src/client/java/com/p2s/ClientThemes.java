@@ -49,7 +49,7 @@ public final class ClientThemes {
     static void flushMessages(Minecraft client) {
         if (client == null || client.player == null || startupMessages.isEmpty()) return;
         for (Component message : startupMessages) {
-            client.gui.getChat().addMessage(message);
+            com.p2s.compat.P2SClientLifecycleCompat.addChatMessage(client, message);
             ClientSessionState.addSystemMessage(message.getString());
         }
         startupMessages.clear();

@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 
@@ -27,6 +28,12 @@ public final class P2SClientLifecycleCompat {
 
     public static void registerEndClientTick(Consumer<Minecraft> listener) {
         ClientTickEvents.END_CLIENT_TICK.register(listener::accept);
+    }
+
+    public static void addChatMessage(Minecraft client, Component message) {
+        if (client != null && client.gui != null && message != null) {
+            client.gui.getChat().addMessage(message);
+        }
     }
 
     public static void registerSelectionCallbacks(

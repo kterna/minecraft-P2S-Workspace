@@ -3,6 +3,7 @@ package com.p2s.compat;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -144,6 +145,12 @@ public final class P2SGameCompat {
 
     public static Direction directionByName(String raw) {
         return Direction.byName(raw);
+    }
+
+    public static void displayClientMessage(ServerPlayer player, Component message, boolean overlay) {
+        if (player != null && message != null) {
+            player.displayClientMessage(message, overlay);
+        }
     }
 
     public static long millis() {
