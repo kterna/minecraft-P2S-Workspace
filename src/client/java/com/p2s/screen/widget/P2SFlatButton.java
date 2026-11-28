@@ -84,9 +84,9 @@ public class P2SFlatButton extends P2SButtonBase {
     }
 
     @Override
-    public void onPress() {
+    protected void p2sOnPress() {
         pressedUntil = P2SGameCompat.millis() + 100;
-        super.onPress();
+        p2sSuperOnPress();
     }
 
     @Override

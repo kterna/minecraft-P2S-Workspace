@@ -25,6 +25,19 @@ public abstract class P2SButtonBase extends Button {
     }
 
     @Override
+    public void onPress() {
+        p2sOnPress();
+    }
+
+    protected void p2sOnPress() {
+        p2sSuperOnPress();
+    }
+
+    protected final void p2sSuperOnPress() {
+        super.onPress();
+    }
+
+    @Override
     protected void renderWidget(GuiGraphics gfx, int mouseX, int mouseY, float partialTick) {
         p2sRenderWidget(new P2SGfx(gfx), mouseX, mouseY, partialTick);
     }

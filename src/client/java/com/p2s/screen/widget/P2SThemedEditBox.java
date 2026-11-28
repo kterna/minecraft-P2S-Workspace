@@ -39,19 +39,19 @@ public class P2SThemedEditBox extends P2SEditBoxBase {
         int anchor = state.p2s$highlightPos() - offset;
         int cursorIndex = Math.clamp(cursor, 0, visibleText.length());
         String before = visibleText.substring(0, cursorIndex);
-        FormattedCharSequence prefix = state.p2s$formatter().apply(before, offset);
+        FormattedCharSequence prefix = p2sFormat(before, offset);
         int caret = left + font.width(prefix);
         int ink = color(active && state.p2s$isEditable() ? "text" : "faint");
 
         gfx.enableScissor(x, y, x + width, y + height);
         if (anchor != cursor) {
             int anchorIndex = Math.clamp(anchor, 0, visibleText.length());
-            int selectionEnd = left + font.width(state.p2s$formatter().apply(visibleText.substring(0, anchorIndex), offset));
+            int selectionEnd = left + font.width(p2sFormat(visibleText.substring(0, anchorIndex), offset));
             gfx.fill(Math.min(caret, selectionEnd), top - 1, Math.max(caret, selectionEnd), top + 9, color("selected"));
         }
         ThemePaint.text(gfx, font, prefix, left, top, ink, false);
         if (cursorIndex < visibleText.length()) {
-            FormattedCharSequence suffix = state.p2s$formatter().apply(visibleText.substring(cursorIndex), offset + cursorIndex);
+            FormattedCharSequence suffix = p2sFormat(visibleText.substring(cursorIndex), offset + cursorIndex);
             ThemePaint.text(gfx, font, suffix, caret, top, ink, false);
         }
         if (value.isEmpty() && !isFocused() && state.p2s$hint() != null) {
