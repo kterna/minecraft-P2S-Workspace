@@ -25,6 +25,7 @@ public final class P2SInputCompat {
     public static final int KEY_PAGE_DOWN = GLFW.GLFW_KEY_PAGE_DOWN;
     public static final int KEY_F7 = GLFW.GLFW_KEY_F7;
     public static final int KEY_O = GLFW.GLFW_KEY_O;
+    public static final int DEFAULT_OPEN_CHAT_KEY = GLFW.GLFW_KEY_O;
     public static final int KEY_1 = GLFW.GLFW_KEY_1;
     public static final int KEY_3 = GLFW.GLFW_KEY_3;
     public static final int KEY_A = GLFW.GLFW_KEY_A;

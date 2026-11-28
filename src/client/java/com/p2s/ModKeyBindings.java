@@ -6,7 +6,7 @@ import net.minecraft.client.KeyMapping;
 
 public final class ModKeyBindings {
     public static final KeyMapping OPEN_CHAT = P2SInputCompat.registerKeyMapping(
-            "key.p2s.open_chat", P2SInputCompat.KEY_O, "category.p2s"
+            "key.p2s.open_chat", P2SInputCompat.DEFAULT_OPEN_CHAT_KEY, "category.p2s"
     );
 
     private ModKeyBindings() {

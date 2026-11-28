@@ -29,6 +29,8 @@ public final class P2SInputCompat {
     public static final int KEY_PAGE_DOWN = InputConstants.KEY_PAGEDOWN;
     public static final int KEY_F7 = InputConstants.KEY_F7;
     public static final int KEY_O = InputConstants.KEY_O;
+    public static final int KEY_K = InputConstants.KEY_K;
+    public static final int DEFAULT_OPEN_CHAT_KEY = InputConstants.KEY_K;
     public static final int KEY_1 = InputConstants.KEY_1;
     public static final int KEY_3 = InputConstants.KEY_3;
     public static final int KEY_A = InputConstants.KEY_A;
